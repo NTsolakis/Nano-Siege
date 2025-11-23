@@ -1400,7 +1400,14 @@ export class Game {
             e.applyBurn(z.burnDps, 0.6);
           }
           if(doTick && z.dps > 0){
-            const dmg = z.dps * interval;
+            let dmg = z.dps * interval;
+            // Splash puddles: ensure a noticeable tick that scales with
+            // the global base damage stat. Baseline is 5 per tick at
+            // 0% base damage, increased proportionally by buffs.baseDamageMul.
+            if(z.kind === 'bubble'){
+              const baseMul = buffs.baseDamageMul || 1;
+              dmg = 5 * baseMul;
+            }
             // Direct hit: if the puddle is spawning exactly under this enemy, treat this tick as a larger impact.
             const directR2 = (z.r * 0.45) * (z.r * 0.45);
             const isDirect = dist2(e.x, e.y, z.x, z.y) <= directR2;

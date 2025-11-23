@@ -271,63 +271,6 @@ export class CannonTower extends BaseTower{
     ctx.beginPath(); ctx.moveTo(-7,0); ctx.lineTo(7,0); ctx.moveTo(0,-7); ctx.lineTo(0,7); ctx.stroke();
     ctx.restore();
   }
-  // Splash towers see slightly farther than they can actually hit,
-  // so they can start leading shots earlier, but they only fire within
-  // their visible range.
-  acquireTarget(enemies, dt=0){
-    const prevTarget = this.target;
-    const prevId = prevTarget?.uid || null;
-    if(dt){ this.retargetTimer = Math.max(0, (this.retargetTimer||0) - dt); }
-    if(prevTarget && !prevTarget.alive){
-      this.target = null;
-      if(this.retargetDelay > 0){
-        const speedBonus = Math.max(0, buffs.retargetSpeedBonus || 0);
-        const mul = 1 + speedBonus;
-        const baseDelay = this.retargetDelay;
-        const effective = Math.max(0.05, baseDelay / mul);
-        this.retargetTimer = Math.max(this.retargetTimer||0, effective);
-      }
-    }
-    const range = this.getRange();
-    const rangeR2 = range * range;
-    const visionRange = range * 2.0;
-    const visionR2 = visionRange * visionRange;
-    if(!this.target){
-      if((this.retargetTimer||0) > 0){
-        if(prevId && prevId !== (this.target?.uid || null)){
-          this._resonanceArmed = false;
-          this._lastTargetId = null;
-        }
-        return;
-      }
-      // Prefer the closest enemy within hidden vision.
-      let best = null;
-      let bestDist2 = Infinity;
-      for(const e of enemies){
-        if(!e.alive) continue;
-        const d2v = dist2(this.x,this.y,e.x,e.y);
-        if(d2v <= visionR2 && d2v < bestDist2){
-          bestDist2 = d2v;
-          best = e;
-        }
-      }
-      this.target = best;
-    } else {
-      const d2v = dist2(this.x,this.y,this.target.x,this.target.y);
-      // Drop target once it leaves actual range (so we can reacquire a closer one),
-      // or completely outside vision.
-      if(d2v > rangeR2 || d2v > visionR2){
-        this.target = null;
-      }
-    }
-    const newId = this.target?.uid || null;
-    if(newId !== prevId){
-      this._resonanceArmed = !!newId;
-      this._lastTargetId = newId;
-    }
-    // Rotation for splash is handled in update using the predicted impact point,
-    // so we don't adjust the turret angle here.
-  }
   update(dt,enemies){
     this.tickIdleTimer(dt);
     // effects ttl
@@ -618,6 +561,7 @@ export class SplashTower extends BaseTower{
     this.sparks = []; // shrapnel particles {x,y,vx,vy,life}
     this.telegraph = null; // ground target hint before firing
     this.retargetDelay = 0.6;
+    this._telegraphLocked = false;
   }
   getLeadDistance(){
     // Aim roughly 1.5 tiles ahead of the current target along its path.
@@ -678,25 +622,44 @@ export class SplashTower extends BaseTower{
       }
     }
 
-    // Ground telegraph: show only in the last part of the cooldown so it
-    // looks like the tower is "locking in" the next shot, not idling forever.
+    // Ground telegraph: only show when we're close to firing, and lock the
+    // chosen impact tile so the ring doesn't slide between cells while the
+    // enemy moves.
     if(this.target && impact){
       const cycle = this.lastShotInterval || (1 / this.fireRate);
       const leadWindow = Math.min(1.0, cycle * 0.4); // up to ~1s of warning
       if(this.cooldown <= leadWindow){
         const elapsed = leadWindow - this.cooldown;
-        this.telegraph = {
-          x: impact.x,
-          y: impact.y,
-          r: puddleBaseR * 0.8,
-          t: elapsed,
-          ttl: leadWindow
-        };
+        if(!this.telegraph || !this._telegraphLocked){
+          this.telegraph = {
+            x: impact.x,
+            y: impact.y,
+            r: puddleBaseR * 0.8,
+            t: elapsed,
+            ttl: leadWindow
+          };
+          this._telegraphLocked = true;
+        } else {
+          // Keep timing progress, but don't move the locked impact position.
+          this.telegraph.t = elapsed;
+          this.telegraph.ttl = leadWindow;
+        }
       } else {
         this.telegraph = null;
+        this._telegraphLocked = false;
       }
     } else {
       this.telegraph = null;
+      this._telegraphLocked = false;
+    }
+
+    // While telegraphing, keep the launcher oriented toward the future
+    // impact point instead of the enemy's current position so the barrel
+    // and bubble trajectory stay in sync.
+    if(this.telegraph){
+      const adx = this.telegraph.x - this.x;
+      const ady = this.telegraph.y - this.y;
+      this.rotation = Math.atan2(ady, adx);
     }
 
       if(this.target && impact && this.cooldown<=0){
@@ -713,16 +676,15 @@ export class SplashTower extends BaseTower{
       dmg = tp.dmg;
 	      const isCrit = tp.crit;
       // Use telegraphed impact point if present, otherwise the latest computed one.
-	      const sx = this.telegraph ? this.telegraph.x : impact.x;
-	      const sy = this.telegraph ? this.telegraph.y : impact.y;
+      const sx = this.telegraph ? this.telegraph.x : impact.x;
+      const sy = this.telegraph ? this.telegraph.y : impact.y;
 
-	      // Aim the turret at the future impact point so it appears to
-	      // lead the target instead of tracking the current enemy position.
-	      if(sx != null && sy != null){
-	        const adx = sx - this.x;
-	        const ady = sy - this.y;
-	        this.rotation = Math.atan2(ady, adx);
-	      }
+      // Ensure launcher is snapped to the final impact direction on fire.
+      if(sx != null && sy != null){
+        const adx = sx - this.x;
+        const ady = sy - this.y;
+        this.rotation = Math.atan2(ady, adx);
+      }
       const color = this.baseColor || COLORS.towerSplash;
       // No explicit direct AoE burst here; damage is handled by the puddle DoT.
       this.explosions.push({x:sx,y:sy,r:splashR,life:0.25});
@@ -768,6 +730,7 @@ export class SplashTower extends BaseTower{
       this.cooldown = puddleTtl;
       this.lastShotInterval = puddleTtl;
       this.telegraph = null;
+      this._telegraphLocked = false;
       for(let i=0;i<10;i++){
         const a = Math.random()*Math.PI*2; const sp = 120 + Math.random()*140;
         this.sparks.push({x:sx,y:sy,vx:Math.cos(a)*sp,vy:Math.sin(a)*sp,life:0.25+Math.random()*0.2});
