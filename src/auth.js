@@ -1,0 +1,62 @@
+// Simple API helpers for user login + save.
+
+const API_BASE = ''; // same origin
+
+async function apiRequest(path, body) {
+  const res = await fetch(API_BASE + path, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body || {})
+  });
+  let data;
+  try {
+    data = await res.json();
+  } catch (e) {
+    data = null;
+  }
+  if (!res.ok || !data || data.ok === false) {
+    const msg = (data && data.error) || `Request failed (${res.status})`;
+    throw new Error(msg);
+  }
+  return data;
+}
+
+async function apiGet(path) {
+  const res = await fetch(API_BASE + path);
+  let data;
+  try {
+    data = await res.json();
+  } catch (e) {
+    data = null;
+  }
+  if (!res.ok || !data || data.ok === false) {
+    const msg = (data && data.error) || `Request failed (${res.status})`;
+    throw new Error(msg);
+  }
+  return data;
+}
+
+export async function loginUser(username, password) {
+  return apiRequest('/api/login', { username, password });
+}
+
+export async function createUser(username, password) {
+  return apiRequest('/api/create', { username, password });
+}
+
+export async function saveUserState(state) {
+  return apiRequest('/api/save', { state });
+}
+
+export async function fetchLeaderboard(mapKey) {
+  const suffix = mapKey ? `?map=${encodeURIComponent(mapKey)}` : '';
+  return apiGet('/api/leaderboard' + suffix);
+}
+
+export async function submitLeaderboard(username, waves, perfectCombo=0, map=null) {
+  return apiRequest('/api/leaderboard', { waves, perfectCombo, map });
+}
+
+export async function logoutUser() {
+  return apiRequest('/api/logout', {});
+}

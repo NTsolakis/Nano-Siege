@@ -1,0 +1,486 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+    <title>Nano‑Siege</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='0.9em' font-size='90'>🧬</text></svg>">
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div id="game-container">
+      <div id="scale-root">
+      <div id="game-frame">
+        <div id="game-root">
+          <div id="game-wrapper">
+            <div id="app">
+      <header class="hud">
+        <div class="hud-title-floating">
+          <h1>Nano‑Siege</h1>
+          <p class="hud-sub">Neon Reactor Defense Protocol</p>
+        </div>
+        <div class="hud-grid">
+          <section class="hud-cell hud-stats">
+            <div class="currency-box">
+              <div class="currency-header">Economy Pulse</div>
+              <div class="currency-rail">
+                <div class="currency-chip credit">
+                  <span class="chip-icon" aria-hidden="true"></span>
+                  <div class="chip-copy">
+                    <span class="chip-label">Credits</span>
+                    <span class="chip-value" id="stat-credits">0</span>
+                  </div>
+                </div>
+                <div class="currency-chip fragment">
+                  <span class="chip-icon" aria-hidden="true"></span>
+                  <div class="chip-copy">
+                    <span class="chip-label">Fragments</span>
+                    <span class="chip-value" id="stat-fragments">0</span>
+                  </div>
+                </div>
+                <div class="currency-chip core">
+                  <span class="chip-icon" aria-hidden="true"></span>
+                  <div class="chip-copy">
+                    <span class="chip-label">Shards</span>
+                    <span class="chip-value" id="stat-core">0</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </section>
+          <section class="hud-cell hud-hp">
+            <div class="hud-hpbar">
+              <span id="stat-lives">HP: 0</span>
+              <span class="hpbar"><span class="hpfill" id="hp-fill" style="width:100%"></span></span>
+            </div>
+            <div class="control-dev"></div>
+          </section>
+          <section class="hud-cell hud-controls">
+            <div class="control-row">
+              <button id="btn-start-wave">Start Wave</button>
+              <button id="btn-fast">⏩ 1x</button>
+              <button id="btn-pause">Pause</button>
+            </div>
+          </section>
+          <section class="hud-cell hud-abilities">
+            <button id="btn-abil-bomb" class="abil-btn">Bomb (Locked)</button>
+            <button id="btn-abil-overclock" class="abil-btn">Overclock (Locked)</button>
+            <button id="btn-abil-cryo" class="abil-btn">Cryo (Locked)</button>
+          </section>
+          <section class="hud-cell hud-towers">
+            <div class="tower-palette">
+              <button class="tower-btn selected" data-tower="basic">
+                <span class="tower-icon tower-icon-basic" aria-hidden="true"></span>
+                <span class="tower-label">
+                  <span class="tower-name">Cannon</span>
+                  <span class="tower-cost">(30)</span>
+                </span>
+              </button>
+              <button class="tower-btn" data-tower="laser">
+                <span class="tower-icon tower-icon-laser" aria-hidden="true"></span>
+                <span class="tower-label">
+                  <span class="tower-name">Laser</span>
+                  <span class="tower-cost">(60)</span>
+                </span>
+              </button>
+              <button class="tower-btn" data-tower="splash">
+                <span class="tower-icon tower-icon-splash" aria-hidden="true"></span>
+                <span class="tower-label">
+                  <span class="tower-name">Splash</span>
+                  <span class="tower-cost">(90)</span>
+                </span>
+              </button>
+            </div>
+          </section>
+        </div>
+      </header>
+
+      <main class="stage-wrap">
+        <aside class="wave-panel">
+          <div class="wave-panel-top">
+            <span id="stat-wave">Wave: 1</span>
+            <div id="wave-status" class="wave-status">
+              <span class="ws-label">Wave in progress</span>
+              <div class="wave-bar"><span class="fill" style="width:100%"></span></div>
+            </div>
+          </div>
+          <div class="wave-metrics">
+            <div class="wave-metric">
+              <span class="label">Current Wave</span>
+              <span class="value" id="wave-current">1</span>
+            </div>
+            <div class="wave-metric">
+              <span class="label">Highest Wave</span>
+              <span class="value" id="wave-best">0</span>
+            </div>
+            <div class="wave-metric">
+              <span class="label">Current Perfect Combo</span>
+              <span class="value" id="perfect-combo">0</span>
+            </div>
+            <div class="wave-metric">
+              <span class="label">Best Perfect Combo</span>
+              <span class="value" id="perfect-best">0</span>
+            </div>
+          </div>
+          <div class="banner-feed" id="banner-feed">
+            <div class="banner-empty">Status messages will appear here.</div>
+          </div>
+        </aside>
+        <div id="canvas-shell" class="canvas-shell">
+          <div id="combat-stats" class="combat-stats-card">
+            <div class="cs-title">Combat Stats</div>
+            <div class="cs-row"><span>Base Damage</span><span id="stat-basedmg">+0%</span></div>
+            <div class="cs-row"><span>Crit Chance</span><span id="stat-crit">+0%</span></div>
+            <div class="cs-row"><span>Crit Damage</span><span id="stat-critdmg">+0%</span></div>
+            <div class="cs-row"><span>Slow Strength</span><span id="stat-slow">+0%</span></div>
+            <div class="cs-row"><span>Burn DPS</span><span id="stat-burn">+0%</span></div>
+            <div class="cs-row"><span>Targeting Speed</span><span id="stat-target">+0%</span></div>
+          </div>
+          <canvas id="game" width="960" height="540"></canvas>
+        </div>
+        <aside id="passive-panel" class="passive-panel">
+          <div id="passive-lines" class="pp-lines"></div>
+        </aside>
+        <aside id="upgrade-panel" class="upgrade" style="display:none">
+          <button id="btn-upg-close" class="upg-close" aria-label="Close">×</button>
+          <div class="upg-title">Selected:
+            <span id="upg-icon" class="upg-icon" aria-hidden="true"></span>
+            <span id="upg-name">—</span>
+          </div>
+          <div class="upg-actions">
+            <button id="btn-upg-slow">Install Slow Module (75)</button>
+            <button id="btn-upg-burn">Install Burn Module (90)</button>
+          </div>
+          <div class="upg-actions">
+            <button id="btn-upg-rate">Upgrade Fire Rate (60)</button>
+            <button id="btn-upg-range">Upgrade Fire Range (80)</button>
+          </div>
+          <!-- Dev: instant max upgrade -->
+          <div class="upg-actions" id="upg-dev-actions" style="display:none">
+            <button id="btn-upg-max">Upgrade To Max</button>
+          </div>
+          <div class="upg-actions">
+            <button id="btn-sell" class="sell-btn">Sell Tower</button>
+          </div>
+          <div class="upg-hint">Click a placed tower to upgrade</div>
+        </aside>
+        <!-- Overlays -->
+        <!-- Assembly War Missions -->
+        <section id="assembly-overlay" class="overlay mainmenu">
+          <div class="panel mainmenu-panel">
+            <h3>Assembly War Missions</h3>
+            <p class="construction-note">Assembly War is under construction — expect placeholder missions and work-in-progress balance.</p>
+            <p class="tag">Choose a protocol to deploy. (Placeholder missions for now.)</p>
+            <div class="mission-grid">
+              <button class="mission-card" id="mission-1" data-mission="1">
+                <h4>Mission 1 — System Boot</h4>
+                <p>Waves: 10 • Enemies: basic runners</p>
+                <p>Reward: currency + ability unlock</p>
+              </button>
+              <button class="mission-card locked" id="mission-2" data-mission="2" disabled>
+                <h4>Mission 2 — Subroutine Siege</h4>
+                <p>Waves: 15 • New enemy: shield drones</p>
+                <p>Reward: passive upgrade unlock</p>
+              </button>
+              <button class="mission-card locked" id="mission-3" data-mission="3" disabled>
+                <h4>Mission 3 — Corruption Bloom</h4>
+                <p>Waves: 20 • Map hazard: creeping corruption</p>
+                <p>Reward: new tower</p>
+              </button>
+              <button class="mission-card locked" id="mission-4" data-mission="4" disabled>
+                <h4>Mission 4 — Dual Core Defense</h4>
+                <p>Two cores to protect • Waves: 25</p>
+                <p>Reward: meta-currency bonus</p>
+              </button>
+              <button class="mission-card locked" id="mission-5" data-mission="5" disabled>
+                <h4>Mission 5 — Overmind Ascendant</h4>
+                <p>Elite versions of all enemies • Waves: 30</p>
+                <p>Reward: powerful ability</p>
+              </button>
+              <button class="mission-card locked" id="mission-6" data-mission="6" disabled>
+                <h4>Mission 6 — Cascade Protocol</h4>
+                <p>Final boss • huge wave spikes • multi-phase</p>
+                <p>Completion unlocks Endless Mode</p>
+              </button>
+            </div>
+            <div class="actions" style="margin-top:16px">
+              <button id="btn-assembly-main">Main Menu</button>
+              <button id="btn-assembly-core">Assembly Core</button>
+              <button id="btn-assembly-back">Back</button>
+            </div>
+            <p class="hint">Mission details are placeholders; all missions currently play the standard mode.</p>
+          </div>
+        </section>
+
+        <section id="pause-overlay" class="overlay">
+          <div class="panel small">
+            <h3>Paused</h3>
+            <div class="actions">
+              <button id="btn-resume">Resume</button>
+              <button id="btn-pause-menu">Main Menu</button>
+              <button id="btn-settings">Settings</button>
+            </div>
+            <!-- Settings sub-menu (hidden by default) -->
+            <div id="settings-panel" style="display:none; margin-top:10px">
+              <h4>Settings</h4>
+              <div class="vol-ctl" style="margin-top:4px; display:flex; align-items:center; gap:8px; justify-content:center">
+                <label for="vol-slider">Volume <span id="vol-label">70%</span></label>
+                <input type="range" id="vol-slider" min="0" max="100" step="1" value="70" />
+              </div>
+              <div class="zoom-ctl" style="margin-top:10px; display:flex; align-items:center; gap:8px; justify-content:center">
+                <label for="zoom-slider">Zoom <span id="zoom-label">100%</span></label>
+                <input type="range" id="zoom-slider" min="100" max="200" step="5" value="100" />
+              </div>
+              <div class="actions" style="margin-top:10px">
+                <button id="btn-settings-back">Back</button>
+              </div>
+            </div>
+            <p class="hint">P or Esc to toggle</p>
+          </div>
+        </section>
+
+        <section id="gameover-overlay" class="overlay">
+          <div class="panel">
+            <h2>Reactor Breached</h2>
+            <p class="tag">The nano‑core has fallen.</p>
+            <div class="actions">
+              <button id="btn-retry">Retry</button>
+              <button id="btn-over-menu">Main Menu</button>
+            </div>
+          </div>
+        </section>
+
+        <!-- Shop overlay after boss waves -->
+        <section id="shop-overlay" class="overlay">
+          <div class="panel" style="position:relative">
+            <button id="btn-shop-close" class="shop-close" aria-label="Close">×</button>
+            <h2>Nanotech Shop</h2>
+            <p class="tag">Spend nano credits in the Assembly Core between missions.</p>
+            <h4 class="shop-subtitle">Nano-Tech Upgrades</h4>
+            <div id="shop-items" class="shop-items"></div>
+            <h4 class="shop-subtitle">Ultimate Abilities</h4>
+            <div id="shop-abilities" class="shop-abilities"></div>
+            <!-- Dev: unlock all ultimates quick action -->
+            <div class="actions" id="shop-dev-actions" style="display:none; margin-top:6px">
+              <button id="btn-dev-unlock-ults" class="sell-btn">Unlock All Ultimates</button>
+            </div>
+            <div class="actions" style="margin-top:12px">
+              <button id="btn-shop-reroll">Reroll (30⟐)</button>
+              <button id="btn-shop-continue">Back</button>
+            </div>
+            <p class="hint">Adjust your build, then head back to mission select.</p>
+          </div>
+        </section>
+
+        <!-- Sell confirm overlay -->
+        <section id="sell-overlay" class="overlay">
+          <div class="panel small">
+            <h3>Sell Tower?</h3>
+            <p id="sell-text" class="tag">Are you sure?</p>
+            <div class="actions">
+              <button id="btn-sell-confirm" class="sell-btn">Confirm Sell</button>
+              <button id="btn-sell-cancel">Cancel</button>
+            </div>
+          </div>
+        </section>
+      </main>
+
+            </div> <!-- #app -->
+          </div> <!-- #game-wrapper -->
+        </div> <!-- #game-root -->
+      </div> <!-- #game-frame -->
+    </div> <!-- #scale-root -->
+    </div> <!-- #game-container -->
+
+      <!-- Fullscreen Main Menu (unscaled) -->
+      <section id="mainmenu-overlay" class="overlay mainmenu visible">
+        <div class="panel mainmenu-panel">
+          <div class="mainmenu-logo-wrap">
+            <div class="mainmenu-orbit"></div>
+          <h1 class="mainmenu-logo">Nano‑Siege</h1>
+          <p class="mainmenu-sub">Neon Reactor Defense Protocol</p>
+        </div>
+          <div class="mainmenu-actions">
+            <button id="btn-main-endless">Endless Cycle</button>
+            <button id="btn-main-leaderboard">Leaderboard</button>
+            <button id="btn-main-assembly">Assembly War <span class="badge-uc">Under Construction</span></button>
+            <button id="btn-main-loaduser">Sign In</button>
+            <button id="btn-main-settings">Settings</button>
+            <button id="btn-main-exit">Exit</button>
+          </div>
+        </div>
+    </section>
+
+      <!-- Fullscreen Map Select (Endless Cycle) -->
+      <section id="mapselect-overlay" class="overlay mainmenu">
+        <div class="panel mapselect-panel">
+          <h2>Select a Map</h2>
+          <p class="tag">Choose your battlefield for Endless Cycle. Left/Right arrows to browse.</p>
+          <div id="map-list" class="map-carousel"></div>
+          <div class="map-meta">
+            <div id="map-title" class="map-title"></div>
+            <div id="map-desc" class="map-desc"></div>
+          </div>
+          <div class="actions" style="margin-top:18px">
+            <button id="btn-map-back">Back</button>
+            <button id="btn-map-start">Start Endless Cycle</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- Fullscreen Main Settings -->
+      <section id="mainsettings-overlay" class="overlay mainmenu">
+        <div class="panel mainmenu-panel">
+          <h2>Settings</h2>
+          <p class="tag">Adjust global options before entering the Reactor Chamber.</p>
+          <div class="vol-ctl" style="margin-top:10px; display:flex; align-items:center; gap:8px; justify-content:center">
+            <label for="vol-slider-main">Volume <span id="vol-label-main">70%</span></label>
+            <input type="range" id="vol-slider-main" min="0" max="100" step="1" value="70" />
+          </div>
+          <div class="zoom-ctl" style="margin-top:14px; display:flex; align-items:center; gap:8px; justify-content:center">
+            <label for="zoom-slider-main">Zoom <span id="zoom-label-main">100%</span></label>
+            <input type="range" id="zoom-slider-main" min="100" max="200" step="5" value="100" />
+          </div>
+          <div class="dev-toggle" style="margin-top:14px">
+            <span class="dev-label">Developer Mode</span>
+            <label class="switch">
+              <input type="checkbox" id="dev-toggle-main" />
+              <span class="slider"></span>
+            </label>
+            <span class="dev-hint">∞ money, rerolls, HP</span>
+          </div>
+          <div class="actions" style="margin-top:18px">
+            <button id="btn-main-settings-back">Back</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- Fullscreen Login / Load User Menu -->
+      <section id="loadmenu-overlay" class="overlay mainmenu">
+        <div class="panel mainmenu-panel">
+          <h2>Sign In</h2>
+          <p class="tag">Log in with a username and password to load your Reactor profile.</p>
+          <div class="login-grid">
+            <div class="login-field">
+              <label for="login-username">Username</label>
+              <input type="text" id="login-username" autocomplete="username" />
+            </div>
+            <div class="login-field">
+              <label for="login-password">Password</label>
+              <input type="password" id="login-password" autocomplete="current-password" />
+            </div>
+            <div id="login-status" class="login-status"></div>
+          </div>
+          <div class="actions" style="margin-top:18px">
+            <button id="btn-login-submit">Sign In</button>
+            <button id="btn-login-create">Create User</button>
+            <button id="btn-load-back">Back</button>
+          </div>
+        </div>
+      </section>
+
+      <section id="create-overlay" class="overlay mainmenu">
+        <div class="panel mainmenu-panel">
+          <h2>Create User</h2>
+          <p class="tag">Pick a unique username and password to create a Reactor profile.</p>
+          <div class="login-grid">
+            <div class="login-field">
+              <label for="create-username">Username</label>
+              <input type="text" id="create-username" autocomplete="username" />
+            </div>
+            <div class="login-field">
+              <label for="create-password">Password</label>
+              <input type="password" id="create-password" autocomplete="new-password" />
+            </div>
+            <div class="login-field">
+              <label for="create-confirm">Confirm Password</label>
+              <input type="password" id="create-confirm" autocomplete="new-password" />
+            </div>
+            <div id="create-status" class="login-status"></div>
+          </div>
+          <div class="actions" style="margin-top:18px">
+            <button id="btn-create-submit">Create</button>
+            <button id="btn-create-back">Back</button>
+          </div>
+        </div>
+      </section>
+
+      <section id="leaderboard-overlay" class="overlay mainmenu">
+        <div class="lb-layout">
+          <div class="panel mapselect-panel compact">
+            <h3>Select a Map</h3>
+            <p class="tag">Browse leaderboards per map. Left/Right arrows to change.</p>
+            <div id="lb-map-list" class="map-carousel"></div>
+            <div class="map-meta">
+              <div id="lb-map-title" class="map-title"></div>
+              <div id="lb-map-desc" class="map-desc"></div>
+            </div>
+          </div>
+          <div class="panel mainmenu-panel">
+            <h2>Leaderboard</h2>
+            <p class="tag">Top defenders ranked by waves completed.</p>
+            <div class="leaderboard-container">
+              <ol id="leaderboard-list" class="leaderboard-list"></ol>
+            </div>
+            <p class="leaderboard-warning" id="leaderboard-warning">Sign in to compete for a spot on the leaderboard.</p>
+            <p class="leaderboard-dev-warning" id="leaderboard-dev-warning">Developer Mode is on — leaderboard scores are disabled.</p>
+            <div id="leaderboard-status" class="login-status" style="text-align:center"></div>
+            <div class="actions" style="margin-top:18px">
+              <button id="btn-leaderboard-signin">Sign In</button>
+              <button id="btn-leaderboard-back">Back</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+    <div id="signin-banner" class="signin-banner">
+      <span class="label">Signed in as</span>
+      <span id="signin-username" class="name">Guest</span>
+    </div>
+
+    <script type="module" src="src/main.js"></script>
+    <script>
+      (() => {
+        const frame = document.getElementById('game-frame');
+        const baseW = 1600;
+        const baseMenuH = 1100; // Menu overlays are unscaled; keep frame height sane for gameplay UI
+        const baseGameH = 900;
+        let uiMode = 'menu'; // 'menu' | 'game'
+
+        const computeScale = () => {
+          const sw = window.innerWidth;
+          const sh = window.innerHeight;
+          if(uiMode === 'menu'){
+            // Menu fills the width; height can scroll.
+            return sw / baseW;
+          }
+          // Gameplay: on desktop, fill full width; on smaller screens,
+          // keep current "fit to height" behaviour so UI is not cropped.
+          const isDesktop = sw >= 1024;
+          if(isDesktop){
+            return sw / baseW;
+          }
+          return Math.min(sw / baseW, sh / baseGameH);
+        };
+
+        window.setMode = (mode) => {
+          uiMode = (mode === 'game') ? 'game' : 'menu';
+          fitGame();
+        };
+
+        function fitGame(){
+          if(!frame) return;
+          const baseH = uiMode === 'game' ? baseGameH : baseMenuH;
+          const scale = computeScale();
+          frame.style.width = baseW + 'px';
+          frame.style.height = baseH + 'px';
+          frame.style.transform = `translate(-50%, 0) scale(${scale})`;
+        }
+        window.addEventListener('resize', fitGame);
+        window.addEventListener('orientationchange', fitGame);
+        window.addEventListener('load', fitGame);
+        fitGame();
+      })();
+    </script>
+  </body>
+</html>

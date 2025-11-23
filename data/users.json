@@ -1,0 +1,256 @@
+{
+  "users": [
+    {
+      "username": "NTsolakis",
+      "passwordHash": "$2a$10$4ZSJyTJUTAoC1Ls4ru6vm.TtX6LLC8u9Pgxryl/JwDJ9vn.8YBWNu",
+      "state": {
+        "missionUnlockLevel": 1,
+        "nanoCredits": 0,
+        "passives": {
+          "levels": {}
+        },
+        "abilities": {
+          "bomb": {
+            "level": 0,
+            "unlocked": false
+          },
+          "overclock": {
+            "level": 0,
+            "unlocked": false
+          },
+          "cryo": {
+            "level": 0,
+            "unlocked": false
+          },
+          "corehp": {
+            "level": 0
+          }
+        },
+        "shopIndex": 0
+      },
+      "createdAt": 1763360034174,
+      "updatedAt": 1763360034174
+    },
+    {
+      "username": "alexanderraimo",
+      "passwordHash": "$2a$10$F54nRJaEWKQOJFFk6M0C6uyVFraEdkNsTgPtO8LHlfeH.Uroe6bUu",
+      "state": {
+        "missionUnlockLevel": 1,
+        "nanoCredits": 0,
+        "passives": {
+          "levels": {}
+        },
+        "abilities": {
+          "bomb": {
+            "level": 0,
+            "unlocked": false
+          },
+          "overclock": {
+            "level": 0,
+            "unlocked": false
+          },
+          "cryo": {
+            "level": 0,
+            "unlocked": false
+          },
+          "corehp": {
+            "level": 0
+          }
+        },
+        "shopIndex": 0
+      },
+      "createdAt": 1763412266613,
+      "updatedAt": 1763412266613
+    },
+    {
+      "username": "hotdawgguy",
+      "passwordHash": "$2a$10$3MD50SP7HEK5d27f.dCo5eb/S/6i1/r14zc05rgU0E4Mg/6dY.9JS",
+      "state": {
+        "missionUnlockLevel": 1,
+        "nanoCredits": 0,
+        "passives": {
+          "levels": {}
+        },
+        "abilities": {
+          "bomb": {
+            "level": 0,
+            "unlocked": false
+          },
+          "overclock": {
+            "level": 0,
+            "unlocked": false
+          },
+          "cryo": {
+            "level": 0,
+            "unlocked": false
+          },
+          "corehp": {
+            "level": 0
+          }
+        },
+        "shopIndex": 0
+      },
+      "createdAt": 1763415457434,
+      "updatedAt": 1763415457434
+    },
+    {
+      "username": "Nick",
+      "passwordHash": "$2a$10$5LHOU1uRYHgf.dpkyuH1sOga2IV2oZPFWa/foU5hxfsqH/qQzSV4S",
+      "state": {
+        "missionUnlockLevel": 1,
+        "nanoCredits": 0,
+        "passives": {
+          "levels": {}
+        },
+        "abilities": {
+          "bomb": {
+            "level": 0,
+            "unlocked": false
+          },
+          "overclock": {
+            "level": 0,
+            "unlocked": false
+          },
+          "cryo": {
+            "level": 0,
+            "unlocked": false
+          },
+          "corehp": {
+            "level": 0
+          }
+        },
+        "shopIndex": 0
+      },
+      "createdAt": 1763422485571,
+      "updatedAt": 1763422485571
+    },
+    {
+      "username": "Binsky",
+      "passwordHash": "$2a$10$trpZ7U.OnJwYzXwnptiUE.VSIPyWoOqyk7yeBOI.kD/paq0e2zDsS",
+      "state": {
+        "missionUnlockLevel": 1,
+        "nanoCredits": 0,
+        "passives": {
+          "levels": {}
+        },
+        "abilities": {
+          "bomb": {
+            "level": 0,
+            "unlocked": false
+          },
+          "overclock": {
+            "level": 0,
+            "unlocked": false
+          },
+          "cryo": {
+            "level": 0,
+            "unlocked": false
+          },
+          "corehp": {
+            "level": 0
+          }
+        },
+        "shopIndex": 0
+      },
+      "createdAt": 1763488637186,
+      "updatedAt": 1763488637186
+    },
+    {
+      "username": "hdawgyeathatswassup",
+      "passwordHash": "$2a$10$SYxfHTB6hpDJgRK3NRS52eb8MjSxQDfEKeBQbR3m784jGvhLr.NBi",
+      "state": {
+        "missionUnlockLevel": 1,
+        "nanoCredits": 0,
+        "dataFragments": 0,
+        "coreShards": 0,
+        "passives": {
+          "active": [],
+          "capacity": 4,
+          "levels": {}
+        },
+        "abilities": {
+          "bomb": {
+            "level": 0,
+            "unlocked": false
+          },
+          "overclock": {
+            "level": 0,
+            "unlocked": false
+          },
+          "cryo": {
+            "level": 0,
+            "unlocked": false
+          },
+          "corehp": {
+            "level": 0
+          }
+        },
+        "shopIndex": 0
+      },
+      "createdAt": 1763518635181,
+      "updatedAt": 1763518635181
+    },
+    {
+      "username": "JOSH",
+      "passwordHash": "$2a$10$ScSZttUnkFZaHJlVzTcaXOTfk0BgZ3hThLh6tRpz/LzSz6Sj/XadC",
+      "state": {
+        "missionUnlockLevel": 1,
+        "nanoCredits": 0,
+        "dataFragments": 0,
+        "coreShards": 0,
+        "passives": {
+          "active": [],
+          "capacity": 4,
+          "levels": {}
+        },
+        "abilities": {
+          "bomb": {
+            "level": 0,
+            "unlocked": false
+          },
+          "overclock": {
+            "level": 0,
+            "unlocked": false
+          },
+          "cryo": {
+            "level": 0,
+            "unlocked": false
+          },
+          "corehp": {
+            "level": 0
+          }
+        },
+        "shopIndex": 0
+      },
+      "createdAt": 1763598007937,
+      "updatedAt": 1763598007937
+    }
+  ],
+  "leaderboard": [
+    {
+      "username": "NTsolakis",
+      "waves": 44,
+      "updatedAt": 1763426983058
+    },
+    {
+      "username": "alexanderraimo",
+      "waves": 35,
+      "updatedAt": 1763413055714
+    },
+    {
+      "username": "hdawgyeathatswassup",
+      "waves": 49,
+      "updatedAt": 1763522002560
+    },
+    {
+      "username": "Binsky",
+      "waves": 13,
+      "updatedAt": 1763573419802
+    },
+    {
+      "username": "JOSH",
+      "waves": 47,
+      "updatedAt": 1763599341547
+    }
+  ]
+}
