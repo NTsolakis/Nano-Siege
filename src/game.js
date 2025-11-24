@@ -50,6 +50,7 @@ export class Game {
     this.singularityCounter = 0;
     this.nanoKillCounter = 0;
     this.nanoDrones = [];
+    this.droneBeams = [];
     this.reactorShield = 0;
     this.chrono = { timer: 0, active: false, timeLeft: 0 };
     this.time = 0; // seconds, for animation
@@ -69,19 +70,20 @@ export class Game {
     this.shakeMag = 0;
     this.GAME_MAX_LIVES = GAME_RULES.startingLives;
     // Shop meta
-    this.shop = { index: 0, offers: [] };
+    this.shop = { index: 0, offers: [], rerollPrice: GAME_RULES.rerollBasePrice || 50 };
     // Track passive perk levels across the run
     this.passives = { active: [], capacity: 4, slotBoost: false };
     this.recomputeSlotPassives();
     // Abilities (permanent once unlocked for the run)
     this.abilities = {
       bomb: { unlocked:false, level:0, cd:0, cdMax:12, radius:70, damage:120 },
-      overclock: { unlocked:false, level:0, cd:0, cdMax:25, dur:8, boost:1.0, active:false, _applied:false },
-      cryo: { unlocked:false, level:0, cd:0, cdMax:20, slow:0.5, dur:2.5 },
+      overclock: { unlocked:false, level:0, cd:0, cdMax:25, dur:8, boost:1.0, active:false, durLeft:0, _applied:false },
+      cryo: { unlocked:false, level:0, cd:0, cdMax:20, slow:0.5, dur:2.5, active:false, timeLeft:0 },
       corehp: { level:0 }
     };
     this.recomputeAbilityParams();
     this.placingBomb = false;
+    this._lastCritBannerTime = 0;
     // Logged-in user (for backend saves)
     this.currentUser = null; // { username }
 
@@ -208,6 +210,7 @@ export class Game {
     this.ui.on('closeLeaderboard', ()=> this.closeLeaderboard());
     this.ui.on('leaderboardSignIn', ()=> this.handleLeaderboardSignIn());
     this.ui.on('logout', (payload)=> this.handleLogout(payload));
+    this.ui.on('pauseLoginOpen', ()=> { this.profileOrigin = 'pause'; });
     this.ui.on('openAssemblyCore', ()=> this.openAssemblyCore());
     this.ui.on('removePassive', (key)=> this.refundPassive(key));
     this.ui.on('leaderboardSelectMap', (key)=>{ if(key){ this.leaderboardMapKey = key; this.refreshLeaderboard(key); } });
@@ -271,8 +274,8 @@ export class Game {
   resetAbilityUnlocks(){
     this.abilities = {
       bomb: { unlocked:false, level:0, cd:0, cdMax:12, radius:70, damage:120 },
-      overclock: { unlocked:false, level:0, cd:0, cdMax:25, dur:8, boost:1.0, active:false, _applied:false },
-      cryo: { unlocked:false, level:0, cd:0, cdMax:20, slow:0.5, dur:2.5 },
+      overclock: { unlocked:false, level:0, cd:0, cdMax:25, dur:8, boost:1.0, active:false, durLeft:0, _applied:false },
+      cryo: { unlocked:false, level:0, cd:0, cdMax:20, slow:0.5, dur:2.5, active:false, timeLeft:0 },
       corehp: { level:0 }
     };
     this.recomputeAbilityParams();
@@ -305,6 +308,11 @@ export class Game {
   startGame(){
     // Ensure any lingering loops are silenced before start
     this.stopAllAudio();
+    // Endless Cycle should always start from a fresh
+    // progression state (no carried-over abilities).
+    if(this.mode === 'endless'){
+      this.resetAbilityUnlocks();
+    }
     this.reset();
     audio.resume();
     this.state = 'playing';
@@ -355,7 +363,7 @@ export class Game {
     this.bonusPayout = Math.min(GAME_RULES.bigWaveBonus, GAME_RULES.bonusMaxPayout || Infinity);
     this.lastBonusWave = null;
     this.bonusHistory = [];
-    this.shop = { index: 0, offers: [] };
+    this.shop = { index: 0, offers: [], rerollPrice: GAME_RULES.rerollBasePrice || 50 };
     this.hazardZones = [];
     this.thermalVentingCd = 0;
     this.singularityCounter = 0;
@@ -477,6 +485,8 @@ export class Game {
     // leaving the Nanocore chamber.
     this.mode = 'assembly';
     this.coreReturnTarget = 'assembly';
+    // Use gameplay scaling so the chamber matches the in-run view.
+    this.applyScaleMode('game');
     // Reuse the cinematic teleport → chamber flow used in Endless
     // Cycle, so the Assembly Core feels consistent.
     if(this.startTeleportToShop) this.startTeleportToShop();
@@ -617,13 +627,15 @@ export class Game {
         const msg = res.created ? 'User created and loaded.' : 'Login successful.';
         this.ui.setLoginStatus(msg, true);
       }
-      // Close login overlay back to main menu / Assembly menu
+      // Close login overlay back to original context
       if(this.ui.showLoadMenu) this.ui.showLoadMenu(false);
       if(this.ui.showCreateMenu) this.ui.showCreateMenu(false);
       if(this.profileOrigin === 'assembly'){
         if(this.ui.showAssembly) this.ui.showAssembly(true);
-      } else if(this.ui.showMainMenu){
-        this.ui.showMainMenu(true);
+      } else if(this.profileOrigin === 'mainmenu'){
+        if(this.ui.showMainMenu) this.ui.showMainMenu(true);
+      } else if(this.profileOrigin === 'pause'){
+        if(this.ui.showPauseLogin) this.ui.showPauseLogin(false);
       }
       this.profileOrigin = null;
     }catch(err){
@@ -656,8 +668,10 @@ export class Game {
       if(this.ui.showLoadMenu) this.ui.showLoadMenu(false);
       if(this.profileOrigin === 'assembly'){
         if(this.ui.showAssembly) this.ui.showAssembly(true);
-      } else if(this.ui.showMainMenu){
-        this.ui.showMainMenu(true);
+      } else if(this.profileOrigin === 'mainmenu'){
+        if(this.ui.showMainMenu) this.ui.showMainMenu(true);
+      } else if(this.profileOrigin === 'pause'){
+        if(this.ui.showPauseLogin) this.ui.showPauseLogin(false);
       }
       this.profileOrigin = null;
     }catch(err){
@@ -896,13 +910,13 @@ export class Game {
     this.missionId = null;
     this.missionMaxWaves = null;
     // Fresh shop/meta state
-    this.shop = { index: 0, offers: [] };
+    this.shop = { index: 0, offers: [], rerollPrice: GAME_RULES.rerollBasePrice || 50 };
     this.passives = { active: [], capacity: 4, slotBoost: false };
     // Reset abilities to base (locked, level 0)
     this.abilities = {
       bomb: { unlocked:false, level:0, cd:0, cdMax:12, radius:70, damage:120 },
-      overclock: { unlocked:false, level:0, cd:0, cdMax:25, dur:8, boost:1.0, active:false, _applied:false },
-      cryo: { unlocked:false, level:0, cd:0, cdMax:20, slow:0.5, dur:2.5 },
+      overclock: { unlocked:false, level:0, cd:0, cdMax:25, dur:8, boost:1.0, active:false, durLeft:0, _applied:false },
+      cryo: { unlocked:false, level:0, cd:0, cdMax:20, slow:0.5, dur:2.5, active:false, timeLeft:0 },
       corehp: { level:0 }
     };
     this.recomputeAbilityParams();
@@ -924,6 +938,9 @@ export class Game {
     this.bonusPayout = Math.min(GAME_RULES.bigWaveBonus, GAME_RULES.bonusMaxPayout || Infinity);
     this.lastBonusWave = null;
     this.bonusHistory = [];
+    this.nanoKillCounter = 0;
+    this.nanoDrones = [];
+    this.droneBeams = [];
     this.lowHpActive = false;
     this.shakeMag = 0;
     this.floaters = [];
@@ -1183,17 +1200,37 @@ export class Game {
   }
 
   spawnEnemy(def){
-    // Choose a path: supports multi-path maps (array of waypoint arrays)
+    // Choose a path: supports multi-path maps (array of waypoint arrays).
+    // Flying drones use a custom arc from the left side toward the core;
+    // all other enemies follow the map waypoints.
     const W = this.grid.waypoints;
+    const base = this.grid.base || (Array.isArray(W) ? W[W.length-1] : W[W.length-1]);
     const multi = Array.isArray(W) && W.length && Array.isArray(W[0]);
     let path;
-    if(multi){
+    if(def.variant === 'drone' && base){
+      // Start slightly off-screen on either the top-left or bottom-left,
+      // then arc in with a couple of midpoints before reaching the core.
+      const fromTop = Math.random() < 0.5;
+      const startY = fromTop ? (CANVAS_H * 0.12) : (CANVAS_H * 0.88);
+      const start = { x: -40, y: startY };
+      const mid1 = {
+        x: CANVAS_W * 0.25 + Math.random()*80,
+        y: fromTop ? startY + 80 + Math.random()*40 : startY - 80 - Math.random()*40
+      };
+      const mid2 = {
+        x: CANVAS_W * 0.55 + Math.random()*70,
+        y: base.y + (fromTop ? 60 : -60)
+      };
+      path = [start, mid1, mid2, { x: base.x, y: base.y }];
+    } else if(multi){
       let idx;
       if(typeof def._pathIndex === 'number'){ idx = def._pathIndex|0; }
       else { idx = this.choosePathIndex(); }
       idx = Math.max(0, Math.min(W.length-1, idx));
       path = W[idx];
-    } else { path = W; }
+    } else {
+      path = W;
+    }
     const e = new Enemy(path, {
       hp: def.hp,
       speed: def.speed,
@@ -1392,6 +1429,9 @@ export class Game {
       const r2 = z.r * z.r;
       for(const e of this.enemies){
         if(!e.alive) continue;
+        // Flying drones are immune to ground splash puddles (bubble zones),
+        // but can still be affected by other hazard types.
+        if(e.isFlying && z.kind === 'bubble') continue;
         if(dist2(e.x, e.y, z.x, z.y) <= r2){
           if(z.slow > 0){
             e.applySlow(z.slow, 0.5);
@@ -1470,7 +1510,12 @@ export class Game {
     }
   }
   updateDrones(dt){
-    if(!this.nanoDrones.length || !buffs.nanoDroneDamage) return;
+    if(!this.nanoDrones.length) return;
+    // Fade out existing drone beam traces
+    if(this.droneBeams && this.droneBeams.length){
+      this.droneBeams = this.droneBeams.filter(b=> (b.t = (b.t||0) + dt) < (b.ttl||0.12));
+    }
+    if(!buffs.nanoDroneDamage) return;
     const base = this.grid.base || this.grid.waypoints[this.grid.waypoints.length-1];
     const range = buffs.nanoDroneRange || 220;
     const fireDelay = 1 / Math.max(0.1, buffs.nanoDroneFireRate || 1);
@@ -1488,9 +1533,23 @@ export class Game {
         if(d2v < bestD2){ bestD2 = d2v; best = e; }
       }
       if(best){
-        best.damage(buffs.nanoDroneDamage * dt * 4, 'drone', { color:'#a8f0ff' });
+        // Hitscan-style pulse similar to a mini cannon shot.
+        const dmg = Math.max(0, buffs.nanoDroneDamage || 0);
+        if(dmg > 0){
+          best.damage(dmg, 'drone', { color:'#a8f0ff' });
+          // Beam visual from drone to target
+          if(!this.droneBeams) this.droneBeams = [];
+          this.droneBeams.push({
+            x1: d.x,
+            y1: d.y,
+            x2: best.x,
+            y2: best.y,
+            t: 0,
+            ttl: 0.14
+          });
+          if(Math.random()<0.5) this.spawnParticles(best.x, best.y, '#9fffe0');
+        }
         d.cd = fireDelay;
-        if(Math.random()<0.35) this.spawnParticles(best.x, best.y, '#9fffe0');
       }
     }
   }
@@ -1515,7 +1574,9 @@ export class Game {
   }
 
   addFragments(amount, opts={}){
-    const gain = Math.max(0, Math.round(amount));
+    const base = Math.max(0, Math.round(amount));
+    const scale = (GAME_RULES.fragmentGainScale != null) ? GAME_RULES.fragmentGainScale : 0.35;
+    const gain = Math.max(0, Math.round(base * scale));
     if(!gain) return;
     this.fragments = Math.max(0, this.fragments + gain);
     if(this.ui.setFragments) this.ui.setFragments(this.fragments);
@@ -1744,7 +1805,7 @@ export class Game {
       case 'starter_laser_burn': buffs.laserStartBurn = true; break;
       case 'starter_laser_slow': buffs.laserStartSlow = true; break;
       case 'proto_overdrive': buffs.fireRateMul *= 1.05; break;
-      case 'proto_precision': buffs.projectileSpeedMul *= 1.10; break;
+      case 'proto_precision': addRetargetBonus(0.08); break;
       case 'proto_recycler': buffs.creditMul *= 1.05; break;
       case 'proto_coupling': buffs.burnDurationBonus += 1; break;
       case 'proto_cryo': buffs.slowPotencyMul *= 1.05; break;
@@ -1808,7 +1869,9 @@ export class Game {
     const critDmg = Math.max(0, (buffs.targetPainterBonus || 0));
     const slowBonus = Math.max(0, (buffs.slowPotencyMul || 1) - 1);
     const burnBonus = Math.max(0, (buffs.burnDpsMul || 1) - 1);
-    const baseDamage = Math.max(0, (buffs.baseDamageMul || 1) - 1);
+    const dmgMul = (buffs.dmgMul || 1);
+    const baseMul = (buffs.baseDamageMul || 1);
+    const baseDamage = Math.max(0, baseMul * dmgMul - 1);
     const targeting = Math.max(0, buffs.retargetSpeedBonus || 0);
     this.ui.setCombatStats({ baseDamage, crit, critDmg, slow: slowBonus, burn: burnBonus, targeting });
   }
@@ -1950,6 +2013,9 @@ export class Game {
     this.state = 'shop';
     // Roll offers for this shop index and attach dynamic costs/levels
     this.shop.rerolled = false;
+    if(!this.shop.rerollPrice || !Number.isFinite(this.shop.rerollPrice) || this.shop.rerollPrice <= 0){
+      this.shop.rerollPrice = GAME_RULES.rerollBasePrice || 50;
+    }
     const raw = rollShopOffers(SHOP_OFFER_COUNT, this.shop.index, this.getNanoLockoutKeys());
     this.shop.offers = raw.map(o=>{
       const perk = PERKS.find(p=>p.key===o.key) || {};
@@ -1963,6 +2029,7 @@ export class Game {
     const abilList = this.buildAbilityCards();
     if(this.ui.renderShopAbilities) this.ui.renderShopAbilities(abilList, this.coreShards);
     this.ui.showShop(true);
+    if(this.ui.setRerollPrice) this.ui.setRerollPrice(this.shop.rerollPrice || (GAME_RULES.rerollBasePrice || 50));
     if(this.ui.setShopRerollEnabled) this.ui.setShopRerollEnabled(true);
     // Enable Start button after leaving shop; here we just keep it as-is for Endless;
     // Assembly Core uses Back to return to mission select.
@@ -2042,7 +2109,17 @@ export class Game {
   enterChamber(){
     // Prepare shop data (similar to openShop but without HTML overlay)
     this.teleport.phase='in'; this.teleport.t=0;
+    // Hide the combat stats panel while the Assembly Core
+    // (Nanocore chamber) is active so it does not overlap
+    // the chamber UI.
+    if(typeof document !== 'undefined'){
+      const cs = document.getElementById('combat-stats');
+      if(cs) cs.style.display = 'none';
+    }
     this.shop.rerolled = false;
+    if(!this.shop.rerollPrice || !Number.isFinite(this.shop.rerollPrice) || this.shop.rerollPrice <= 0){
+      this.shop.rerollPrice = GAME_RULES.rerollBasePrice || 50;
+    }
     const raw = rollShopOffers(SHOP_OFFER_COUNT, this.shop.index, this.getNanoLockoutKeys());
     this.shop.offers = raw.map(o=>{
       const perk = PERKS.find(p=>p.key===o.key) || {};
@@ -2074,7 +2151,18 @@ export class Game {
     const leftX = cx - 360; const spacing = 110; const nP = Math.max(1, offers.length);
     this.chamber.passive = offers.map((o,i)=>{
       const y = cy + (i - (nP-1)/2)*spacing;
-      return { kind:'passive', idx: offersAll.indexOf(o), x: leftX, y, label:o.name, cost:o.cost, level:o.level||0, desc:o.desc||'', tier: o.tier || 'common' };
+      return {
+        kind:'passive',
+        idx: offersAll.indexOf(o),
+        x: leftX,
+        y,
+        label: o.name,
+        cost: o.cost,
+        level: o.level||0,
+        desc: o.desc||'',
+        tier: o.tier || 'common',
+        rarity: o.tierLabel || (o.tier==='super' ? 'Super Rare' : (o.tier==='rare' ? 'Rare' : 'Common'))
+      };
     });
     // Abilities: compute live list from current ability levels and prices (fresh each time)
     const abilityCards = this.buildAbilityCards();
@@ -2082,20 +2170,50 @@ export class Game {
     const cardLookup = abilityCards.reduce((acc, card)=>{ acc[card.key] = card; return acc; }, {});
     const liveAb = ['bomb','overclock','cryo'].map(k=>{
       const info = cardLookup[k];
-      if(!info) return { key:k, name:k, cost:1, level:0, max: (ULTIMATE_MAX_LEVEL||5), lines: [] };
-      return { key:k, name:info.name, cost:info.cost, level:info.level, max: info.maxLevel|| (ULTIMATE_MAX_LEVEL||5), lines: info.preview || [] };
+      if(!info) return { key:k, name:k, cost:1, level:0, max: (ULTIMATE_MAX_LEVEL||5), lines: [], rarity:'Ultimate' };
+      return {
+        key:k,
+        name:info.name,
+        cost:info.cost,
+        level:info.level,
+        max: info.maxLevel|| (ULTIMATE_MAX_LEVEL||5),
+        lines: info.preview || [],
+        rarity:'Ultimate'
+      };
     });
     const R = Math.min(CANVAS_W, CANVAS_H)*0.26; const m = Math.max(1, liveAb.length);
     this.chamber.abil = liveAb.map((a,i)=>{
       const ang = -Math.PI/2 + i*(Math.PI*2/m);
-      return { kind:'ability', key:a.key, x: cx + Math.cos(ang)*R, y: cy + Math.sin(ang)*R, label:a.name, cost:a.cost, level:a.level||0, max:a.max||5, lines:a.lines||[] };
+      return {
+        kind:'ability',
+        key:a.key,
+        x: cx + Math.cos(ang)*R,
+        y: cy + Math.sin(ang)*R,
+        label:a.name,
+        cost:a.cost,
+        level:a.level||0,
+        max:a.max||5,
+        lines:a.lines||[],
+        rarity:a.rarity || 'Ultimate'
+      };
     });
     // Center hex upgrade: Reactor Reinforce (core HP)
     const lvlCore = this.getAbilityLevel('corehp');
     const aCore = ABILITIES.find(x=> x.key==='corehp');
     const costCore = (ultimateCostFor? ultimateCostFor(aCore,lvlCore): (aCore?.cost||160));
     const coreLines = (cardLookup['corehp']?.preview) || [];
-    this.chamber.abil.push({ kind:'ability', key:'corehp', x: cx, y: cy, label: aCore?.name||'Reactor Reinforce', cost: costCore, level: lvlCore, max: (ULTIMATE_MAX_LEVEL||5), lines: coreLines });
+    this.chamber.abil.push({
+      kind:'ability',
+      key:'corehp',
+      x: cx,
+      y: cy,
+      label: aCore?.name||'Reactor Reinforce',
+      cost: costCore,
+      level: lvlCore,
+      max: (ULTIMATE_MAX_LEVEL||5),
+      lines: coreLines,
+      rarity:'Ultimate'
+    });
     this.chamber.sectionLabels = {
       passive: { text: 'Nano-Tech Upgrades', x: leftX, y: cy - (nP*spacing*0.5) - 60 },
       ability: { text: 'Over Drive Control', x: cx, y: cy - R - 70 }
@@ -2104,9 +2222,17 @@ export class Game {
   closeChamber(){ this.startReturnFromChamber(); this.shop.index = (this.shop.index|0) + 1; }
   startReturnFromChamber(){
     this.state = 'teleport';
-    this.teleport = { t:0, fade:0.12, phase:'out', durOut:0.7, durIn:0.6, target:'map', msg:'Returning to Reactor Chamber' };
+    const target = (this.coreReturnTarget === 'assembly' && this.mode === 'assembly') ? 'assembly' : 'map';
+    const msg = (target === 'assembly') ? 'Returning to Assembly War…' : 'Returning to Reactor Chamber';
+    this.teleport = { t:0, fade:0.12, phase:'out', durOut:0.7, durIn:0.6, target, msg };
     this.teleDots = [];
     for(let i=0;i<50;i++) this.teleDots.push({ x: Math.random()*CANVAS_W, y: Math.random()*CANVAS_H, r:1+Math.random()*2, p: Math.random()*Math.PI*2 });
+    // Restore combat stats panel now that we are leaving
+    // the Assembly Core view.
+    if(typeof document !== 'undefined'){
+      const cs = document.getElementById('combat-stats');
+      if(cs) cs.style.display = '';
+    }
   }
   shopBuy(idx){
     if(!this.shop || !this.shop.offers || idx==null) return;
@@ -2161,9 +2287,15 @@ export class Game {
     this.ui.renderShop(this.shop.offers, this.fragments);
   }
   shopReroll(){
-    const basePrice = 30;
-    const price = Math.max(0, Math.round(basePrice * (1 - (buffs.rerollDiscount||0))));
-    if(!this.devMode && this.shop.rerolled) return;
+    const basePrice = GAME_RULES.rerollBasePrice || 50;
+    const scale = GAME_RULES.rerollPriceScale || 2.0;
+    if(!this.shop) this.shop = { index: 0, offers: [], rerollPrice: basePrice };
+    if(!this.shop.rerollPrice || !Number.isFinite(this.shop.rerollPrice) || this.shop.rerollPrice <= 0){
+      this.shop.rerollPrice = basePrice;
+    }
+    const currentPrice = this.shop.rerollPrice;
+    const discountMul = 1 - (buffs.rerollDiscount || 0);
+    const price = this.devMode ? 0 : Math.max(0, Math.round(currentPrice * discountMul));
     if(!this.devMode){
       if(this.fragments < price){
         this.showBanner('NOT ENOUGH FRAGMENTS', `Need ${price}⟐ to reroll`, 'danger');
@@ -2195,8 +2327,13 @@ export class Game {
     // Refresh ability section's disabled state after currency change
     const abilList = this.buildAbilityCards();
     if(this.ui.renderShopAbilities) this.ui.renderShopAbilities(abilList, this.coreShards);
-    this.shop.rerolled = !this.devMode;
-    if(this.ui.setShopRerollEnabled) this.ui.setShopRerollEnabled(this.devMode);
+    // Increase reroll price for the next use (persists across shop visits
+    // until the run is reset by a new game or loss).
+    if(!this.devMode){
+      this.shop.rerollPrice = Math.max(basePrice, Math.round(currentPrice * scale));
+    }
+    if(this.ui.setRerollPrice) this.ui.setRerollPrice(this.shop.rerollPrice || basePrice);
+    if(this.ui.setShopRerollEnabled) this.ui.setShopRerollEnabled(true);
   }
   shopContinue(){
     // In this build, the HTML shop overlay is treated as
@@ -2476,6 +2613,7 @@ export class Game {
             this.ui.setLives(this.lives);
             this.addFloater(e.x, e.y-16, `+${heal} HP`, COLORS.accent || '#17e7a4');
             this.spawnParticles(e.x, e.y, '#9fffe0');
+            this.showBanner('CORE HP RECOVERED', `+${heal} HP from nano-blob`, null);
           }
         }
 
@@ -2562,7 +2700,13 @@ export class Game {
         }
         if(ab.overclock.cd>0) ab.overclock.cd = Math.max(0, ab.overclock.cd - dt);
       }
-      if(ab.cryo.unlocked && ab.cryo.cd>0) ab.cryo.cd = Math.max(0, ab.cryo.cd - dt);
+      if(ab.cryo.unlocked){
+        if(ab.cryo.active){
+          ab.cryo.timeLeft = (ab.cryo.timeLeft||0) - dt;
+          if(ab.cryo.timeLeft <= 0){ ab.cryo.active = false; }
+        }
+        if(ab.cryo.cd>0) ab.cryo.cd = Math.max(0, ab.cryo.cd - dt);
+      }
       if(this.updateAbilityUI) this.updateAbilityUI();
     }
 
@@ -2732,6 +2876,51 @@ export class Game {
       ctx.textAlign = 'center';
       ctx.fillText('Reactor HP Low', base.x, base.y - r - 24);
       ctx.restore();
+    }
+
+    // Player nano-drones (Nanite Armada): orbiting mini-turrets around the core
+    if(this.nanoDrones && this.nanoDrones.length){
+      for(const d of this.nanoDrones){
+        const r = 8;
+        const col = COLORS.drone || COLORS.accent2;
+        const t = this.time || 0;
+        const pulse = 0.7 + 0.3 * Math.sin(t*4 + d.angle*1.3);
+        ctx.save();
+        // Outer glow
+        ctx.globalAlpha = 0.6 + 0.4*pulse;
+        ctx.shadowColor = col;
+        ctx.shadowBlur = 14;
+        ctx.fillStyle = col;
+        ctx.beginPath();
+        ctx.arc(d.x, d.y, r, 0, Math.PI*2);
+        ctx.fill();
+        // Inner core
+        ctx.globalAlpha = 1;
+        ctx.shadowBlur = 0;
+        ctx.fillStyle = '#0b1f29';
+        ctx.beginPath();
+        ctx.arc(d.x + 1.5, d.y - 1.5, r*0.5, 0, Math.PI*2);
+        ctx.fill();
+        ctx.restore();
+      }
+    }
+    // Drone beams (brief hitscan tracers)
+    if(this.droneBeams && this.droneBeams.length){
+      for(const b of this.droneBeams){
+        const p = Math.max(0, Math.min(1, (b.t||0)/(b.ttl||0.14)));
+        const alpha = 0.8 * (1 - p);
+        if(alpha <= 0) continue;
+        ctx.save();
+        ctx.globalAlpha = alpha;
+        const col = COLORS.drone || COLORS.accent2;
+        ctx.strokeStyle = col;
+        ctx.lineWidth = 2.2 - p*1.2;
+        ctx.beginPath();
+        ctx.moveTo(b.x1, b.y1);
+        ctx.lineTo(b.x2, b.y2);
+        ctx.stroke();
+        ctx.restore();
+      }
     }
 
     // Towers draw below enemies bullets for clarity
@@ -2911,12 +3100,14 @@ export class Game {
       ctx.globalAlpha = a*0.9; ctx.fillStyle = '#000'; ctx.fillRect(0,0,CANVAS_W,CANVAS_H);
       const msg = this.teleport?.msg || (this.teleport?.target==='chamber' ? 'Entering Nanocore…' : 'Returning to Reactor Chamber');
       ctx.globalAlpha = a*0.8; ctx.fillStyle = '#9fffe0'; ctx.font='700 28px system-ui, sans-serif'; ctx.textAlign='center'; ctx.fillText(msg, CANVAS_W/2, CANVAS_H*0.5);
-    } else { // in phase: crossfade in chamber backdrop
-      // draw chamber backdrop with inverse alpha
+    } else { // in phase: crossfade in backdrop
       const inv = Math.max(0, Math.min(1, 1-a));
       ctx.globalAlpha = inv;
-      if(this.teleport?.target==='chamber') this.drawChamberBackdrop(ctx);
-      else this.drawMapBackdrop(ctx);
+      if(this.teleport?.target==='chamber'){
+        this.drawChamberBackdrop(ctx);
+      } else if(this.teleport?.target==='map'){
+        this.drawMapBackdrop(ctx);
+      } // target==='assembly' uses the solid black background only
       ctx.globalAlpha = 1;
     }
     ctx.restore();
@@ -2931,8 +3122,18 @@ export class Game {
       const label = (this.placingBomb && ready) ? 'Loaded' : null;
       this.ui.setAbilityCooldown('bomb', ready, ab.bomb.cd>0? ab.bomb.cd : 0, label);
     }
-    if(ab.overclock.unlocked){ this.ui.setAbilityCooldown('overclock', (!ab.overclock.active && ab.overclock.cd<=0), ab.overclock.cd>0? ab.overclock.cd : 0); }
-    if(ab.cryo.unlocked){ this.ui.setAbilityCooldown('cryo', ab.cryo.cd<=0, ab.cryo.cd>0? ab.cryo.cd : 0); }
+    if(ab.overclock.unlocked){
+      const ready = (!ab.overclock.active && ab.overclock.cd<=0);
+      const cd = ab.overclock.cd>0? ab.overclock.cd : 0;
+      const activeLeft = ab.overclock.active ? Math.max(0, ab.overclock.durLeft||0) : null;
+      this.ui.setAbilityCooldown('overclock', ready, cd, null, activeLeft);
+    }
+    if(ab.cryo.unlocked){
+      const ready = (!ab.cryo.active && ab.cryo.cd<=0);
+      const cd = ab.cryo.cd>0? ab.cryo.cd : 0;
+      const activeLeft = ab.cryo.active ? Math.max(0, ab.cryo.timeLeft||0) : null;
+      this.ui.setAbilityCooldown('cryo', ready, cd, null, activeLeft);
+    }
   }
 
   tryUseBomb(){
@@ -2988,6 +3189,8 @@ export class Game {
     if(!c.unlocked || c.cd>0 || this.state!=='playing') return;
     // Apply slow to all enemies
     for(const e of this.enemies){ if(e.alive) e.applySlow(c.slow, c.dur); }
+    c.active = true;
+    c.timeLeft = c.dur;
     c.cd = c.cdMax;
     if(audio.zap) audio.zap();
     this.updateAbilityUI();
@@ -3188,10 +3391,8 @@ export class Game {
     const step = 40;
     for(let x=0;x<=CANVAS_W;x+=step){ ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,CANVAS_H); ctx.stroke(); }
     for(let y=0;y<=CANVAS_H;y+=step){ ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(CANVAS_W,y); ctx.stroke(); }
-    // core
+    // core position (no longer draws background hex; nodes render their own icons)
     const cx = CANVAS_W/2, cy = CANVAS_H/2;
-    ctx.shadowColor = COLORS.accent2; ctx.shadowBlur = 18; ctx.fillStyle = '#0b1d28'; ctx.strokeStyle = COLORS.accent2; ctx.lineWidth = 2;
-    ctx.beginPath(); for(let i=0;i<6;i++){ const a=i*Math.PI/3; const r=38; const x=cx+Math.cos(a)*r, y=cy+Math.sin(a)*r; if(i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);} ctx.closePath(); ctx.fill(); ctx.stroke();
     ctx.shadowBlur = 0;
     // floating nodes
     const t = (this.chamber?.t)||0;
@@ -3208,37 +3409,19 @@ export class Game {
 
       ctx.save();
 
-      if(isCore){
-        // Core HP upgrade: single larger hex icon (no surrounding ring)
-        ctx.save();
-        ctx.translate(x,y);
-        // Make the core icon noticeably larger than other ability nodes
-        const rHex = (hover ? baseR + 10 : baseR + 6);
-        const drawHex = (r)=>{
-          ctx.beginPath();
-          for(let i=0;i<6;i++){
-            const a = i*Math.PI/3;
-            const px = Math.cos(a)*r, py = Math.sin(a)*r;
-            if(i===0) ctx.moveTo(px,py); else ctx.lineTo(px,py);
-          }
-          ctx.closePath();
-        };
-        ctx.shadowColor = color;
-        ctx.shadowBlur = hover ? 26 : 18;
-        ctx.fillStyle = '#0b1d28';
-        ctx.strokeStyle = color;
-        ctx.lineWidth = 2.5;
-        drawHex(rHex);
-        ctx.fill();
-        ctx.stroke();
-        ctx.restore();
-      } else {
-        // Default node: circular aura + inner core
-        ctx.shadowColor = color; ctx.shadowBlur = hover ? 24 : 14; ctx.fillStyle = color;
-        const R = hover ? baseR+4 : baseR;
-        ctx.beginPath(); ctx.arc(x,y,R,0,Math.PI*2); ctx.fill();
-        ctx.shadowBlur = 0; ctx.fillStyle = '#0b1118'; ctx.beginPath(); ctx.arc(x,y,12,0,Math.PI*2); ctx.fill();
-      }
+      // Circular node icon (core uses a slightly larger radius)
+      const outerR = hover ? baseR + (isCore ? 8 : 4) : baseR + (isCore ? 4 : 0);
+      ctx.shadowColor = color;
+      ctx.shadowBlur = hover ? 24 : 14;
+      ctx.fillStyle = color;
+      ctx.beginPath();
+      ctx.arc(x, y, outerR, 0, Math.PI*2);
+      ctx.fill();
+      ctx.shadowBlur = 0;
+      ctx.fillStyle = '#0b1118';
+      ctx.beginPath();
+      ctx.arc(x, y, isCore ? 16 : 12, 0, Math.PI*2);
+      ctx.fill();
 
       // Label above node
       ctx.fillStyle = 'white'; ctx.font='600 12px system-ui, sans-serif'; ctx.textAlign='center';
@@ -3266,6 +3449,7 @@ export class Game {
           this.ui.showChamberTooltip({
             label,
             lines: lines.length ? lines : [`Level ${filled}/${total}`],
+            rarity: n.rarity || 'Ultimate',
             x: rect.left + x,
             y: rect.top + (y - (isCore ? 54 : 44))
           });
@@ -3285,6 +3469,7 @@ export class Game {
             this.ui.showChamberTooltip({
               label,
               desc: n.desc,
+              rarity: n.rarity || (n.tier==='super' ? 'Super Rare' : (n.tier==='rare' ? 'Rare' : 'Common')),
               x: rect.left + x,
               y: rect.top + y - 24
             });
@@ -3360,9 +3545,10 @@ export class Game {
     };
     const rerollPrice = Math.max(0, Math.round(30 * (1 - (buffs.rerollDiscount||0))));
     const rerollLabel = this.devMode ? 'Reroll (∞)' : `Reroll (${rerollPrice}⟐)`;
+    const contLabel = (this.mode === 'assembly' && this.coreReturnTarget === 'assembly') ? 'Back' : 'Continue';
     drawBtn(btn.reroll, rerollLabel);
     drawConvert(btn.convert);
-    drawBtn(btn.cont, 'Continue');
+    drawBtn(btn.cont, contLabel);
 
     ctx.restore();
   }
@@ -3374,9 +3560,15 @@ export class Game {
     ctx.strokeStyle = 'rgba(255,255,255,0.06)'; ctx.lineWidth = 1;
     const step = 40; for(let x=0;x<=CANVAS_W;x+=step){ ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,CANVAS_H); ctx.stroke(); }
     for(let y=0;y<=CANVAS_H;y+=step){ ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(CANVAS_W,y); ctx.stroke(); }
-    const cx = CANVAS_W/2, cy = CANVAS_H/2; ctx.shadowColor = COLORS.accent2; ctx.shadowBlur = 12; ctx.fillStyle = '#0b1d28'; ctx.strokeStyle = COLORS.accent2; ctx.lineWidth = 2;
-    ctx.beginPath(); for(let i=0;i<6;i++){ const a=i*Math.PI/3, r=38; const x=cx+Math.cos(a)*r, y=cy+Math.sin(a)*r; if(i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y); }
-    ctx.closePath(); ctx.fill(); ctx.stroke(); ctx.restore();
+    // soft central glow instead of hex core
+    const cx = CANVAS_W/2, cy = CANVAS_H/2;
+    const r = 40;
+    const g = ctx.createRadialGradient(cx,cy,0,cx,cy,r*1.6);
+    g.addColorStop(0,'rgba(0,186,255,0.5)');
+    g.addColorStop(1,'rgba(0,186,255,0)');
+    ctx.fillStyle = g;
+    ctx.beginPath(); ctx.arc(cx,cy,r*1.4,0,Math.PI*2); ctx.fill();
+    ctx.restore();
   }
 
   // Backdrop for map return: minimal background + grid + core base
@@ -3408,6 +3600,16 @@ export class Game {
     if(this.ui && this.ui.pushBannerMessage){
       this.ui.pushBannerMessage({ text, subtext, color });
     }
+  }
+
+  registerCrit(damage){
+    const nowTs = now();
+    // Avoid spamming: only show sizeable crits and throttle frequency.
+    if(damage < 15) return;
+    if(nowTs - this._lastCritBannerTime < 900) return;
+    this._lastCritBannerTime = nowTs;
+    const val = Math.max(1, Math.round(damage));
+    this.showBanner('CRITICAL HIT', `-${val} HP`, 'accent');
   }
 
   // Trigger a brief screen shake

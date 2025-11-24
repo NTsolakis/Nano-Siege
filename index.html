@@ -58,14 +58,14 @@
           <section class="hud-cell hud-controls">
             <div class="control-row">
               <button id="btn-start-wave">Start Wave</button>
-              <button id="btn-fast">⏩ 1x</button>
+              <button id="btn-fast"><span class="ff-icon">⏩</span><span class="ff-label" id="fast-label">x1</span></button>
               <button id="btn-pause">Pause</button>
             </div>
           </section>
           <section class="hud-cell hud-abilities">
-            <button id="btn-abil-bomb" class="abil-btn">Bomb (Locked)</button>
-            <button id="btn-abil-overclock" class="abil-btn">Overclock (Locked)</button>
-            <button id="btn-abil-cryo" class="abil-btn">Cryo (Locked)</button>
+            <button id="btn-abil-bomb" class="abil-btn">💣 Bomb (Locked)</button>
+            <button id="btn-abil-overclock" class="abil-btn">⚡ Overclock (Locked)</button>
+            <button id="btn-abil-cryo" class="abil-btn">❄️ Cryo (Locked)</button>
           </section>
           <section class="hud-cell hud-towers">
             <div class="tower-palette">
@@ -219,6 +219,7 @@
               <button id="btn-resume">Resume</button>
               <button id="btn-pause-menu">Main Menu</button>
               <button id="btn-settings">Settings</button>
+              <button id="btn-pause-login">Sign In</button>
             </div>
             <!-- Settings sub-menu (hidden by default) -->
             <div id="settings-panel" style="display:none; margin-top:10px">
@@ -233,6 +234,25 @@
               </div>
               <div class="actions" style="margin-top:10px">
                 <button id="btn-settings-back">Back</button>
+              </div>
+            </div>
+            <!-- In-game Sign In panel (compact) -->
+            <div id="pause-login-panel" style="display:none; margin-top:10px">
+              <h4>Sign In</h4>
+              <div class="login-grid">
+                <div class="login-field">
+                  <label for="pause-login-username">Username</label>
+                  <input type="text" id="pause-login-username" autocomplete="username" />
+                </div>
+                <div class="login-field">
+                  <label for="pause-login-password">Password</label>
+                  <input type="password" id="pause-login-password" autocomplete="current-password" />
+                </div>
+                <div id="pause-login-status" class="login-status"></div>
+              </div>
+              <div class="actions" style="margin-top:10px">
+                <button id="btn-pause-login-submit">Sign In</button>
+                <button id="btn-pause-login-back">Back</button>
               </div>
             </div>
             <p class="hint">P or Esc to toggle</p>
@@ -449,18 +469,16 @@
 
         const computeScale = () => {
           const sw = window.innerWidth;
-          const sh = window.innerHeight;
+          const sh = window.visualViewport ? window.visualViewport.height : window.innerHeight;
           if(uiMode === 'menu'){
-            // Menu fills the width; height can scroll.
-            return sw / baseW;
+            // Keep menus fully visible where possible without introducing scroll.
+            return Math.min(sw / baseW, sh / baseMenuH);
           }
-          // Gameplay: on desktop, fill full width; on smaller screens,
-          // keep current "fit to height" behaviour so UI is not cropped.
-          const isDesktop = sw >= 1024;
-          if(isDesktop){
-            return sw / baseW;
-          }
-          return Math.min(sw / baseW, sh / baseGameH);
+          // Gameplay: always choose the smaller scale so the full 1600x900
+          // frame stays inside the viewport (no cropping on ultrawide/short screens).
+          const scaleW = sw / baseW;
+          const scaleH = sh / baseGameH;
+          return Math.min(scaleW, scaleH);
         };
 
         window.setMode = (mode) => {

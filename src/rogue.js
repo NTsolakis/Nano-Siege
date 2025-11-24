@@ -8,7 +8,7 @@ export const buffs = {
   slowPotencyMul: 1.0,   // slow pct multiplier
   burnDpsMul: 1.0,       // burn DPS multiplier
   splashRadiusMul: 1.0,  // splash radius multiplier
-  projectileSpeedMul: 1.0, // projectile travel speed multiplier
+  projectileSpeedMul: 1.0, // legacy (no longer used)
   baseDamageMul: 1.0,    // base damage multiplier before other bonuses
   retargetSpeedBonus: 0, // fractional bonus to retarget speed (0.10 = +10%)
   cannonStartRangeLevel: 0, // starting range level for new Cannons
@@ -71,7 +71,7 @@ export const buffs = {
 export const PERKS = [
   // ⭐ Tier 1 — Protocols (Common)
   { key:'proto_overdrive', name:'Overdrive Protocol', desc:'+5% tower fire rate.', baseCost: 90, slotPassive:true, tier:'common' },
-  { key:'proto_precision', name:'Precision Targeting Protocol', desc:'Projectiles gain +10% travel speed.', baseCost: 90, slotPassive:true, tier:'common' },
+  { key:'proto_precision', name:'Precision Targeting Protocol', desc:'Towers retarget 8% faster.', baseCost: 90, slotPassive:true, tier:'common' },
   { key:'proto_recycler', name:'Data Recycler', desc:'Enemies drop +5% more NanoCredits.', baseCost: 110, slotPassive:true, tier:'common' },
   { key:'proto_coupling', name:'Thermal Coupling', desc:'Burn damage lasts +1s.', baseCost: 110, slotPassive:true, tier:'common' },
   { key:'proto_cryo', name:'Cryo Efficiency', desc:'Slow effects are 5% stronger.', baseCost: 100, slotPassive:true, tier:'common' },
@@ -189,7 +189,9 @@ function rollTier(){
   return 'common';
 }
 
-// Roll N random offers. Costs scale with shopIndex (0-based). Common tiers can repeat freely.
+// Roll N random offers. Costs scale with shopIndex (0-based). To keep each
+// reroll feeling varied, we avoid showing duplicate perk keys in a single
+// batch where the catalog has enough unique entries available.
 export function rollShopOffers(count=6, shopIndex=0, excludeKeys=[]) {
   const exclude = new Set(excludeKeys||[]);
   const byTier = { common: [], rare: [], super: [] };
@@ -200,6 +202,16 @@ export function rollShopOffers(count=6, shopIndex=0, excludeKeys=[]) {
     byTier[tier].push(perk);
   }
   const offers = [];
+  const seen = new Set();
+  // Determine how many unique perks we can actually draw from the enabled catalog.
+  const availableKeys = new Set();
+  for(const tier of Object.keys(byTier)){
+    for(const perk of byTier[tier]){
+      if(!perk || exclude.has(perk.key)) continue;
+      availableKeys.add(perk.key);
+    }
+  }
+  const maxUnique = availableKeys.size || 0;
   const maxAttempts = Math.max(30, count * 10);
   let attempts = 0;
   while(offers.length < count && attempts < maxAttempts){
@@ -214,33 +226,28 @@ export function rollShopOffers(count=6, shopIndex=0, excludeKeys=[]) {
     }
     const perk = pool[Math.floor(Math.random()*pool.length)];
     if(!perk) continue;
-    if(perk.unique){
-      if(exclude.has(perk.key)) continue;
-      if(offers.some(o=> o.key === perk.key)) continue;
-    } else if(tier === 'super'){
-      // Super tier also avoids duplicates for variety
-      if(exclude.has(perk.key)) continue;
-      if(offers.some(o=> o.key === perk.key)) continue;
-    }
+    if(exclude.has(perk.key)) continue;
+    // When we have enough distinct perks in the catalog, avoid showing
+    // the same key more than once in a single roll for better variety.
+    if(maxUnique >= count && seen.has(perk.key)) continue;
     const copy = clonePerk(perk);
     copy.cost = copy.baseCost>0 ? (copy.baseCost + shopIndex*50) : copy.baseCost;
     offers.push(copy);
+    seen.add(perk.key);
   }
   while(offers.length < count){
     const fallbackList = byTier.common.length ? byTier.common : PERKS.filter(p=>!p.disabled);
     if(!fallbackList.length) break;
     const perk = fallbackList[Math.floor(Math.random()*fallbackList.length)];
     if(!perk) break;
-    if(perk.unique){
-      if(exclude.has(perk.key)) continue;
-      if(offers.some(o=> o.key === perk.key)) continue;
-    } else if((perk.tier||'common') === 'super'){
-      if(exclude.has(perk.key)) continue;
-      if(offers.some(o=> o.key === perk.key)) continue;
-    }
+    if(exclude.has(perk.key)) continue;
+    // Fallback also prefers unique keys when possible; if the catalog
+    // is extremely small (maxUnique < count), duplicates are allowed.
+    if(maxUnique >= count && seen.has(perk.key)) continue;
     const copy = clonePerk(perk);
     copy.cost = copy.baseCost>0 ? (copy.baseCost + shopIndex*50) : copy.baseCost;
     offers.push(copy);
+    seen.add(perk.key);
   }
   return offers;
 }

@@ -3,7 +3,7 @@ import { MAPS, drawMapPreview } from './maps.js';
 
 export class UIManager{
   constructor(){
-    this.listeners = { startWave: [], startGame: [], pause: [], resume: [], retry: [], toMenu: [], toMissionSelect: [], selectTowerType: [], upgradeSlow: [], upgradeRate: [], upgradeRange: [], upgradeBurn: [], sellTower: [], sellConfirm: [], sellCancel: [], selectMap: [], toggleFast: [], closeUpg: [], toggleVolume: [], setVolume: [], shopBuy: [], shopReroll: [], shopContinue: [], shopBuyAbility: [], useBomb: [], useOverclock: [], useCryo: [], toggleDev: [], openShop: [], closeShop: [], devUnlockUlts: [], devUpgradeMax: [], mainNew: [], mainLoad: [], mainExit: [], mainAssembly: [], loadSlot: [], openAssembly: [], closeAssembly: [], startMission: [], assemblySave: [], assemblyLoad: [], openAssemblyCore: [], menuBack: [], mainSettings: [], mainSettingsBack: [], loadBack: [], loginUser: [], openCreateUser: [], closeCreateUser: [], createUser: [], openLeaderboard: [], closeLeaderboard: [], leaderboardSignIn: [], logout: [], removePassive: [], leaderboardSelectMap: [] };
+    this.listeners = { startWave: [], startGame: [], pause: [], resume: [], retry: [], toMenu: [], toMissionSelect: [], selectTowerType: [], upgradeSlow: [], upgradeRate: [], upgradeRange: [], upgradeBurn: [], sellTower: [], sellConfirm: [], sellCancel: [], selectMap: [], toggleFast: [], closeUpg: [], toggleVolume: [], setVolume: [], shopBuy: [], shopReroll: [], shopContinue: [], shopBuyAbility: [], useBomb: [], useOverclock: [], useCryo: [], toggleDev: [], openShop: [], closeShop: [], devUnlockUlts: [], devUpgradeMax: [], mainNew: [], mainLoad: [], mainExit: [], mainAssembly: [], loadSlot: [], openAssembly: [], closeAssembly: [], startMission: [], assemblySave: [], assemblyLoad: [], openAssemblyCore: [], menuBack: [], mainSettings: [], mainSettingsBack: [], loadBack: [], loginUser: [], openCreateUser: [], closeCreateUser: [], createUser: [], openLeaderboard: [], closeLeaderboard: [], leaderboardSignIn: [], logout: [], removePassive: [], leaderboardSelectMap: [], pauseLoginOpen: [] };
     this.$root = document.getElementById('app');
     this.$wave = document.getElementById('stat-wave');
     this.$credits = document.getElementById('stat-credits');
@@ -13,6 +13,7 @@ export class UIManager{
     this.$start = document.getElementById('btn-start-wave');
     this.$pause = document.getElementById('btn-pause');
     this.$fast = document.getElementById('btn-fast');
+    this.$fastLabel = document.getElementById('fast-label');
     // Zoom controls in HUD
     this.$zoom = document.getElementById('zoom-slider');
     this.$zoomLabel = document.getElementById('zoom-label');
@@ -43,6 +44,13 @@ export class UIManager{
     this.$pauseActions = this.$pauseOverlay ? this.$pauseOverlay.querySelector('.actions') : null;
     this.$btnSettings = document.getElementById('btn-settings');
     this.$settingsPanel = document.getElementById('settings-panel');
+    this.$btnPauseLogin = document.getElementById('btn-pause-login');
+    this.$pauseLoginPanel = document.getElementById('pause-login-panel');
+    this.$pauseLoginUsername = document.getElementById('pause-login-username');
+    this.$pauseLoginPassword = document.getElementById('pause-login-password');
+    this.$pauseLoginStatus = document.getElementById('pause-login-status');
+    this.$pauseLoginSubmit = document.getElementById('btn-pause-login-submit');
+    this.$pauseLoginBack = document.getElementById('btn-pause-login-back');
     this.$btnSettingsBack = document.getElementById('btn-settings-back');
     this.$gameover = document.getElementById('gameover-overlay');
     this.$sellOverlay = document.getElementById('sell-overlay');
@@ -162,7 +170,7 @@ export class UIManager{
       cryo: { title:'Cryo Burst', lines:['Slows all enemies in the chamber.', 'Duration up, cooldown down per level.'] },
       slow: { title:'Slow Module', lines:['Bullets briefly slow enemies.', 'Single install; pairs well with splash.'] },
       burn: { title:'Burn Module', lines:['Bullets apply burning damage over time.', 'Single install; stacks with other towers.'] },
-      rate: { title:'Upgrade Fire Rate', lines:['Increase fire rate by 20% per level.', 'Max 3 levels.'] },
+      rate: { title:'Upgrade DPS', lines:['Increase sustained damage per second.', 'Max 3 levels.'] },
       range: { title:'Upgrade Fire Range', lines:['Increase range by 15% per level.', 'Max 3 levels.'] },
       start: { title:'Start Wave', lines:['Begin spawning the next wave of enemies.'] },
       fast: { title:'Speed', lines:['Cycles 1x → 2x → 3x → 4x.', 'Resets to 1x on bosses/bonus/difficulty.'] },
@@ -177,7 +185,11 @@ export class UIManager{
         this.clearTip();
         return;
       }
-      const lines = Array.isArray(payload.lines) ? payload.lines : [payload.desc || ''];
+      let lines = Array.isArray(payload.lines) ? payload.lines : [payload.desc || ''];
+      if(payload.rarity){
+        const rarityLine = `Rarity: ${payload.rarity}`;
+        lines = [rarityLine, ...lines];
+      }
       const data = { title: payload.label || '', lines };
       const coords = { x: payload.screenX || payload.x || 0, y: payload.screenY || payload.y || 0 };
       this._spawnTooltip(data, coords);
@@ -320,7 +332,7 @@ export class UIManager{
     if(this.$abilOverclock){ this.$abilOverclock.disabled = true; this.$abilOverclock.classList.add('locked'); this.$abilOverclock.textContent = 'Overclock (Locked)'; }
     if(this.$abilCryo){ this.$abilCryo.disabled = true; this.$abilCryo.classList.add('locked'); this.$abilCryo.textContent = 'Cryo (Locked)'; }
 
-    this.listeners = { startWave: [], startGame: [], pause: [], resume: [], retry: [], toMenu: [], toMissionSelect: [], selectTowerType: [], upgradeSlow: [], upgradeRate: [], upgradeRange: [], upgradeBurn: [], sellTower: [], sellConfirm: [], sellCancel: [], selectMap: [], toggleFast: [], closeUpg: [], toggleVolume: [], setVolume: [], shopBuy: [], shopReroll: [], shopContinue: [], shopBuyAbility: [], useBomb: [], useOverclock: [], useCryo: [], toggleDev: [], openShop: [], closeShop: [], devUnlockUlts: [], devUpgradeMax: [], mainNew: [], mainLoad: [], mainExit: [], mainAssembly: [], loadSlot: [], openAssembly: [], closeAssembly: [], startMission: [], assemblySave: [], assemblyLoad: [], openAssemblyCore: [], menuBack: [], mainSettings: [], mainSettingsBack: [], loadBack: [], loginUser: [], openCreateUser: [], closeCreateUser: [], createUser: [], openLeaderboard: [], closeLeaderboard: [], leaderboardSignIn: [], logout: [], removePassive: [], leaderboardSelectMap: [] };
+    this.listeners = { startWave: [], startGame: [], pause: [], resume: [], retry: [], toMenu: [], toMissionSelect: [], selectTowerType: [], upgradeSlow: [], upgradeRate: [], upgradeRange: [], upgradeBurn: [], sellTower: [], sellConfirm: [], sellCancel: [], selectMap: [], toggleFast: [], closeUpg: [], toggleVolume: [], setVolume: [], shopBuy: [], shopReroll: [], shopContinue: [], shopBuyAbility: [], useBomb: [], useOverclock: [], useCryo: [], toggleDev: [], openShop: [], closeShop: [], devUnlockUlts: [], devUpgradeMax: [], mainNew: [], mainLoad: [], mainExit: [], mainAssembly: [], loadSlot: [], openAssembly: [], closeAssembly: [], startMission: [], assemblySave: [], assemblyLoad: [], openAssemblyCore: [], menuBack: [], mainSettings: [], mainSettingsBack: [], loadBack: [], loginUser: [], openCreateUser: [], closeCreateUser: [], createUser: [], openLeaderboard: [], closeLeaderboard: [], leaderboardSignIn: [], logout: [], removePassive: [], leaderboardSelectMap: [], pauseLoginOpen: [] };
     // Track dev mode state for UI behavior (e.g., enabling shop buttons and credit label)
     this.devMode = false;
     this.setFragments(0);
@@ -366,6 +378,12 @@ export class UIManager{
       this.$pauseMission.addEventListener('click', ()=> this.emit('toMissionSelect'));
     }
     if(this.$fast){ this.$fast.addEventListener('click', ()=> this.emit('toggleFast')); }
+    if(this.$btnPauseLogin){
+      this.$btnPauseLogin.addEventListener('click', ()=>{
+        if(this.showPauseLogin) this.showPauseLogin(true);
+        this.emit('pauseLoginOpen');
+      });
+    }
     if(this.$towerBtns && this.$towerBtns.length){
       this.$towerBtns.forEach(btn=> btn.addEventListener('click', ()=>{
         const key = btn.dataset.tower;
@@ -433,6 +451,42 @@ export class UIManager{
           password: this.$loginPassword ? (this.$loginPassword.value||'') : ''
         };
         this.emit('loginUser', payload);
+      });
+    }
+    // Allow Enter key to submit login (main overlay)
+    const handleLoginEnter = (e)=>{
+      if(e.key === 'Enter'){
+        e.preventDefault();
+        if(this.$loginUser) this.$loginUser.click();
+      }
+    };
+    if(this.$loginUsername){ this.$loginUsername.addEventListener('keydown', handleLoginEnter); }
+    if(this.$loginPassword){ this.$loginPassword.addEventListener('keydown', handleLoginEnter); }
+    // Pause-menu login submit
+    if(this.$pauseLoginSubmit){
+      this.$pauseLoginSubmit.addEventListener('click', ()=>{
+        if(this.isSignedIn){
+          this.emit('logout', { source:'login' });
+          return;
+        }
+        const payload = {
+          username: this.$pauseLoginUsername ? (this.$pauseLoginUsername.value||'').trim() : '',
+          password: this.$pauseLoginPassword ? (this.$pauseLoginPassword.value||'') : ''
+        };
+        this.emit('loginUser', payload);
+      });
+    }
+    const handlePauseLoginEnter = (e)=>{
+      if(e.key === 'Enter'){
+        e.preventDefault();
+        if(this.$pauseLoginSubmit) this.$pauseLoginSubmit.click();
+      }
+    };
+    if(this.$pauseLoginUsername){ this.$pauseLoginUsername.addEventListener('keydown', handlePauseLoginEnter); }
+    if(this.$pauseLoginPassword){ this.$pauseLoginPassword.addEventListener('keydown', handlePauseLoginEnter); }
+    if(this.$pauseLoginBack){
+      this.$pauseLoginBack.addEventListener('click', ()=>{
+        if(this.showPauseLogin) this.showPauseLogin(false);
       });
     }
     if(this.$loginCreate){ this.$loginCreate.addEventListener('click', ()=> this.emit('openCreateUser')); }
@@ -658,9 +712,25 @@ export class UIManager{
 
   
   setStartEnabled(v){ this.$start.disabled = !v; }
-  setPauseLabel(text){ this.$pause.textContent = text; }
+  setPauseLabel(text){
+    if(!this.$pause) return;
+    const lower = String(text||'').toLowerCase();
+    const isResume = lower.includes('resume') || lower.includes('play');
+    // Use emoji icons for play/pause
+    const label = isResume ? '▶️' : '⏸';
+    this.$pause.textContent = label;
+    this.$pause.dataset.state = isResume ? 'resume' : 'pause';
+    this.$pause.setAttribute('aria-label', isResume ? 'Resume' : 'Pause');
+  }
   setPauseMissionLabel(text){ if(this.$pauseMission) this.$pauseMission.textContent = text; }
-  setFastLabel(mult){ if(this.$fast) this.$fast.textContent = `⏩ ${mult}x`; }
+  setFastLabel(mult){
+    const label = `x${mult}`;
+    if(this.$fastLabel){
+      this.$fastLabel.textContent = label;
+    } else if(this.$fast){
+      this.$fast.textContent = `▸▸ ${label}`;
+    }
+  }
   setVolumeLabel(text){
     const v = text.replace('Volume: ','');
     if(this.$volLabel) this.$volLabel.textContent = v;
@@ -700,13 +770,21 @@ export class UIManager{
 
   // Login helpers
   setLoginStatus(message, ok=true){
-    if(!this.$loginStatus) return;
-    this.$loginStatus.textContent = message || '';
-    this.$loginStatus.style.color = ok ? (COLORS.accent || '#17e7a4') : (COLORS.danger || '#ff5370');
+    const color = ok ? (COLORS.accent || '#17e7a4') : (COLORS.danger || '#ff5370');
+    if(this.$loginStatus){
+      this.$loginStatus.textContent = message || '';
+      this.$loginStatus.style.color = color;
+    }
+    if(this.$pauseLoginStatus){
+      this.$pauseLoginStatus.textContent = message || '';
+      this.$pauseLoginStatus.style.color = color;
+    }
   }
   clearLoginForm(){
     if(this.$loginUsername) this.$loginUsername.value = '';
     if(this.$loginPassword) this.$loginPassword.value = '';
+    if(this.$pauseLoginUsername) this.$pauseLoginUsername.value = '';
+    if(this.$pauseLoginPassword) this.$pauseLoginPassword.value = '';
     this.setLoginStatus('');
   }
   setCreateStatus(message, ok=true){
@@ -888,12 +966,29 @@ export class UIManager{
   }
   showPause(show){
     this.show(this.$pauseOverlay, show);
-    if(show) this.showSettings(false);
+    if(show){
+      this.showSettings(false);
+      if(this.showPauseLogin) this.showPauseLogin(false);
+    }
   }
   showSettings(show){
     if(!this.$settingsPanel) return;
     this.$settingsPanel.style.display = show? 'block' : 'none';
+    if(show && this.$pauseLoginPanel){
+      this.$pauseLoginPanel.style.display = 'none';
+    }
     if(this.$pauseActions) this.$pauseActions.style.display = show? 'none' : 'flex';
+  }
+  showPauseLogin(show){
+    if(!this.$pauseLoginPanel) return;
+    this.$pauseLoginPanel.style.display = show ? 'block' : 'none';
+    if(show && this.$settingsPanel){
+      this.$settingsPanel.style.display = 'none';
+    }
+    if(this.$pauseActions) this.$pauseActions.style.display = show ? 'none' : 'flex';
+    if(show && this.$pauseLoginUsername){
+      try{ this.$pauseLoginUsername.focus(); }catch(e){}
+    }
   }
   showGameOver(show){ this.show(this.$gameover, show); }
   showSell(show, text){ if(this.$sellText && typeof text==='string') this.$sellText.textContent = text; this.show(this.$sellOverlay, show); }
@@ -1007,6 +1102,12 @@ export class UIManager{
 
   setShopRerollEnabled(v){ if(this.$shopReroll) this.$shopReroll.disabled = !v; }
 
+  setRerollPrice(price){
+    if(!this.$shopReroll) return;
+    const val = Math.max(0, Math.round(price||0));
+    this.$shopReroll.textContent = `Reroll (${val}⟐)`;
+  }
+
   // Render ability unlocks at the bottom of the shop
   renderShopAbilities(abilities=[], coreShards=0){
     if(!this.$shopAbilities) return;
@@ -1093,32 +1194,43 @@ export class UIManager{
   // Ability helpers
   setAbilityVisible(key, show){
     const el = key==='bomb'? this.$abilBomb : key==='overclock'? this.$abilOverclock : key==='cryo'? this.$abilCryo : null;
+    const baseLabel = key==='bomb' ? '💣 Bomb' : key==='overclock' ? '⚡ Overclock' : '❄️ Cryo';
     if(!el) return;
     if(show){
-      el.classList.remove('locked');
+      el.classList.remove('locked','active','cooldown','ready');
       // do not force enabled here; updateAbilityUI controls cooldown/ready state
     } else {
       // keep visible but locked/disabled
       el.classList.add('locked');
       el.disabled = true;
-      const label = key==='bomb'?'Bomb': key==='overclock'?'Overclock':'Cryo';
-      el.textContent = `${label} (Locked)`;
+      el.textContent = `${baseLabel} (Locked)`;
     }
   }
-  setAbilityCooldown(key, ready, seconds, labelOverride=null){
+  setAbilityCooldown(key, ready, seconds, labelOverride=null, activeSeconds=null){
     const el = key==='bomb'? this.$abilBomb : key==='overclock'? this.$abilOverclock : key==='cryo'? this.$abilCryo : null;
     if(!el) return;
+    const baseLabel = key==='bomb' ? '💣 Bomb' : key==='overclock' ? '⚡ Overclock' : '❄️ Cryo';
+    // Reset shared state classes before applying specific mode
+    el.classList.remove('locked','active','cooldown','ready');
+    // If ability is currently active, show remaining duration instead of cooldown.
+    if(typeof activeSeconds === 'number' && activeSeconds > 0){
+      const secs = Math.max(0, activeSeconds);
+      el.classList.add('active');
+      el.disabled = true;
+      el.textContent = `${baseLabel} (Active ${secs.toFixed(1)}s)`;
+      return;
+    }
     // Consider tiny residuals as ready (avoid flashing 0.0s while enabled)
     const isReady = !!ready || (typeof seconds==='number' && seconds<=0.05);
-    // Always remove locked styling once we manage cooldown; visibility controls lock state
-    el.classList.remove('locked');
     if(isReady){
       const stateLabel = labelOverride || 'Ready';
-      el.textContent = (key==='bomb'?'Bomb': key==='overclock'?'Overclock':'Cryo') + ` (${stateLabel})`;
+      el.classList.add('ready');
+      el.textContent = `${baseLabel} (${stateLabel})`;
       el.disabled = false;
     } else {
       const secs = Math.max(0, Number(seconds)||0);
-      el.textContent = (key==='bomb'?'Bomb': key==='overclock'?'Overclock':'Cryo') + ` (${secs.toFixed(1)}s)`;
+      el.classList.add('cooldown');
+      el.textContent = `${baseLabel} (CD ${secs.toFixed(1)}s)`;
       el.disabled = true;
     }
   }
@@ -1156,8 +1268,8 @@ export class UIManager{
     // Rate (0..3)
     const rateLvl = tower.rateLevel || 0;
     const rateCosts = [UPGRADE_COSTS.rateModule, Math.round(UPGRADE_COSTS.rateModule*1.5), Math.round(UPGRADE_COSTS.rateModule*2.0)];
-    if(rateLvl>=3){ this.$upgRate.textContent = 'Upgrade Fire Rate'; this.$upgRate.disabled = true; }
-    else { const cost = rateCosts[rateLvl]; this.$upgRate.textContent = `Upgrade Fire Rate (${cost})`; this.$upgRate.disabled = false; }
+    if(rateLvl>=3){ this.$upgRate.textContent = 'Upgrade DPS'; this.$upgRate.disabled = true; }
+    else { const cost = rateCosts[rateLvl]; this.$upgRate.textContent = `Upgrade DPS (${cost})`; this.$upgRate.disabled = false; }
     if(this._setBtnWithDots) this._setBtnWithDots(this.$upgRate, this.$upgRate.textContent, rateLvl, 3);
     // Range (0..3)
     const rangeLvl = tower.rangeLevel || 0;
@@ -1213,10 +1325,10 @@ export class UIManager{
   updateAuthButtons(){
     const signed = !!this.isSignedIn;
     if(this.$btnMainLoadUser){
-      this.$btnMainLoadUser.textContent = signed ? 'Log Out' : 'Sign In';
+      this.$btnMainLoadUser.textContent = signed ? 'Sign Out' : 'Sign In';
     }
     if(this.$btnLeaderboardSignIn){
-      this.$btnLeaderboardSignIn.textContent = signed ? 'Log Out' : 'Sign In';
+      this.$btnLeaderboardSignIn.textContent = signed ? 'Sign Out' : 'Sign In';
     }
     if(this.$loginUser){
       this.$loginUser.textContent = signed ? 'Sign Out' : 'Sign In';

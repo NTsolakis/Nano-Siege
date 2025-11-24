@@ -303,6 +303,9 @@ export class CannonTower extends BaseTower{
       if(target && target.alive){
         const color = this.baseColor || COLORS.towerBasic;
         target.damage(dmg, 'bullet', { slowPct: slow?.pct, burnDps: burn?.dps, color, source:{x:this.x,y:this.y}, hitDamage:dmg, crit:isCrit });
+        if(isCrit && this.game && typeof this.game.registerCrit === 'function'){
+          this.game.registerCrit(dmg);
+        }
         if(slow) target.applySlow(slow.pct, slow.dur);
         if(burn) target.applyBurn(burn.dps, burn.dur);
         const pierceChance = Math.min(1, buffs.pierceChance || 0);
@@ -469,7 +472,11 @@ export class LaserTower extends BaseTower{
       dps = this.applyResonanceBonus(this.target, dps);
       const tp = this.applyTargetPainter(this.target, dps);
       dps = tp.dmg;
-      this.target.damage(dps*dt, 'laser', { dps, color: this.baseColor || COLORS.towerLaser, source:{x:this.x,y:this.y}, hitDamage:dps*dt, crit: tp.crit });
+      const isCrit = tp.crit;
+      this.target.damage(dps*dt, 'laser', { dps, color: this.baseColor || COLORS.towerLaser, source:{x:this.x,y:this.y}, hitDamage:dps*dt, crit: isCrit });
+      if(isCrit && this.game && typeof this.game.registerCrit === 'function'){
+        this.game.registerCrit(dps*dt);
+      }
       if(this.hasSlow){ this.target.applySlow(0.35*(buffs.slowPotencyMul||1), 0.2); }
       if(this.hasBurn){ this.burnCooldown -= dt; if(this.burnCooldown<=0){ this.target.applyBurn(8*(buffs.burnDpsMul||1), 2.0); this.burnCooldown = 0.3; } }
       if(!this._buzz){ this._buzz = audio.buzz(); }

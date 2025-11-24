@@ -61,6 +61,10 @@ export class Enemy {
       color = COLORS.enemy2;
     } else if(this.variant==='v3') {
       color = COLORS.enemy3;
+    } else if(this.variant==='drone'){
+      // Flying recon drone — lighter, teal/cyan glow
+      color = COLORS.drone || COLORS.accent2;
+      this.isFlying = true;
     } else if(this.variant==='nano_minion'){
       // nano swarmlings spawned from nano boss
       color = COLORS.accent2;
@@ -80,6 +84,13 @@ export class Enemy {
     this.burns = []; // {dps, t}
     // Lane offset disabled by default for straight spacing (no zig-zag)
     this.lane = 0;
+    // Optional flying wobble parameters (used by drones)
+    if(this.isFlying){
+      this.flightPhase = Math.random()*Math.PI*2;
+      this.flightAmp = 10 + Math.random()*6;   // side-to-side amplitude (px)
+      this.flightFreq = 1.6 + Math.random()*0.6; // zig-zag frequency
+      this.loopAmp = 6 + Math.random()*4;      // gentle along-path bob
+    }
     // Visual animation state
     this.angle = Math.random()*Math.PI*2; // for rotating shapes
     this.spinSpeed = (Math.random()<0.5? -1:1) * 0.8; // rad/s (slow, subtle)
@@ -202,9 +213,18 @@ export class Enemy {
     if(this.laserLinger>0){
       this.laserLinger = Math.max(0, this.laserLinger - dt);
     }
-    const slowPct = this.slows.reduce((m,s)=> Math.max(m, s.pct), 0);
-    // Apply movement with a minimum safety speed to avoid near-zero creeping
-    this.speed = Math.max(MIN_SPEED, this.baseSpeed * this.speedMult * (1 - slowPct));
+    // Combine all active slows multiplicatively so multiple sources stack
+    // with diminishing returns, but clamp so movement never drops below
+    // 20% of the enemy's base speed.
+    let slowMul = 1;
+    for(const s of this.slows){
+      const p = Math.max(0, Math.min(0.95, s.pct||0));
+      slowMul *= (1 - p);
+    }
+    // slowMul is the remaining speed fraction; enforce a 20% floor.
+    slowMul = Math.max(0.2, slowMul);
+    // Apply movement with a small absolute safety floor as well.
+    this.speed = Math.max(MIN_SPEED, this.baseSpeed * this.speedMult * slowMul);
     if(this.idx >= this.waypoints.length){
       this.reachedEnd = true;
       this.alive = false;
@@ -230,8 +250,24 @@ export class Enemy {
       }
     }
     // Apply lane offset perpendicular to the segment direction
-    const offX = -this.lastUy * this.lane;
-    const offY =  this.lastUx * this.lane;
+    let offX = -this.lastUy * this.lane;
+    let offY =  this.lastUx * this.lane;
+    // Flying drones wobble around the path for a more natural arc
+    if(this.isFlying){
+      const t = this.age || 0;
+      const amp = this.flightAmp || 0;
+      const freq = this.flightFreq || 0;
+      const loopAmp = this.loopAmp || 0;
+      const phase = this.flightPhase || 0;
+      // Side-to-side zig‑zag perpendicular to the path direction
+      const wobble = amp ? Math.sin(t * freq + phase) * amp : 0;
+      offX += -this.lastUy * wobble;
+      offY +=  this.lastUx * wobble;
+      // Small forward/back loop along the path
+      const bob = loopAmp ? Math.cos(t * (freq*0.7) + phase) * loopAmp : 0;
+      offX += this.lastUx * bob * 0.25;
+      offY += this.lastUy * bob * 0.25;
+    }
     this.pos.x = this.center.x + offX;
     this.pos.y = this.center.y + offY;
   }
@@ -350,19 +386,20 @@ export class Enemy {
       this.hitFx = this.hitFx.filter(fx=> fx.age < fx.ttl);
     }
     if(this.alive){
-      // Nano-bot spider with animated legs
+      // Ground nano‑bots vs. flying drones share HP/status UI but
+      // have distinct bodies.
       ctx.save();
       ctx.translate(this.pos.x, this.pos.y);
-      // Keep orientation horizontal; flip left/right based on facing
       ctx.scale(this.facing || 1, 1);
       const R = this.radius;
-      const pairs = this.legPairs || 3;
+      const isFlying = !!this.isFlying;
+      const pairs = isFlying ? 0 : (this.legPairs || 3);
       const stepRate = 6 + Math.min(10, this.speed/12);
       const amp = 0.5; // radians swing
       const lenF = Math.max(0.8, this.legLengthFactor || 1);
       const seg1 = Math.max(6, R*0.7*lenF), seg2 = Math.max(6, R*0.9*lenF);
-      // Boss abdomen glow behind body
-      if(this.isBoss){
+      // Boss abdomen glow behind body (ground bosses only)
+      if(this.isBoss && !isFlying){
         const pulse = 0.6 + 0.4*(Math.sin(this.age*3)*0.5 + 0.5);
         ctx.save();
         ctx.globalAlpha = 0.24 * pulse;
@@ -371,59 +408,98 @@ export class Enemy {
         ctx.beginPath(); ctx.ellipse(-R*0.6, 0, R*0.65, R*0.5, 0, 0, Math.PI*2); ctx.fill();
         ctx.restore();
       }
-      // Draw legs behind body
-      const lw = 2 + Math.min(2, (this.armorLevel||0)*0.3);
-      ctx.lineWidth = lw;
-      ctx.strokeStyle = this.color;
-      ctx.shadowColor = this.color; ctx.shadowBlur = 8;
-      for(let i=0;i<pairs;i++){
-        const t0 = (pairs>1? (i/(pairs-1)) : 0.5) - 0.5; // -0.5..0.5
-        const baseY = t0 * (R*0.9);
-        for(const side of [-1,1]){
-          const phase = this.phase*stepRate + i*0.6 + (side===-1?0:Math.PI);
-          const swing = Math.sin(phase) * amp;
-          const baseA = (side===-1? Math.PI: 0) + (side===-1?-0.2:0.2);
-          const a1 = baseA + swing*0.6;
-          const x1 = Math.cos(a1)*seg1;
-          const y1 = baseY + Math.sin(a1)*seg1;
-          const a2 = a1 + (side===-1? -0.9: 0.9) + swing*0.4;
-          const x2 = x1 + Math.cos(a2)*seg2;
-          const y2 = y1 + Math.sin(a2)*seg2;
-          ctx.beginPath(); ctx.moveTo(0, baseY); ctx.lineTo(x1,y1); ctx.lineTo(x2,y2); ctx.stroke();
-          // foot glint
-          ctx.save(); ctx.shadowBlur = 6; ctx.fillStyle = 'white'; ctx.globalAlpha = 0.75; ctx.beginPath(); ctx.arc(x2,y2,1.5,0,Math.PI*2); ctx.fill(); ctx.restore();
+      if(!isFlying){
+        // Spider legs for ground nano‑bots
+        const lw = 2 + Math.min(2, (this.armorLevel||0)*0.3);
+        ctx.lineWidth = lw;
+        ctx.strokeStyle = this.color;
+        ctx.shadowColor = this.color; ctx.shadowBlur = 8;
+        for(let i=0;i<pairs;i++){
+          const t0 = (pairs>1? (i/(pairs-1)) : 0.5) - 0.5; // -0.5..0.5
+          const baseY = t0 * (R*0.9);
+          for(const side of [-1,1]){
+            const phase = this.phase*stepRate + i*0.6 + (side===-1?0:Math.PI);
+            const swing = Math.sin(phase) * amp;
+            const baseA = (side===-1? Math.PI: 0) + (side===-1?-0.2:0.2);
+            const a1 = baseA + swing*0.6;
+            const x1 = Math.cos(a1)*seg1;
+            const y1 = baseY + Math.sin(a1)*seg1;
+            const a2 = a1 + (side===-1? -0.9: 0.9) + swing*0.4;
+            const x2 = x1 + Math.cos(a2)*seg2;
+            const y2 = y1 + Math.sin(a2)*seg2;
+            ctx.beginPath(); ctx.moveTo(0, baseY); ctx.lineTo(x1,y1); ctx.lineTo(x2,y2); ctx.stroke();
+            // foot glint
+            ctx.save(); ctx.shadowBlur = 6; ctx.fillStyle = 'white'; ctx.globalAlpha = 0.75; ctx.beginPath(); ctx.arc(x2,y2,1.5,0,Math.PI*2); ctx.fill(); ctx.restore();
+          }
+        }
+        ctx.shadowBlur = 0;
+        // Armor/plating outlines (scale with tier/boss)
+        const plates = Math.max(0, Math.min(5, this.armorLevel||0));
+        for(let i=0;i<plates;i++){
+          const s = 1.05 + i*0.12;
+          ctx.save();
+          const a = 0.12 + i*0.06 + 0.08*Math.sin(this.age*2 + i*0.8);
+          ctx.globalAlpha = Math.max(0.05, Math.min(0.6, a));
+          ctx.strokeStyle = 'white';
+          ctx.lineWidth = 2;
+          ctx.beginPath(); ctx.ellipse(0, 0, R*0.9*s, R*0.75*s, 0, 0, Math.PI*2); ctx.stroke();
+          ctx.restore();
         }
       }
-      ctx.shadowBlur = 0;
-      // Armor/plating outlines (scale with tier/boss)
-      const plates = Math.max(0, Math.min(5, this.armorLevel||0));
-      for(let i=0;i<plates;i++){
-        const s = 1.05 + i*0.12;
-        ctx.save();
-        const a = 0.12 + i*0.06 + 0.08*Math.sin(this.age*2 + i*0.8);
-        ctx.globalAlpha = Math.max(0.05, Math.min(0.6, a));
-        ctx.strokeStyle = 'white';
-        ctx.lineWidth = 2;
-        ctx.beginPath(); ctx.ellipse(0, 0, R*0.9*s, R*0.75*s, 0, 0, Math.PI*2); ctx.stroke();
-        ctx.restore();
-      }
-      // Body core (faded if intangible)
+      // Body core
       ctx.fillStyle = this.color;
-      if(this.ghostPhasing && this.intangible){ ctx.globalAlpha = 0.45; }
-      ctx.beginPath(); ctx.ellipse(0,0,R*0.95,R*0.8,0,0,Math.PI*2); ctx.fill();
-      if(this.ghostPhasing && this.intangible){ ctx.globalAlpha = 1; }
-      // Shimmer sweep across plating (bosses emphasized)
-      const sweepA = (this.age*1.2) % (Math.PI*2);
-      ctx.save();
-      ctx.globalAlpha = this.isBoss? 0.35 : 0.2;
-      ctx.strokeStyle = 'white';
-      ctx.lineWidth = this.isBoss? 2.0 : 1.4;
-      ctx.shadowColor = 'white'; ctx.shadowBlur = this.isBoss? 10 : 6;
-      ctx.beginPath(); ctx.ellipse(0, 0, R*0.85, R*0.7, 0, sweepA, sweepA + Math.PI*0.6); ctx.stroke();
-      ctx.restore();
-      // Dorsal highlight and eye
-      ctx.fillStyle = 'white'; ctx.globalAlpha = 0.85; ctx.beginPath(); ctx.arc(R*0.15, -R*0.1, Math.max(2, R*0.25), 0, Math.PI*2); ctx.fill(); ctx.globalAlpha = 1;
-      ctx.fillStyle = 'rgba(0,0,0,0.6)'; ctx.beginPath(); ctx.arc(R*0.35,0, R*0.12, 0, Math.PI*2); ctx.fill();
+      if(this.ghostPhasing && this.intangible && !isFlying){ ctx.globalAlpha = 0.45; }
+      if(isFlying){
+        // Compact drone hull (disc) slightly tilted
+        ctx.save();
+        ctx.rotate(0.18*Math.sin(this.age*1.1));
+        ctx.beginPath(); ctx.ellipse(0,0,R*0.95,R*0.65,0,0,Math.PI*2); ctx.fill();
+        // Rotor hub
+        ctx.fillStyle = '#0b1f29';
+        ctx.beginPath(); ctx.arc(0,0,R*0.32,0,Math.PI*2); ctx.fill();
+        // Crossed rotor blades
+        ctx.strokeStyle = 'rgba(255,255,255,0.9)';
+        ctx.lineWidth = 2;
+        const spin = this.age*6;
+        for(let i=0;i<2;i++){
+          const a = spin + i*Math.PI/2;
+          const bx = Math.cos(a)*R*1.1;
+          const by = Math.sin(a)*R*1.1;
+          ctx.beginPath(); ctx.moveTo(-bx*0.4,-by*0.4); ctx.lineTo(bx,by); ctx.stroke();
+        }
+        ctx.restore();
+        // Side fins / wings
+        ctx.save();
+        ctx.fillStyle = 'rgba(98,240,255,0.85)';
+        ctx.globalAlpha = 0.9;
+        const wingSpan = R*1.4;
+        ctx.beginPath();
+        ctx.moveTo(-wingSpan, -R*0.15);
+        ctx.quadraticCurveTo(-R*0.2, -R*0.8, 0, -R*0.2);
+        ctx.quadraticCurveTo(R*0.2, -R*0.8, wingSpan, -R*0.15);
+        ctx.quadraticCurveTo(R*0.2, -R*0.3, 0, -R*0.05);
+        ctx.quadraticCurveTo(-R*0.2, -R*0.3, -wingSpan, -R*0.15);
+        ctx.closePath();
+        ctx.fill();
+        ctx.restore();
+      } else {
+        ctx.beginPath(); ctx.ellipse(0,0,R*0.95,R*0.8,0,0,Math.PI*2); ctx.fill();
+      }
+      if(this.ghostPhasing && this.intangible && !isFlying){ ctx.globalAlpha = 1; }
+      if(!isFlying){
+        // Shimmer sweep across plating (bosses emphasized)
+        const sweepA = (this.age*1.2) % (Math.PI*2);
+        ctx.save();
+        ctx.globalAlpha = this.isBoss? 0.35 : 0.2;
+        ctx.strokeStyle = 'white';
+        ctx.lineWidth = this.isBoss? 2.0 : 1.4;
+        ctx.shadowColor = 'white'; ctx.shadowBlur = this.isBoss? 10 : 6;
+        ctx.beginPath(); ctx.ellipse(0, 0, R*0.85, R*0.7, 0, sweepA, sweepA + Math.PI*0.6); ctx.stroke();
+        ctx.restore();
+        // Dorsal highlight and eye
+        ctx.fillStyle = 'white'; ctx.globalAlpha = 0.85; ctx.beginPath(); ctx.arc(R*0.15, -R*0.1, Math.max(2, R*0.25), 0, Math.PI*2); ctx.fill(); ctx.globalAlpha = 1;
+        ctx.fillStyle = 'rgba(0,0,0,0.6)'; ctx.beginPath(); ctx.arc(R*0.35,0, R*0.12, 0, Math.PI*2); ctx.fill();
+      }
       ctx.restore();
 
       // Health bar

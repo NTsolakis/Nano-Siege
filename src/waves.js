@@ -144,6 +144,25 @@ export function buildWave(w){
     if(introduced >= 3 && r === 4){ enemies.push({ delay: groupGap(), hp: Math.round(baseHp*2.5), speed: baseSpeed*0.95, reward: 0, variant:'b3' }); }
   }
 
+  // Flying drone enemies — appear starting on wave 15. They scale with the
+  // same base HP/speed curves as other enemies but stay much weaker while
+  // moving a bit faster. Only a handful spawn each wave to add pressure.
+  if(w >= 15 && !isBossWave){
+    const droneCount = Math.max(2, Math.min(5, 2 + Math.floor((w - 15) / 6)));
+    const droneHp = Math.round(baseHp * 0.4);       // noticeably softer than ground units
+    const droneSpeed = Math.round(baseSpeed * 1.25); // slightly faster than peers
+    for(let i=0;i<droneCount;i++){
+      enemies.push({
+        delay: groupGap() * (0.6 + Math.random()*0.6),
+        hp: droneHp,
+        speed: droneSpeed,
+        reward: 0,
+        variant: 'drone',
+        radius: 13
+      });
+    }
+  }
+
   return enemies;
 }
 

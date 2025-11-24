@@ -178,7 +178,16 @@ app.get('/api/leaderboard', (req, res) => {
       return emap === target;
     })
     .slice()
-    .sort((a, b) => (b.waves || 0) - (a.waves || 0))
+    .sort((a, b) => {
+      const wa = a.waves || 0;
+      const wb = b.waves || 0;
+      if (wb !== wa) return wb - wa;
+      const pa = a.perfectCombo || 0;
+      const pb = b.perfectCombo || 0;
+      if (pb !== pa) return pb - pa;
+      // Stable fallback: earlier updatedAt wins if everything else ties.
+      return (a.updatedAt || 0) - (b.updatedAt || 0);
+    })
     .slice(0, 10)
     .map(e => ({ ...e, perfectCombo: e.perfectCombo || 0 }));
   return res.json({ ok: true, entries });

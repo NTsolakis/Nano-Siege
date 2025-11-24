@@ -404,9 +404,24 @@ canvas#game{display:block;max-width:100%;width:960px;height:auto;border:1px soli
 .level-dots .dot.filled{background:var(--accent-2);box-shadow:0 0 6px rgba(0,186,255,.5), inset 0 0 0 1px rgba(0,186,255,.6)}
 
 /* Ability buttons */
-.abil-btn{border-color:rgba(255,255,255,.2)}
+.abil-btn{
+  border-color:rgba(255,255,255,.2);
+}
 .abil-btn:disabled{opacity:.55}
 .abil-btn.locked{opacity:.55; filter:grayscale(40%)}
+.abil-btn.ready{
+  border-color:rgba(0,186,255,.5);
+  box-shadow:0 0 12px rgba(0,186,255,.35);
+}
+.abil-btn.cooldown{
+  border-color:rgba(255,255,255,.18);
+  box-shadow:none;
+}
+.abil-btn.active{
+  border-color:rgba(23,231,164,.8);
+  box-shadow:0 0 16px rgba(23,231,164,.75);
+  background:radial-gradient(circle at 20% 0%, rgba(255,255,255,0.12), rgba(0,0,0,0.9));
+}
 
 /* Map select thumbnails */
 .map-select{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:6px}
@@ -613,6 +628,48 @@ canvas#game{display:block;max-width:100%;width:960px;height:auto;border:1px soli
   text-align:center;
   padding:5px 9px;
   font-size:11px;
+}
+/* Start Wave: prominent red call-to-action */
+#btn-start-wave{
+  font-weight:700;
+  letter-spacing:.18em;
+  text-transform:uppercase;
+  color:#ffe5e5;
+  background:linear-gradient(135deg, rgba(248,113,113,0.25), rgba(248,113,113,0.05));
+  border-color:rgba(248,113,113,0.8);
+  box-shadow:0 0 18px rgba(248,113,113,0.5),0 10px 30px rgba(0,0,0,0.45);
+}
+#btn-start-wave:hover{
+  border-color:#fecaca;
+  box-shadow:0 0 24px rgba(248,113,113,0.7),0 12px 34px rgba(0,0,0,0.6);
+}
+/* Speed control: simple text fast-forward icon + xN label */
+#btn-fast{
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  gap:4px;
+}
+#btn-fast .ff-icon{
+  font-size:18px;
+  color:#facc15;
+  text-shadow:0 0 12px rgba(250,204,21,0.9);
+}
+#btn-fast .ff-label{
+  font-size:13px;
+  color:#f9fafb;
+  text-shadow:0 0 6px rgba(148,163,184,0.6);
+}
+#btn-pause{
+  font-size:16px;
+}
+#btn-pause[data-state="pause"]{
+  color:#e5e7eb;
+  text-shadow:0 0 8px rgba(148,163,184,0.65);
+}
+#btn-pause[data-state="resume"]{
+  color:#4ade80;
+  text-shadow:0 0 10px rgba(74,222,128,0.9);
 }
 .currency-box{
   width:100%;
@@ -877,10 +934,32 @@ canvas#game{display:block;max-width:100%;width:960px;height:auto;border:1px soli
 }
 @media (max-width:1480px){.hud-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media (max-width:1100px){
-  .hud{flex-direction:column;align-items:stretch;gap:14px}
-  .hud-grid{grid-template-columns:1fr}
-  .hud-controls,.hud-abilities,.hud-towers{flex-wrap:wrap;justify-content:flex-start}
-  .tower-palette{flex-wrap:wrap}
+  .hud{
+    display:flex;
+    flex-direction:column;
+    align-items:stretch;
+    gap:14px;
+    padding:6px 10px;
+  }
+  .hud-grid{
+    display:flex;
+    flex-direction:column;
+    gap:6px;
+  }
+  .hud-controls,
+  .hud-abilities,
+  .hud-towers{
+    flex-wrap:wrap;
+    justify-content:center;
+  }
+  .tower-palette{
+    flex-wrap:wrap;
+    justify-content:center;
+  }
+  .currency-box{
+    max-width:600px;
+    margin:0 auto;
+  }
   .currency-rail{grid-template-columns:repeat(auto-fit,minmax(140px,1fr))}
   .hud-controls button,
   .hud-abilities .abil-btn,
@@ -909,7 +988,7 @@ canvas#game{display:block;max-width:100%;width:960px;height:auto;border:1px soli
   .hud-controls .control-row,
   .hud-abilities{
     flex-wrap:wrap;
-    justify-content:flex-start;
+    justify-content:center;
     gap:6px;
   }
   .tower-btn,
@@ -982,22 +1061,10 @@ canvas#game{display:block;max-width:100%;width:960px;height:auto;border:1px soli
     padding:6px;
     gap:6px;
   }
-  #canvas-shell canvas{
-    min-width:300px;
-  }
-}
+	  #canvas-shell canvas{
+	    min-width:300px;
+	  }
+	}
 @media screen and (max-width: 900px) and (orientation: landscape){
-  #game-wrapper{
-    width:calc(var(--design-width) * 1px);
-    transform:scale(calc(100vw / (var(--design-width) * 1px)));
-    transform-origin:top left;
-  }
   body{overflow-x:hidden;}
-}
-
-@media screen and (max-height: 650px){
-  #game-wrapper{
-    transform:scale(calc(100vh / 720));
-    transform-origin:top left;
-  }
 }

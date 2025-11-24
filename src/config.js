@@ -25,6 +25,8 @@ export const COLORS = {
   towerBasic: '#17e7a4',   // green-teal
   towerLaser: '#62f0ff',   // cyan
   towerSplash: '#ff9e00',  // orange
+  // Flying drone enemy accent
+  drone: '#7ce0ff',
   range: 'rgba(23,231,164,0.12)',
   // Palette for dynamically introduced enemy types (cycled as needed)
   typePalette: [
@@ -58,6 +60,10 @@ export const GAME_RULES = {
   bonusMaxPayout: 150,   // hard cap on bonus rewards
   // Dynamic enemy type system
   maxActiveEnemyTypes: 3,
+  // Economy tuning
+  fragmentGainScale: 0.35,   // global multiplier on fragment drops
+  rerollBasePrice: 50,       // starting reroll price (fragments)
+  rerollPriceScale: 2.0,     // price multiplier per reroll
 };
 
 export const TOWER_TYPES = {
