@@ -6,6 +6,159 @@ let ENEMY_UID = 1;
 // Ensure enemies never fully stall due to stacked slows + separation.
 const MIN_SPEED = 8; // px/s safety floor
 
+// Optional sprite-sheet support for select enemy variants (e.g., nano bot/boss).
+// Drop your sheet into /data and update the config below to match.
+const NANO_SPRITE = {
+  img: null,
+  baseImg: null,
+  loaded: false,
+  // Sheet layout: 10 columns, 12 full rows, last row with 5 frames = 125.
+  cols: 10,
+  frames: 125,
+  fps: 14,
+  frameW: 0,
+  frameH: 0,
+  tinted: null,      // lazily populated map: color -> tinted sheet canvas
+  frameOffsets: null // optional per-frame vertical offsets to stabilize walk
+};
+
+function computeNanoFrameOffsets(sheet, cols, rows, frames){
+  if(typeof document === 'undefined' || !sheet) return null;
+  try{
+    const off = document.createElement('canvas');
+    off.width = sheet.width;
+    off.height = sheet.height;
+    const c = off.getContext('2d');
+    if(!c) return null;
+    c.drawImage(sheet, 0, 0);
+    const id = c.getImageData(0, 0, off.width, off.height);
+    const data = id.data;
+    const frameW = off.width / cols;
+    const frameH = off.height / rows;
+    const offsets = new Array(frames).fill(0);
+    const bottoms = [];
+    for(let i=0;i<frames;i++){
+      const col = i % cols;
+      const row = Math.floor(i / cols);
+      if(row >= rows) break;
+      const startX = Math.floor(col * frameW);
+      const startY = Math.floor(row * frameH);
+      let bottom = -1;
+      for(let y = Math.floor(frameH)-1; y>=0; y--){
+        const sy = startY + y;
+        let idx = (sy * off.width + startX) * 4;
+        for(let x=0; x<frameW; x++){
+          const a = data[idx+3];
+          if(a > 15){
+            bottom = y;
+            break;
+          }
+          idx += 4;
+        }
+        if(bottom >= 0) break;
+      }
+      if(bottom >= 0){
+        offsets[i] = bottom;
+        bottoms.push(bottom);
+      } else {
+        offsets[i] = null;
+      }
+    }
+    if(!bottoms.length) return null;
+    const baseline = bottoms.reduce((a,b)=>a+b,0) / bottoms.length;
+    for(let i=0;i<frames;i++){
+      const b = offsets[i];
+      offsets[i] = (b == null) ? 0 : (baseline - b);
+    }
+    return offsets;
+  }catch(e){
+    return null;
+  }
+}
+
+if(typeof Image !== 'undefined'){
+  const img = new Image();
+  img.src = 'data/nano-boss-sheet.png';
+  img.onload = ()=>{
+    // Pre-process the sheet once: treat near‑black pixels as transparent
+    // so the rectangular frame background disappears in-game and trim
+    // dark artifacts along frame edges (e.g., bottom-right specks).
+    let source = img;
+    const cols = Math.max(1, NANO_SPRITE.cols|0);
+    const rows = Math.max(1, Math.ceil((NANO_SPRITE.frames||1) / cols));
+    try{
+      if(typeof document !== 'undefined'){
+        const off = document.createElement('canvas');
+        off.width = img.width;
+        off.height = img.height;
+        const c = off.getContext('2d');
+        if(c){
+          c.drawImage(img, 0, 0);
+          const id = c.getImageData(0, 0, off.width, off.height);
+          const data = id.data;
+          const frameW = off.width / cols;
+          const frameH = off.height / rows;
+          for(let i=0;i<data.length;i+=4){
+            const r = data[i], g = data[i+1], b = data[i+2];
+            const idx = (i/4)|0;
+            const x = idx % off.width;
+            const y = (idx / off.width)|0;
+            const fx = x % frameW;
+            const fy = y % frameH;
+            const nearEdge =
+              fx < 2 || fx > frameW-3 ||
+              fy < 2 || fy > frameH-3;
+            // Pure/near‑pure black, or dark pixels hugging the frame
+            // edges, become fully transparent.
+            if((r < 18 && g < 18 && b < 18) ||
+               (nearEdge && r < 32 && g < 32 && b < 32)){
+              data[i+3] = 0;
+            }
+          }
+          c.putImageData(id, 0, 0);
+          source = off;
+        }
+      }
+    }catch(e){}
+    NANO_SPRITE.baseImg = source;
+    NANO_SPRITE.img = source;
+    NANO_SPRITE.loaded = true;
+    NANO_SPRITE.frameW = img.width / cols;
+    NANO_SPRITE.frameH = img.height / rows;
+    NANO_SPRITE.frameOffsets = computeNanoFrameOffsets(source, cols, rows, NANO_SPRITE.frames||0);
+  };
+}
+
+function getNanoTintedSheet(color){
+  if(!color || !NANO_SPRITE.baseImg) return NANO_SPRITE.img;
+  if(typeof document === 'undefined') return NANO_SPRITE.img;
+  const key = String(color);
+  if(!NANO_SPRITE.tinted) NANO_SPRITE.tinted = {};
+  if(NANO_SPRITE.tinted[key]) return NANO_SPRITE.tinted[key];
+  const base = NANO_SPRITE.baseImg;
+  const canvas = document.createElement('canvas');
+  canvas.width = base.width;
+  canvas.height = base.height;
+  const c = canvas.getContext('2d');
+  if(!c){
+    NANO_SPRITE.tinted[key] = base;
+    return base;
+  }
+  c.drawImage(base, 0, 0);
+  c.globalCompositeOperation = 'source-atop';
+  // Softer overlay with a tiny blur to reduce grain and keep
+  // the original shading/edges from the base sprite.
+  c.globalAlpha = 0.32;
+  c.filter = 'blur(0.35px) saturate(1.05)';
+  c.fillStyle = color;
+  c.fillRect(0, 0, canvas.width, canvas.height);
+  c.filter = 'none';
+  c.globalCompositeOperation = 'source-over';
+  c.globalAlpha = 1;
+  NANO_SPRITE.tinted[key] = canvas;
+  return canvas;
+}
+
 export class Enemy {
   constructor(waypoints, opts={}){
     this.waypoints = waypoints;
@@ -33,6 +186,9 @@ export class Enemy {
       color = pal.length ? pal[idx % pal.length] : COLORS.enemy;
       this.tier = idx;
       this.isBoss = false;
+      // Use the sprite sheet for regular tiered enemies as well,
+      // so the new art is visible from early waves.
+      this.spriteKey = 'nanoBot';
     } else if(/^boss(\d+)?$/.test(this.variant||'')){
       color = COLORS.boss || '#c77dff';
       this.isBoss = true;
@@ -40,6 +196,8 @@ export class Enemy {
       this.bossIndex = (typeof this.bossIndex === 'number')
         ? this.bossIndex
         : (mb ? (parseInt(mb[1]||'0',10) || 0) : 0);
+      // Primary wave bosses use the sprite sheet at a larger scale.
+      this.spriteKey = 'nanoBoss';
     } else if((this.variant||'').startsWith('boss_')){
       // New boss archetypes
       color = COLORS.boss || '#c77dff';
@@ -57,6 +215,8 @@ export class Enemy {
       } else if(this.variant==='boss_nano'){
         this.nanoSack = true; // will spawn swarm on death (handled by game)
       }
+      // Archetype bosses share the giant sprite body.
+      this.spriteKey = 'nanoBoss';
     } else if(this.variant==='v2') {
       color = COLORS.enemy2;
     } else if(this.variant==='v3') {
@@ -74,10 +234,13 @@ export class Enemy {
       color = COLORS.boss || '#c77dff';
     } else if(this.variant==='b1') {
       color = COLORS.blob1;
+      this.spriteKey = 'nanoBot';
     } else if(this.variant==='b2') {
       color = COLORS.blob2;
+      this.spriteKey = 'nanoBot';
     } else if(this.variant==='b3') {
       color = COLORS.blob3;
+      this.spriteKey = 'nanoBot';
     }
     this.color = color;
     this.slows = []; // {pct, t}
@@ -95,6 +258,8 @@ export class Enemy {
     this.angle = Math.random()*Math.PI*2; // for rotating shapes
     this.spinSpeed = (Math.random()<0.5? -1:1) * 0.8; // rad/s (slow, subtle)
     this.phase = Math.random()*Math.PI*2; // wobble phase for blobs
+    // Smoothed facing angle for sprite-based enemies; follows path direction.
+    this.renderAngle = 0;
     this.age = 0;
     this.hitFx = []; // transient hit text/flash
     this._lastHitFx = 0;
@@ -106,6 +271,8 @@ export class Enemy {
       const dy0 = waypoints[1].y - waypoints[0].y;
       const d0 = Math.hypot(dx0,dy0) || 1; this.lastUx = dx0/d0; this.lastUy = dy0/d0;
     } else { this.lastUx = 1; this.lastUy = 0; }
+    // Initial facing along the first segment.
+    this.renderAngle = Math.atan2(this.lastUy, this.lastUx);
     // Apply initial offset
     this.pos.x = this.center.x - this.lastUy * this.lane;
     this.pos.y = this.center.y + this.lastUx * this.lane;
@@ -270,6 +437,20 @@ export class Enemy {
     }
     this.pos.x = this.center.x + offX;
     this.pos.y = this.center.y + offY;
+    // Smoothly steer the rendered facing toward the current path direction
+    // so sprite-based enemies rotate smoothly around corners.
+    {
+      const target = Math.atan2(this.lastUy, this.lastUx);
+      if(Number.isFinite(target)){
+        if(!Number.isFinite(this.renderAngle)) this.renderAngle = target;
+        let diff = target - this.renderAngle;
+        while(diff > Math.PI) diff -= Math.PI*2;
+        while(diff < -Math.PI) diff += Math.PI*2;
+        const maxTurn = 6 * dt; // rad per second
+        if(Math.abs(diff) > maxTurn) diff = maxTurn * Math.sign(diff);
+        this.renderAngle += diff;
+      }
+    }
   }
 
   _labelAnchor(){
@@ -388,117 +569,176 @@ export class Enemy {
     if(this.alive){
       // Ground nano‑bots vs. flying drones share HP/status UI but
       // have distinct bodies.
+      const useNanoSprite = !!this.spriteKey && NANO_SPRITE.loaded && NANO_SPRITE.img;
       ctx.save();
       ctx.translate(this.pos.x, this.pos.y);
-      ctx.scale(this.facing || 1, 1);
-      const R = this.radius;
-      const isFlying = !!this.isFlying;
-      const pairs = isFlying ? 0 : (this.legPairs || 3);
-      const stepRate = 6 + Math.min(10, this.speed/12);
-      const amp = 0.5; // radians swing
-      const lenF = Math.max(0.8, this.legLengthFactor || 1);
-      const seg1 = Math.max(6, R*0.7*lenF), seg2 = Math.max(6, R*0.9*lenF);
-      // Boss abdomen glow behind body (ground bosses only)
-      if(this.isBoss && !isFlying){
-        const pulse = 0.6 + 0.4*(Math.sin(this.age*3)*0.5 + 0.5);
-        ctx.save();
-        ctx.globalAlpha = 0.24 * pulse;
-        ctx.shadowColor = this.color; ctx.shadowBlur = 24 + R*0.6;
-        ctx.fillStyle = this.color;
-        ctx.beginPath(); ctx.ellipse(-R*0.6, 0, R*0.65, R*0.5, 0, 0, Math.PI*2); ctx.fill();
-        ctx.restore();
-      }
-      if(!isFlying){
-        // Spider legs for ground nano‑bots
-        const lw = 2 + Math.min(2, (this.armorLevel||0)*0.3);
-        ctx.lineWidth = lw;
-        ctx.strokeStyle = this.color;
-        ctx.shadowColor = this.color; ctx.shadowBlur = 8;
-        for(let i=0;i<pairs;i++){
-          const t0 = (pairs>1? (i/(pairs-1)) : 0.5) - 0.5; // -0.5..0.5
-          const baseY = t0 * (R*0.9);
-          for(const side of [-1,1]){
-            const phase = this.phase*stepRate + i*0.6 + (side===-1?0:Math.PI);
-            const swing = Math.sin(phase) * amp;
-            const baseA = (side===-1? Math.PI: 0) + (side===-1?-0.2:0.2);
-            const a1 = baseA + swing*0.6;
-            const x1 = Math.cos(a1)*seg1;
-            const y1 = baseY + Math.sin(a1)*seg1;
-            const a2 = a1 + (side===-1? -0.9: 0.9) + swing*0.4;
-            const x2 = x1 + Math.cos(a2)*seg2;
-            const y2 = y1 + Math.sin(a2)*seg2;
-            ctx.beginPath(); ctx.moveTo(0, baseY); ctx.lineTo(x1,y1); ctx.lineTo(x2,y2); ctx.stroke();
-            // foot glint
-            ctx.save(); ctx.shadowBlur = 6; ctx.fillStyle = 'white'; ctx.globalAlpha = 0.75; ctx.beginPath(); ctx.arc(x2,y2,1.5,0,Math.PI*2); ctx.fill(); ctx.restore();
-          }
+      if(useNanoSprite){
+        // Rotate sprite to follow path direction; base art is rotated
+        // 90° counter-clockwise so we offset by -PI/2.
+        const heading = Number.isFinite(this.renderAngle) ? this.renderAngle : 0;
+        ctx.rotate(heading - Math.PI/2);
+        const cfg = NANO_SPRITE;
+        const sheet = getNanoTintedSheet(this.color);
+        const frameCount = Math.max(1, cfg.frames|0);
+        const cols = Math.max(1, cfg.cols|0);
+        const rows = Math.max(1, Math.ceil(frameCount / cols));
+        const fw = cfg.frameW || (sheet.width / cols);
+        const fh = cfg.frameH || (sheet.height / rows);
+        const t = this.age || 0;
+        // Speed up the animation for faster-moving enemies so the walk
+        // cycle roughly tracks travel speed, but keep a moderate global
+        // cadence so the motion doesn't feel too jumpy.
+        const base = Math.max(20, this.baseSpeed || 60);
+        const speedNow = Math.max(10, this.speed || base);
+        const speedFactor = Math.max(0.7, Math.min(2.0, speedNow / base));
+        const walkBoost = 1.8; // 1.5x faster than previous 1.2
+        const fps = (cfg.fps || 14) * speedFactor * walkBoost;
+        // Use only the dedicated walk cycle frames from the sheet
+        // to avoid awkward jumps between non-walk poses.
+        const startFrame = 34;
+        const endFrame = 46;
+        const s = Math.max(0, startFrame|0);
+        const e = Math.max(s, Math.min(frameCount-1, endFrame|0));
+        const span = (e - s + 1) || 1;
+        const raw = Math.floor(t * fps) % span;
+        const idx = s + raw;
+        const col = idx % cols;
+        const row = Math.floor(idx / cols);
+        const sx = col * fw;
+        const sy = row * fh;
+        const baseSize = Math.max(fw, fh) || 1;
+        const sizeMul = this.isBoss ? 4.8 : 3.4;
+        const desiredDiameter = this.radius * sizeMul;
+        const scale = desiredDiameter / baseSize;
+        // Stabilize vertical position so the enemy doesn't appear to
+        // shrink or grow when frames are drawn slightly higher/lower
+        // within their cells in the sheet.
+        let offsetY = 0;
+        const offs = NANO_SPRITE.frameOffsets;
+        if(offs && offs.length > idx){
+          offsetY = (offs[idx] || 0) * scale;
         }
-        ctx.shadowBlur = 0;
-        // Armor/plating outlines (scale with tier/boss)
-        const plates = Math.max(0, Math.min(5, this.armorLevel||0));
-        for(let i=0;i<plates;i++){
-          const s = 1.05 + i*0.12;
-          ctx.save();
-          const a = 0.12 + i*0.06 + 0.08*Math.sin(this.age*2 + i*0.8);
-          ctx.globalAlpha = Math.max(0.05, Math.min(0.6, a));
-          ctx.strokeStyle = 'white';
-          ctx.lineWidth = 2;
-          ctx.beginPath(); ctx.ellipse(0, 0, R*0.9*s, R*0.75*s, 0, 0, Math.PI*2); ctx.stroke();
-          ctx.restore();
-        }
-      }
-      // Body core
-      ctx.fillStyle = this.color;
-      if(this.ghostPhasing && this.intangible && !isFlying){ ctx.globalAlpha = 0.45; }
-      if(isFlying){
-        // Compact drone hull (disc) slightly tilted
         ctx.save();
-        ctx.rotate(0.18*Math.sin(this.age*1.1));
-        ctx.beginPath(); ctx.ellipse(0,0,R*0.95,R*0.65,0,0,Math.PI*2); ctx.fill();
-        // Rotor hub
-        ctx.fillStyle = '#0b1f29';
-        ctx.beginPath(); ctx.arc(0,0,R*0.32,0,Math.PI*2); ctx.fill();
-        // Crossed rotor blades
-        ctx.strokeStyle = 'rgba(255,255,255,0.9)';
-        ctx.lineWidth = 2;
-        const spin = this.age*6;
-        for(let i=0;i<2;i++){
-          const a = spin + i*Math.PI/2;
-          const bx = Math.cos(a)*R*1.1;
-          const by = Math.sin(a)*R*1.1;
-          ctx.beginPath(); ctx.moveTo(-bx*0.4,-by*0.4); ctx.lineTo(bx,by); ctx.stroke();
-        }
-        ctx.restore();
-        // Side fins / wings
-        ctx.save();
-        ctx.fillStyle = 'rgba(98,240,255,0.85)';
-        ctx.globalAlpha = 0.9;
-        const wingSpan = R*1.4;
-        ctx.beginPath();
-        ctx.moveTo(-wingSpan, -R*0.15);
-        ctx.quadraticCurveTo(-R*0.2, -R*0.8, 0, -R*0.2);
-        ctx.quadraticCurveTo(R*0.2, -R*0.8, wingSpan, -R*0.15);
-        ctx.quadraticCurveTo(R*0.2, -R*0.3, 0, -R*0.05);
-        ctx.quadraticCurveTo(-R*0.2, -R*0.3, -wingSpan, -R*0.15);
-        ctx.closePath();
-        ctx.fill();
+        ctx.drawImage(
+          sheet,
+          sx, sy, fw, fh,
+          -fw*scale/2,
+          -fh*scale/2 + offsetY,
+          fw*scale,
+          fh*scale
+        );
         ctx.restore();
       } else {
-        ctx.beginPath(); ctx.ellipse(0,0,R*0.95,R*0.8,0,0,Math.PI*2); ctx.fill();
-      }
-      if(this.ghostPhasing && this.intangible && !isFlying){ ctx.globalAlpha = 1; }
-      if(!isFlying){
-        // Shimmer sweep across plating (bosses emphasized)
-        const sweepA = (this.age*1.2) % (Math.PI*2);
-        ctx.save();
-        ctx.globalAlpha = this.isBoss? 0.35 : 0.2;
-        ctx.strokeStyle = 'white';
-        ctx.lineWidth = this.isBoss? 2.0 : 1.4;
-        ctx.shadowColor = 'white'; ctx.shadowBlur = this.isBoss? 10 : 6;
-        ctx.beginPath(); ctx.ellipse(0, 0, R*0.85, R*0.7, 0, sweepA, sweepA + Math.PI*0.6); ctx.stroke();
-        ctx.restore();
-        // Dorsal highlight and eye
-        ctx.fillStyle = 'white'; ctx.globalAlpha = 0.85; ctx.beginPath(); ctx.arc(R*0.15, -R*0.1, Math.max(2, R*0.25), 0, Math.PI*2); ctx.fill(); ctx.globalAlpha = 1;
-        ctx.fillStyle = 'rgba(0,0,0,0.6)'; ctx.beginPath(); ctx.arc(R*0.35,0, R*0.12, 0, Math.PI*2); ctx.fill();
+        ctx.scale(this.facing || 1, 1);
+        const R = this.radius;
+        const isFlying = !!this.isFlying;
+        const pairs = isFlying ? 0 : (this.legPairs || 3);
+        const stepRate = 6 + Math.min(10, this.speed/12);
+        const amp = 0.5; // radians swing
+        const lenF = Math.max(0.8, this.legLengthFactor || 1);
+        const seg1 = Math.max(6, R*0.7*lenF), seg2 = Math.max(6, R*0.9*lenF);
+        // Boss abdomen glow behind body (ground bosses only)
+        if(this.isBoss && !isFlying){
+          const pulse = 0.6 + 0.4*(Math.sin(this.age*3)*0.5 + 0.5);
+          ctx.save();
+          ctx.globalAlpha = 0.24 * pulse;
+          ctx.shadowColor = this.color; ctx.shadowBlur = 24 + R*0.6;
+          ctx.fillStyle = this.color;
+          ctx.beginPath(); ctx.ellipse(-R*0.6, 0, R*0.65, R*0.5, 0, 0, Math.PI*2); ctx.fill();
+          ctx.restore();
+        }
+        if(!isFlying){
+          // Spider legs for ground nano‑bots
+          const lw = 2 + Math.min(2, (this.armorLevel||0)*0.3);
+          ctx.lineWidth = lw;
+          ctx.strokeStyle = this.color;
+          ctx.shadowColor = this.color; ctx.shadowBlur = 8;
+          for(let i=0;i<pairs;i++){
+            const t0 = (pairs>1? (i/(pairs-1)) : 0.5) - 0.5; // -0.5..0.5
+            const baseY = t0 * (R*0.9);
+            for(const side of [-1,1]){
+              const phase = this.phase*stepRate + i*0.6 + (side===-1?0:Math.PI);
+              const swing = Math.sin(phase) * amp;
+              const baseA = (side===-1? Math.PI: 0) + (side===-1?-0.2:0.2);
+              const a1 = baseA + swing*0.6;
+              const x1 = Math.cos(a1)*seg1;
+              const y1 = baseY + Math.sin(a1)*seg1;
+              const a2 = a1 + (side===-1? -0.9: 0.9) + swing*0.4;
+              const x2 = x1 + Math.cos(a2)*seg2;
+              const y2 = y1 + Math.sin(a2)*seg2;
+              ctx.beginPath(); ctx.moveTo(0, baseY); ctx.lineTo(x1,y1); ctx.lineTo(x2,y2); ctx.stroke();
+              // foot glint
+              ctx.save(); ctx.shadowBlur = 6; ctx.fillStyle = 'white'; ctx.globalAlpha = 0.75; ctx.beginPath(); ctx.arc(x2,y2,1.5,0,Math.PI*2); ctx.fill(); ctx.restore();
+            }
+          }
+          ctx.shadowBlur = 0;
+          // Armor/plating outlines (scale with tier/boss)
+          const plates = Math.max(0, Math.min(5, this.armorLevel||0));
+          for(let i=0;i<plates;i++){
+            const s = 1.05 + i*0.12;
+            ctx.save();
+            const a = 0.12 + i*0.06 + 0.08*Math.sin(this.age*2 + i*0.8);
+            ctx.globalAlpha = Math.max(0.05, Math.min(0.6, a));
+            ctx.strokeStyle = 'white';
+            ctx.lineWidth = 2;
+            ctx.beginPath(); ctx.ellipse(0, 0, R*0.9*s, R*0.75*s, 0, 0, Math.PI*2); ctx.stroke();
+            ctx.restore();
+          }
+        }
+        // Body core
+        ctx.fillStyle = this.color;
+        if(this.ghostPhasing && this.intangible && !isFlying){ ctx.globalAlpha = 0.45; }
+        if(isFlying){
+          // Compact drone hull (disc) slightly tilted
+          ctx.save();
+          ctx.rotate(0.18*Math.sin(this.age*1.1));
+          ctx.beginPath(); ctx.ellipse(0,0,R*0.95,R*0.65,0,0,Math.PI*2); ctx.fill();
+          // Rotor hub
+          ctx.fillStyle = '#0b1f29';
+          ctx.beginPath(); ctx.arc(0,0,R*0.32,0,Math.PI*2); ctx.fill();
+          // Crossed rotor blades
+          ctx.strokeStyle = 'rgba(255,255,255,0.9)';
+          ctx.lineWidth = 2;
+          const spin = this.age*6;
+          for(let i=0;i<2;i++){
+            const a = spin + i*Math.PI/2;
+            const bx = Math.cos(a)*R*1.1;
+            const by = Math.sin(a)*R*1.1;
+            ctx.beginPath(); ctx.moveTo(-bx*0.4,-by*0.4); ctx.lineTo(bx,by); ctx.stroke();
+          }
+          ctx.restore();
+          // Side fins / wings
+          ctx.save();
+          ctx.fillStyle = 'rgba(98,240,255,0.85)';
+          ctx.globalAlpha = 0.9;
+          const wingSpan = R*1.4;
+          ctx.beginPath();
+          ctx.moveTo(-wingSpan, -R*0.15);
+          ctx.quadraticCurveTo(-R*0.2, -R*0.8, 0, -R*0.2);
+          ctx.quadraticCurveTo(R*0.2, -R*0.8, wingSpan, -R*0.15);
+          ctx.quadraticCurveTo(R*0.2, -R*0.3, 0, -R*0.05);
+          ctx.quadraticCurveTo(-R*0.2, -R*0.3, -wingSpan, -R*0.15);
+          ctx.closePath();
+          ctx.fill();
+          ctx.restore();
+        } else {
+          ctx.beginPath(); ctx.ellipse(0,0,R*0.95,R*0.8,0,0,Math.PI*2); ctx.fill();
+        }
+        if(this.ghostPhasing && this.intangible && !isFlying){ ctx.globalAlpha = 1; }
+        if(!isFlying){
+          // Shimmer sweep across plating (bosses emphasized)
+          const sweepA = (this.age*1.2) % (Math.PI*2);
+          ctx.save();
+          ctx.globalAlpha = this.isBoss? 0.35 : 0.2;
+          ctx.strokeStyle = 'white';
+          ctx.lineWidth = this.isBoss? 2.0 : 1.4;
+          ctx.shadowColor = 'white'; ctx.shadowBlur = this.isBoss? 10 : 6;
+          ctx.beginPath(); ctx.ellipse(0, 0, R*0.85, R*0.7, 0, sweepA, sweepA + Math.PI*0.6); ctx.stroke();
+          ctx.restore();
+          // Dorsal highlight and eye
+          ctx.fillStyle = 'white'; ctx.globalAlpha = 0.85; ctx.beginPath(); ctx.arc(R*0.15, -R*0.1, Math.max(2, R*0.25), 0, Math.PI*2); ctx.fill(); ctx.globalAlpha = 1;
+          ctx.fillStyle = 'rgba(0,0,0,0.6)'; ctx.beginPath(); ctx.arc(R*0.35,0, R*0.12, 0, Math.PI*2); ctx.fill();
+        }
       }
       ctx.restore();
 

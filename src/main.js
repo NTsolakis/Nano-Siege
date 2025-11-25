@@ -36,9 +36,7 @@ const updateStageSizing = ()=>{
     : Math.max(minCanvasWidth, stageWidth - sideWidth);
   const ratio = 16 / 9;
   // Let the canvas grow to the full usable width, height-capped later to preserve aspect.
-  const zoomToken = getComputedStyle(root).getPropertyValue('--canvas-zoom') || '1';
-  const zoom = parseFloat(zoomToken) || 1;
-  let width = usableWidth * zoom;
+  let width = usableWidth;
   let height = width / ratio;
   // On wider layouts we cap by height so the canvas
   // never exceeds the available vertical space.
@@ -67,6 +65,74 @@ canvas.height = CANVAS_H;
 
 const game = new Game(canvas);
 game.start();
+
+// Browser back handling: keep navigation inside the game.
+if(window.history && window.history.pushState){
+  const pushStateSafe = (screen)=>{
+    try{
+      window.history.pushState({ nanoSiege:true, screen }, '');
+    }catch(e){}
+  };
+  try{
+    window.history.replaceState({ nanoSiege:true, screen:'menu' }, '');
+    // Seed an initial in-page history entry so Back has somewhere to go.
+    pushStateSafe('menu');
+  }catch(e){}
+  let backInFlight = false;
+  window.addEventListener('popstate', (evt)=>{
+    if(!evt.state || !evt.state.nanoSiege){
+      // Let the browser handle non-game history entries.
+      return;
+    }
+    const isInRun = game.state === 'playing' || game.state === 'paused' || game.state === 'exitConfirm';
+    if(isInRun){
+      if(backInFlight) return;
+      backInFlight = true;
+      if(typeof game.requestExitConfirm === 'function'){
+        game.requestExitConfirm((ok)=>{
+          if(ok){
+            game.toMenu();
+          } else {
+            // Re‑assert game state in history so Back again re-prompts.
+            pushStateSafe('game');
+          }
+          backInFlight = false;
+        });
+      } else {
+        backInFlight = false;
+      }
+    } else {
+      // From any menu/overlay, return to fullscreen main menu instead of leaving the page.
+      if(typeof game.handleMenuBack === 'function') game.handleMenuBack();
+      else game.toMenu();
+      pushStateSafe('menu');
+    }
+  });
+
+  // When gameplay starts or returns to menus, push explicit states so Back
+  // can move between "game" and "menu" without leaving the page.
+  if(typeof game.startGame === 'function'){
+    const origStartGame = game.startGame.bind(game);
+    game.startGame = (...args)=>{
+      pushStateSafe('game');
+      return origStartGame(...args);
+    };
+  }
+  if(typeof game.toMenu === 'function'){
+    const origToMenu = game.toMenu.bind(game);
+    game.toMenu = (...args)=>{
+      pushStateSafe('menu');
+      return origToMenu(...args);
+    };
+  }
+  if(typeof game.handleMenuBack === 'function'){
+    const origHandleMenuBack = game.handleMenuBack.bind(game);
+    game.handleMenuBack = (...args)=>{
+      pushStateSafe('menu');
+      return origHandleMenuBack(...args);
+    };
+  }
+}
 
 requestAnimationFrame(updateStageSizing);
 

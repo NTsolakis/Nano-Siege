@@ -8,6 +8,7 @@ import { UIManager } from './ui.js';
 import { audio } from './audio.js';
 import { MAPS } from './maps.js';
 import { TOWER_TYPES, UPGRADE_COSTS } from './config.js';
+import { defaultSandboxConfig, clampSandboxConfig } from '../sandbox-config.js';
 import { rollShopOffers, applyPerk, buffs, ABILITIES, PASSIVE_MAX_LEVEL, passiveCostFor, ULTIMATE_MAX_LEVEL, ultimateCostFor, PERKS } from './rogue.js';
 import { getMissionById, getMissionMap, buildMissionWave, getMissionTotalWaves } from './campaign.js';
 import { loginUser as apiLoginUser, saveUserState as apiSaveUserState, createUser as apiCreateUser, fetchLeaderboard as apiFetchLeaderboard, submitLeaderboard as apiSubmitLeaderboard, logoutUser as apiLogoutUser } from './auth.js';
@@ -54,7 +55,7 @@ export class Game {
     this.reactorShield = 0;
     this.chrono = { timer: 0, active: false, timeLeft: 0 };
     this.time = 0; // seconds, for animation
-    this.state = 'menu'; // menu | playing | paused | gameover
+    this.state = 'menu'; // menu | playing | paused | gameover | exitConfirm
     this.floaters = []; // {x,y,text,age,ttl,vy,color}
     this.ambient = [];  // background motes
     this.banner = null; // {text, age, ttl}
@@ -64,7 +65,7 @@ export class Game {
     this.waveLostHP = false; // did we lose HP during current wave?
     this.livesAtWaveStart = this.lives;
     this.bonusPayout = Math.min(GAME_RULES.bigWaveBonus, GAME_RULES.bonusMaxPayout || Infinity); // scales by bonusScale each bonus wave, capped
-    this.speedFactor = 1; // 1x or 2x
+    this.speedFactor = 1; // 1x..4x
     this.lowHpActive = false;
     // Screen shake magnitude (px)
     this.shakeMag = 0;
@@ -84,6 +85,11 @@ export class Game {
     this.recomputeAbilityParams();
     this.placingBomb = false;
     this._lastCritBannerTime = 0;
+    this._exitConfirmCallback = null;
+    this._exitConfirmPrevState = null;
+    this._exitConfirmKind = 'exit';
+    this.sandboxMode = false;
+    this.sandboxConfig = defaultSandboxConfig();
     // Logged-in user (for backend saves)
     this.currentUser = null; // { username }
 
@@ -154,7 +160,12 @@ export class Game {
     this.ui.on('pause', ()=> this.pause());
     this.ui.on('resume', ()=> this.resume());
     this.ui.on('retry', ()=> this.retry());
-    this.ui.on('toMenu', ()=> this.toMenu());
+    this.ui.on('toMenu', ()=> {
+      // Confirm before exiting the current run via Main Menu.
+      this.requestExitConfirm('exit', (ok)=>{
+        if(ok) this.toMenu();
+      });
+    });
     this.ui.on('toMissionSelect', ()=> this.toMissionSelect());
     this.ui.on('selectTowerType', (v)=>{ this.selectedTower = v; });
     this.ui.on('selectMap', (key)=>{ const m = MAPS.find(x=>x.key===key); if(m){ this.selectedMap = m; } });
@@ -184,16 +195,19 @@ export class Game {
     // Dev mode
     this.devMode = this._readDevModePref();
     this.ui.on('toggleDev', (v)=> this.setDevMode(!!v));
+    // Automatic speed control (auto slow on boss/bonus/difficulty)
+    this.autoSpeedControl = this._readAutoSpeedPref();
+    this.ui.on('toggleAutoSpeed', (v)=> this.setAutoSpeedControl(!!v));
     this.ui.on('devUpgradeMax', ()=> this.upgradeSelectedMax());
 
     // Main menu flow
     this.ui.on('mainNew', ()=> this.handleMainNew());
     this.ui.on('mainLoad', ()=> this.handleMainLoad());
-    this.ui.on('mainExit', ()=> this.handleMainExit());
     this.ui.on('loadSlot', (slot)=> this.handleLoadSlot(slot));
     this.ui.on('loadBack', ()=> this.handleLoadBack());
     this.ui.on('menuBack', ()=> this.handleMenuBack());
     this.ui.on('mainAssembly', ()=> this.handleMainAssembly());
+    this.ui.on('mainSandbox', ()=> this.handleMainSandbox());
     this.ui.on('mainSettings', ()=> this.handleMainSettings());
     this.ui.on('mainSettingsBack', ()=> this.handleMainSettingsBack());
     // Assembly War missions
@@ -214,6 +228,16 @@ export class Game {
     this.ui.on('openAssemblyCore', ()=> this.openAssemblyCore());
     this.ui.on('removePassive', (key)=> this.refundPassive(key));
     this.ui.on('leaderboardSelectMap', (key)=>{ if(key){ this.leaderboardMapKey = key; this.refreshLeaderboard(key); } });
+    this.ui.on('exitConfirm', ()=> this._handleExitConfirm(true));
+    this.ui.on('exitCancel', ()=> this._handleExitConfirm(false));
+    this.ui.on('restart', ()=> {
+      this.requestExitConfirm('restart', (ok)=>{
+        if(ok) this.retry();
+      });
+    });
+    this.ui.on('sandboxOpen', ()=> this.openSandboxFromRun());
+    this.ui.on('sandboxStart', ()=> this.handleSandboxStart());
+    this.ui.on('sandboxReset', ()=> this.resetSandboxConfig());
 
     this.ui.setWave(1);
     this.ui.setCredits(this.credits);
@@ -224,7 +248,6 @@ export class Game {
     this.ui.highlightTowerBtn(this.selectedTower);
     this.ui.setVolumeLabel(audio.getVolumeLabel());
     if(this.ui.setVolumeSlider) this.ui.setVolumeSlider(audio.getVolumePercent());
-    if(this.ui.setZoom) this.ui.setZoom(100);
     this.ui.setWaveStatus(false);
     if(this.ui.setWaveProgress) this.ui.setWaveProgress(0);
     this.refreshPassivePanel();
@@ -255,6 +278,8 @@ export class Game {
 
     // Sync dev mode toggle + state with persisted preference
     this.setDevMode(this.devMode);
+    // Sync automatic speed control toggle with persisted preference
+    this.setAutoSpeedControl(this.autoSpeedControl);
 
     // Keyboard shortcuts
     window.addEventListener('keydown', (e)=>{
@@ -317,6 +342,7 @@ export class Game {
     audio.resume();
     this.state = 'playing';
     this.applyScaleMode('game');
+    if(this.ui.setSandboxSettingsVisible) this.ui.setSandboxSettingsVisible(this.sandboxMode);
     // Ensure no menu overlay blur/pointer lock persists into gameplay
     if(typeof document !== 'undefined'){
       document.body.classList.remove('mainmenu-visible');
@@ -384,8 +410,8 @@ export class Game {
       this.ui.setAbilityVisible('cryo', this.abilities.cryo.unlocked);
     }
     if(this.updateAbilityUI) this.updateAbilityUI();
-    // If dev mode is active, keep credits effectively infinite and reflect UI
-    if(this.devMode){ this.credits = Math.max(this.credits, 999999); }
+    // If cheat mode is active, keep credits effectively infinite and reflect UI
+    if(this.isCheatMode()){ this.credits = Math.max(this.credits, 999999); }
     this.ui.setWave(1);
     this.ui.setCredits(this.credits);
     if(this.ui.setBestWave) this.ui.setBestWave(this.bestWave);
@@ -438,6 +464,8 @@ export class Game {
     this.ui.showPause(false);
     this.ui.showGameOver(false);
     this.resetAbilityUnlocks();
+    this.sandboxMode = false;
+    if(this.ui.setSandboxSettingsVisible) this.ui.setSandboxSettingsVisible(false);
     // Return to top-level main menu
     if(this.ui.showMenu) this.ui.showMenu(false);
     if(this.ui.showLoadMenu) this.ui.showLoadMenu(false);
@@ -746,7 +774,7 @@ export class Game {
     this.leaderboardOrigin = null;
   }
   async recordLeaderboardEntry(waves){
-    if(!this.currentUser || this.devMode) return;
+    if(!this.currentUser || this.isCheatMode()) return;
     const value = Math.max(0, Number.isFinite(waves) ? waves : this.bestWave || this.waveIdx);
     if(value <= 0) return;
     try{
@@ -812,6 +840,167 @@ export class Game {
     }
   }
 
+  _readAutoSpeedPref(){
+    if(typeof window === 'undefined' || !window.localStorage) return true;
+    try{
+      const raw = window.localStorage.getItem('nano_siege_auto_speed');
+      if(raw === null) return true;
+      return raw !== '0';
+    }catch(e){
+      return true;
+    }
+  }
+  _writeAutoSpeedPref(on){
+    if(typeof window === 'undefined' || !window.localStorage) return;
+    try{
+      window.localStorage.setItem('nano_siege_auto_speed', on ? '1' : '0');
+    }catch(e){
+      // ignore
+    }
+  }
+
+  isCheatMode(){
+    return !!(this.devMode || this.sandboxMode);
+  }
+
+  resetSandboxConfig(){
+    this.sandboxConfig = defaultSandboxConfig();
+    this.applySandboxBuffs();
+  }
+  applySandboxBuffs(){
+    const cfg = clampSandboxConfig(this.sandboxConfig);
+    this.sandboxConfig = cfg;
+    // Apply to global buffs used by towers/status.
+    buffs.dmgMul = cfg.towerDmgMul;
+    buffs.fireRateMul = cfg.towerFireRateMul;
+    buffs.rangeMul = cfg.towerRangeMul;
+    buffs.slowPotencyMul = cfg.slowMul;
+    buffs.burnDpsMul = cfg.burnDpsMul;
+    buffs.burnDurationBonus = (cfg.burnDurationMul - 1) * 1.0;
+    buffs.creditMul = cfg.creditMul;
+    buffs.creditFlatPerKill = cfg.flatCreditsPerKill|0;
+  }
+
+  syncSandboxConfigFromUI(){
+    if(typeof document === 'undefined') return;
+    const readRange = (id, fallback)=>{
+      const el = document.getElementById(id);
+      if(!el) return fallback;
+      const v = parseFloat(el.value);
+      return Number.isFinite(v) ? v : fallback;
+    };
+    const readCheck = (id, fallback)=>{
+      const el = document.getElementById(id);
+      if(!el) return fallback;
+      return !!el.checked;
+    };
+    const cfg = { ...(this.sandboxConfig || defaultSandboxConfig()) };
+    cfg.enemyHpMul = readRange('sb-enemyhp', cfg.enemyHpMul);
+    cfg.enemySpeedMul = readRange('sb-enemyspeed', cfg.enemySpeedMul);
+    cfg.waveSizeMul = readRange('sb-wavesize', cfg.waveSizeMul);
+    cfg.spawnSpacingMul = readRange('sb-spacing', cfg.spawnSpacingMul);
+    cfg.bossEveryWave = readCheck('sb-boss-every', cfg.bossEveryWave);
+    cfg.towerDmgMul = readRange('sb-dmg', cfg.towerDmgMul);
+    cfg.towerFireRateMul = readRange('sb-firerate', cfg.towerFireRateMul);
+    cfg.towerRangeMul = readRange('sb-range', cfg.towerRangeMul);
+    cfg.slowMul = readRange('sb-slow', cfg.slowMul);
+    cfg.burnDpsMul = readRange('sb-burndps', cfg.burnDpsMul);
+    cfg.burnDurationMul = readRange('sb-burndur', cfg.burnDurationMul);
+    cfg.puddleDpsMul = readRange('sb-puddledps', cfg.puddleDpsMul);
+    cfg.puddleDurMul = readRange('sb-puddledur', cfg.puddleDurMul);
+    cfg.creditMul = readRange('sb-credits', cfg.creditMul);
+    cfg.fragmentMul = readRange('sb-frags', cfg.fragmentMul);
+    cfg.flatCreditsPerKill = readRange('sb-flatcredits', cfg.flatCreditsPerKill);
+    cfg.infiniteCredits = readCheck('sb-inf-credits', cfg.infiniteCredits);
+    cfg.infiniteHp = readCheck('sb-inf-hp', cfg.infiniteHp);
+    cfg.freeShop = readCheck('sb-free-shop', cfg.freeShop);
+    cfg.freeRerolls = readCheck('sb-free-shop', cfg.freeRerolls); // share switch for now
+    cfg.noLeaksEndGame = readCheck('sb-no-leaks', cfg.noLeaksEndGame);
+    this.sandboxConfig = clampSandboxConfig(cfg);
+  }
+
+  tuneSandboxWave(wave){
+    const cfg = this.sandboxConfig || defaultSandboxConfig();
+    const hpMul = cfg.enemyHpMul ?? 1;
+    const spMul = cfg.enemySpeedMul ?? 1;
+    const sizeMul = cfg.waveSizeMul ?? 1;
+    const spaceMul = cfg.spawnSpacingMul ?? 1;
+    let out = wave.map(def=>({
+      ...def,
+      hp: Math.max(1, Math.round((def.hp||1) * hpMul)),
+      speed: Math.max(10, Math.round((def.speed||60) * spMul)),
+      delay: (def.delay||0) * spaceMul
+    }));
+    // Wave size scaling
+    if(sizeMul > 1.001){
+      const copies = Math.max(1, Math.round(sizeMul));
+      const expanded = [];
+      for(const d of out){
+        for(let i=0;i<copies;i++){
+          expanded.push({ ...d });
+        }
+      }
+      out = expanded;
+    } else if(sizeMul < 0.999){
+      const keepProb = Math.max(0, sizeMul);
+      out = out.filter(()=> Math.random() < keepProb);
+      if(out.length === 0 && wave.length){
+        out.push({ ...wave[wave.length-1] });
+      }
+    }
+    // Optional boss injection every wave
+    if(cfg.bossEveryWave){
+      const hasBoss = out.some(d=> d.variant && /^boss/.test(d.variant));
+      if(!hasBoss && out.length){
+        const base = out[out.length-1];
+        const boss = {
+          ...base,
+          hp: Math.max(50, Math.round((base.hp||50) * 10)),
+          speed: Math.max(20, Math.round((base.speed||60) * 0.6)),
+          reward: (base.reward||0) + 80,
+          variant: 'boss_sandbox',
+          radius: base.radius || 24
+        };
+        out.push(boss);
+      }
+    }
+    return out;
+  }
+
+  requestExitConfirm(kindOrCb, maybeCb){
+    let kind = 'exit';
+    let cb = maybeCb;
+    if(typeof kindOrCb === 'function'){
+      cb = kindOrCb;
+    } else if(typeof kindOrCb === 'string'){
+      kind = kindOrCb;
+    }
+    if(this._exitConfirmCallback){
+      // Already waiting on a previous confirmation.
+      return;
+    }
+    this._exitConfirmKind = kind === 'restart' ? 'restart' : 'exit';
+    this._exitConfirmCallback = (typeof cb === 'function') ? cb : null;
+    this._exitConfirmPrevState = this.state;
+    if(this.state === 'playing' || this.state === 'paused'){
+      // Freeze gameplay but keep the board rendered underneath the modal.
+      this.state = 'exitConfirm';
+    }
+    if(this.ui.showExitConfirm) this.ui.showExitConfirm(true, this._exitConfirmKind);
+  }
+  _handleExitConfirm(ok){
+    if(this.ui.showExitConfirm) this.ui.showExitConfirm(false);
+    // Restore previous state if we temporarily switched into confirm mode.
+    if(this._exitConfirmPrevState){
+      this.state = this._exitConfirmPrevState;
+    }
+    const cb = this._exitConfirmCallback;
+    this._exitConfirmPrevState = null;
+    this._exitConfirmCallback = null;
+    this._exitConfirmKind = 'exit';
+    if(typeof cb === 'function') cb(!!ok);
+  }
+
   // --- Main menu handlers ---
   handleMainNew(){
     // From fullscreen main menu or load menu, go to the in-game
@@ -820,6 +1009,7 @@ export class Game {
     if(this.ui.showLoadMenu) this.ui.showLoadMenu(false);
     if(this.ui.showAssembly) this.ui.showAssembly(true);
     if(this.ui.showMainSettings) this.ui.showMainSettings(false);
+    if(this.ui.setMapStartLabel) this.ui.setMapStartLabel('Start Endless Cycle');
     this.state = 'menu';
   }
   handleMenuBack(){
@@ -836,6 +1026,37 @@ export class Game {
     if(this.ui.showLoadMenu) this.ui.showLoadMenu(false);
     if(this.ui.showAssembly) this.ui.showAssembly(true);
     this.state = 'menu';
+  }
+  handleMainSandbox(){
+    // Sandbox Mode: open the Sandbox Lab panel.
+    this.sandboxMode = true;
+    if(this.ui.showMainMenu) this.ui.showMainMenu(false);
+    if(this.ui.showAssembly) this.ui.showAssembly(false);
+    if(this.ui.showMainSettings) this.ui.showMainSettings(false);
+    if(this.ui.showSandbox) this.ui.showSandbox(true);
+    this.state = 'menu';
+  }
+  handleSandboxStart(){
+    // From Sandbox Lab → map select, keeping sandbox flags active for this run.
+    this.syncSandboxConfigFromUI();
+    this.applySandboxBuffs();
+    if(this.ui.showSandbox) this.ui.showSandbox(false);
+    if(this.ui.showMapSelect) this.ui.showMapSelect(true);
+    if(this.ui.setMapStartLabel) this.ui.setMapStartLabel('Start Sandbox');
+  }
+
+  openSandboxFromRun(){
+    if(!this.sandboxMode) return;
+    this.requestExitConfirm('exit', (ok)=>{
+      if(!ok) return;
+      // Drop back to Sandbox Lab instead of main menu.
+      this.state = 'menu';
+      this.applyScaleMode('menu');
+      if(this.ui.showPause) this.ui.showPause(false);
+      if(this.ui.showGameOver) this.ui.showGameOver(false);
+      if(this.ui.showSandbox) this.ui.showSandbox(true);
+      if(this.ui.setSandboxSettingsVisible) this.ui.setSandboxSettingsVisible(false);
+    });
   }
   handleLeaderboardSignIn(){
     this.closeLeaderboard();
@@ -877,6 +1098,7 @@ export class Game {
     if(this.ui.showMainSettings) this.ui.showMainSettings(false);
     if(this.ui.showMainMenu) this.ui.showMainMenu(true);
     this.resetAbilityUnlocks();
+    this.sandboxMode = false;
     this.state = 'menu';
   }
   handleLoadBack(){
@@ -1030,9 +1252,12 @@ export class Game {
     }
     // Use a separate builder for Assembly War so its pacing can diverge
     // from Endless Cycle.
-    const wave = isAssembly
+    let wave = isAssembly
       ? buildMissionWave(this.missionId, waveNumber)
       : buildWave(waveNumber);
+    if(this.sandboxMode && !isAssembly){
+      wave = this.tuneSandboxWave(wave);
+    }
     this.bestWave = Math.max(this.bestWave, waveNumber);
     if(this.ui.setBestWave) this.ui.setBestWave(this.bestWave);
     this.spawner.queue = [...wave];
@@ -1070,12 +1295,21 @@ export class Game {
     if(this.bonusActive){ this.lastBonusWave = upcomingWaveNumber; this.bonusHistory.push(upcomingWaveNumber); }
     this.waveLostHP = false;
     this.livesAtWaveStart = this.lives;
-    if(this.bonusActive){ this.showBanner('BONUS WAVE'); this.speedFactor = 1; this.ui.setFastLabel(this.speedFactor); }
+    if(this.bonusActive){
+      this.showBanner('BONUS WAVE');
+      if(this.autoSpeedControl){
+        this.speedFactor = 1;
+        this.ui.setFastLabel(this.speedFactor);
+      }
+    }
     // Boss wave banner
     if(upcomingWaveNumber % 10 === 0){
       this.showBanner('BOSS INCOMING', 'Brace for impact', 'danger');
       if(audio.bossIntro) audio.bossIntro();
-      this.speedFactor = 1; this.ui.setFastLabel(this.speedFactor);
+      if(this.autoSpeedControl){
+        this.speedFactor = 1;
+        this.ui.setFastLabel(this.speedFactor);
+      }
     }
     // Difficulty increase banner on variant introductions and phase-outs
     const triggers = new Set([
@@ -1086,7 +1320,10 @@ export class Game {
     ]);
     if(triggers.has(upcomingWaveNumber)){
       this.showBanner('DIFFICULTY INCREASE', null, 'danger');
-      this.speedFactor = 1; this.ui.setFastLabel(this.speedFactor);
+      if(this.autoSpeedControl){
+        this.speedFactor = 1;
+        this.ui.setFastLabel(this.speedFactor);
+      }
     }
   }
 
@@ -1096,8 +1333,8 @@ export class Game {
     if(this.grid.canPlace(gx,gy)){
       const def = TOWER_TYPES[this.selectedTower];
       const cost = def.cost;
-      if(this.devMode || this.credits >= cost){
-        if(!this.devMode){ this.credits -= cost; }
+      if(this.isCheatMode() || this.credits >= cost){
+        if(!this.isCheatMode()){ this.credits -= cost; }
         this.grid.occupy(gx,gy);
         const t = createTower(this.selectedTower,gx,gy,TILE_SIZE);
         t.game = this;
@@ -1106,7 +1343,7 @@ export class Game {
         this.towers.push(t);
         this.ui.setCredits(this.credits);
         // Show spend toast near cursor
-        if(!this.devMode) this.addFloater(this.mouse.x + 14, this.mouse.y - 10, `-${cost}⚛`, COLORS.danger || '#ff5370');
+        if(!this.isCheatMode()) this.addFloater(this.mouse.x + 14, this.mouse.y - 10, `-${cost}⚛`, COLORS.danger || '#ff5370');
         audio.place();
       } else {
         // Not enough nano credits — show red toast near cursor and above upgrade panel if open
@@ -1373,9 +1610,12 @@ export class Game {
           // then auto-return to mission select after a short delay.
           this.ui.setStartEnabled(false);
           this.ui.setWaveStatus(false);
-          // Reset game speed back to 1x for the banner + transition.
-          this.speedFactor = 1;
-          this.ui.setFastLabel(this.speedFactor);
+          // Reset game speed back to 1x for the banner + transition,
+          // unless automatic speed control is disabled.
+          if(this.autoSpeedControl){
+            this.speedFactor = 1;
+            this.ui.setFastLabel(this.speedFactor);
+          }
           const mission = getMissionById(this.missionId);
           const label = mission ? mission.name : `Mission ${this.missionId}`;
           this.showBanner('MISSION COMPLETE', label, null);
@@ -1399,8 +1639,20 @@ export class Game {
 
   addHazardZone({ x, y, r, dur, slowPct, dps=0, burnDps=0, kind='generic', color=null }){
     const radius = Math.max(10, r||0);
-    const ttl = Math.max(0.1, dur||0);
-    const slow = Math.max(0, Math.min(0.95, slowPct||0));
+    let ttl = Math.max(0.1, dur||0);
+    let slow = Math.max(0, Math.min(0.95, slowPct||0));
+    let dpsVal = Math.max(0, dps||0);
+    let burnVal = Math.max(0, burnDps||0);
+    if(this.sandboxMode && this.sandboxConfig){
+      const cfg = this.sandboxConfig;
+      const mulD = cfg.puddleDpsMul ?? 1;
+      const mulS = cfg.puddleSlowMul ?? 1;
+      const mulT = cfg.puddleDurMul ?? 1;
+      dpsVal *= mulD;
+      burnVal *= mulD;
+      slow = Math.max(0, Math.min(0.95, slow * mulS));
+      ttl = Math.max(0.1, ttl * mulT);
+    }
     this.hazardZones.push({
       x,
       y,
@@ -1408,8 +1660,8 @@ export class Game {
       t: ttl,
       ttl,
       slow,
-      dps: Math.max(0, dps||0),
-      burnDps: Math.max(0, burnDps||0),
+      dps: dpsVal,
+      burnDps: burnVal,
       kind,
       color,
       tickInterval: 0.25,
@@ -1576,7 +1828,8 @@ export class Game {
   addFragments(amount, opts={}){
     const base = Math.max(0, Math.round(amount));
     const scale = (GAME_RULES.fragmentGainScale != null) ? GAME_RULES.fragmentGainScale : 0.35;
-    const gain = Math.max(0, Math.round(base * scale));
+    const fragMul = (this.sandboxMode && this.sandboxConfig) ? (this.sandboxConfig.fragmentMul ?? 1) : 1;
+    const gain = Math.max(0, Math.round(base * scale * fragMul));
     if(!gain) return;
     this.fragments = Math.max(0, this.fragments + gain);
     if(this.ui.setFragments) this.ui.setFragments(this.fragments);
@@ -1606,11 +1859,11 @@ export class Game {
   // Convert fragments into a single shard (spec system)
   convertFragmentsToShard(){
     const cost = 500;
-    if(!this.devMode && this.fragments < cost){
+    if(!this.isCheatMode() && this.fragments < cost){
       this.showBanner('NOT ENOUGH FRAGMENTS', `Need ${cost}⟐`, 'danger');
       return;
     }
-    if(!this.devMode){
+    if(!this.isCheatMode()){
       this.fragments = Math.max(0, this.fragments - cost);
       if(this.ui.setFragments) this.ui.setFragments(this.fragments);
       const fxX = (this.mouse && typeof this.mouse.x==='number') ? this.mouse.x : CANVAS_W/2;
@@ -2255,11 +2508,11 @@ export class Game {
       this.showBanner('NANOCORE MAXED', 'Slot expansion already installed', 'danger');
       return;
     }
-    if(!this.devMode && cost > this.fragments){
+    if(!this.isCheatMode() && cost > this.fragments){
       this.showBanner('NOT ENOUGH FRAGMENTS', `Need ${cost}⟐`, 'danger');
       return;
     }
-    if(!this.devMode){
+    if(!this.isCheatMode()){
       this.fragments = Math.max(0, this.fragments - cost);
       if(this.ui.setFragments) this.ui.setFragments(this.fragments);
       // Feedback for spends in both HUD and chamber
@@ -2295,8 +2548,8 @@ export class Game {
     }
     const currentPrice = this.shop.rerollPrice;
     const discountMul = 1 - (buffs.rerollDiscount || 0);
-    const price = this.devMode ? 0 : Math.max(0, Math.round(currentPrice * discountMul));
-    if(!this.devMode){
+    const price = this.isCheatMode() ? 0 : Math.max(0, Math.round(currentPrice * discountMul));
+    if(!this.isCheatMode()){
       if(this.fragments < price){
         this.showBanner('NOT ENOUGH FRAGMENTS', `Need ${price}⟐ to reroll`, 'danger');
         return;
@@ -2329,7 +2582,7 @@ export class Game {
     if(this.ui.renderShopAbilities) this.ui.renderShopAbilities(abilList, this.coreShards);
     // Increase reroll price for the next use (persists across shop visits
     // until the run is reset by a new game or loss).
-    if(!this.devMode){
+    if(!this.isCheatMode()){
       this.shop.rerollPrice = Math.max(basePrice, Math.round(currentPrice * scale));
     }
     if(this.ui.setRerollPrice) this.ui.setRerollPrice(this.shop.rerollPrice || basePrice);
@@ -2368,11 +2621,11 @@ export class Game {
     const currentLvl = this.getAbilityLevel(key) || 0;
     if(currentLvl >= (ULTIMATE_MAX_LEVEL||5)) return;
     const cost = (ultimateCostFor ? ultimateCostFor(a, currentLvl) : (a.cost|0));
-    if(!this.devMode && cost > this.coreShards){
+    if(!this.isCheatMode() && cost > this.coreShards){
       this.showBanner('NOT ENOUGH CORE SHARDS', `Need ${cost}✦`, 'danger');
       return;
     }
-    if(!this.devMode){
+    if(!this.isCheatMode()){
       this.coreShards = Math.max(0, this.coreShards - cost);
       if(this.ui.setCoreShards) this.ui.setCoreShards(this.coreShards);
       const fxX = (this.mouse && typeof this.mouse.x==='number') ? this.mouse.x : CANVAS_W/2;
@@ -2474,10 +2727,6 @@ export class Game {
       const wasAlive = e.alive;
       e.update(dt);
       if(wasAlive && !e.alive && e.reachedEnd){
-        if(this.devMode){
-          // In dev mode, do not reduce HP
-          continue;
-        }
         let damage = 1;
         if(this.reactorShield>0){
           const absorb = Math.min(this.reactorShield, damage);
@@ -2486,21 +2735,28 @@ export class Game {
           const basePos = this.grid.base || this.grid.waypoints[this.grid.waypoints.length-1];
           this.addFloater(basePos.x, basePos.y - 16, `- ${absorb} SHIELD`, '#7ce0ff');
         }
-        if(damage<=0) continue;
-        this.lives = Math.max(0, this.lives - damage);
-        this.ui.setLives(this.lives);
         const base = this.grid.base || this.grid.waypoints[this.grid.waypoints.length-1];
-        this.addFloater(base.x, base.y - 12, '-1 HP', COLORS.danger || '#ff5370');
-        audio.damage();
+        // Always show reactor hit feedback and screen shake, even in dev mode.
+        if(damage>0 || this.isCheatMode()){
+          // If cheat mode is enabled, keep HP frozen but still show a hit marker.
+          if(!this.isCheatMode() && damage>0){
+            this.lives = Math.max(0, this.lives - damage);
+            this.ui.setLives(this.lives);
+          }
+          const label = (!this.isCheatMode() && damage>0) ? `-${damage} HP` : 'CORE HIT';
+          this.addFloater(base.x, base.y - 12, label, COLORS.danger || '#ff5370');
+          audio.damage();
+          // Screen shake scales with missing HP (more intense when low)
+          const hpPct = Math.max(0, Math.min(1, this.lives / GAME_RULES.startingLives));
+          const amp = 8 * (1 + (1 - hpPct) * 2.8);
+          this.addShake(amp);
+        }
+        if(this.isCheatMode() || damage<=0) continue;
         // Reset current perfect combo immediately on damage
         if(this.perfectCombo){
           this.perfectCombo = 0;
           if(this.ui.setPerfectCombo) this.ui.setPerfectCombo(0);
         }
-        // Screen shake scales with missing HP (more intense when low)
-        const hpPct = Math.max(0, Math.min(1, this.lives / GAME_RULES.startingLives));
-        const amp = 6 * (1 + (1 - hpPct) * 2.5);
-        this.addShake(amp);
         if(this.bonusActive) this.waveLostHP = true;
         // update low-HP warning
         this.updateLowHpAlarm();
@@ -2783,10 +3039,6 @@ export class Game {
       const oy = (Math.random()*2-1) * this.shakeMag;
       ctx.translate(ox, oy);
     }
-
-    // Map-themed background motif
-    this.drawBackground(ctx);
-    this.drawAmbient(ctx);
 
     this.grid.draw(ctx, this.time);
 
@@ -3439,7 +3691,7 @@ export class Game {
           ctx.fillStyle = i<filled ? color : 'rgba(255,255,255,0.25)'; ctx.fill();
         }
         if(n.cost!=null){
-          const costText = this.devMode ? '∞' : n.cost;
+          const costText = this.isCheatMode() ? '∞' : n.cost;
           ctx.fillStyle='rgba(255,255,255,0.9)'; ctx.font='11px system-ui, sans-serif';
           ctx.fillText(`${costText}✦`, x, yCost);
         }
@@ -3458,7 +3710,7 @@ export class Game {
       } else {
         // Passive: only cost + optional tooltip line
         if(n.cost!=null){
-          const costText = this.devMode ? '∞' : n.cost;
+          const costText = this.isCheatMode() ? '∞' : n.cost;
           ctx.fillStyle='rgba(255,255,255,0.9)'; ctx.font='11px system-ui, sans-serif';
           ctx.fillText(`${costText}⟐`, x, y+36);
         }
@@ -3544,7 +3796,7 @@ export class Game {
       ctx.restore();
     };
     const rerollPrice = Math.max(0, Math.round(30 * (1 - (buffs.rerollDiscount||0))));
-    const rerollLabel = this.devMode ? 'Reroll (∞)' : `Reroll (${rerollPrice}⟐)`;
+    const rerollLabel = this.isCheatMode() ? 'Reroll (∞)' : `Reroll (${rerollPrice}⟐)`;
     const contLabel = (this.mode === 'assembly' && this.coreReturnTarget === 'assembly') ? 'Back' : 'Continue';
     drawBtn(btn.reroll, rerollLabel);
     drawConvert(btn.convert);
@@ -3573,8 +3825,6 @@ export class Game {
 
   // Backdrop for map return: minimal background + grid + core base
   drawMapBackdrop(ctx){
-    // Background glow/motifs
-    this.drawBackground(ctx);
     // Grid and base without towers/enemies for a clean crossfade
     this.grid.draw(ctx, this.time);
     this.drawBase(ctx);
@@ -3625,8 +3875,8 @@ export class Game {
   upgradeSelected(type){
     if(!this.selected) return;
     if(type==='slow' && !this.selected.hasSlow){
-      if(this.devMode || this.credits >= UPGRADE_COSTS.slowModule){
-        if(!this.devMode){ this.credits -= UPGRADE_COSTS.slowModule; }
+      if(this.isCheatMode() || this.credits >= UPGRADE_COSTS.slowModule){
+        if(!this.isCheatMode()){ this.credits -= UPGRADE_COSTS.slowModule; }
         this.selected.installSlow(); this.selected.invested = (this.selected.invested||0) + UPGRADE_COSTS.slowModule; this.ui.setCredits(this.credits);
         this.ui.setUpgradePanel(this.selected, this.credits);
       } else {
@@ -3638,8 +3888,8 @@ export class Game {
       const lvl = this.selected.rateLevel||0;
       const costs = [UPGRADE_COSTS.rateModule, Math.round(UPGRADE_COSTS.rateModule*1.5), Math.round(UPGRADE_COSTS.rateModule*2.0)];
       const cost = costs[lvl];
-      if(this.devMode || this.credits >= cost){
-        if(!this.devMode){ this.credits -= cost; }
+      if(this.isCheatMode() || this.credits >= cost){
+        if(!this.isCheatMode()){ this.credits -= cost; }
         this.selected.upgradeRate(); this.selected.invested = (this.selected.invested||0) + cost; this.ui.setCredits(this.credits);
         this.ui.setUpgradePanel(this.selected, this.credits);
       } else {
@@ -3651,8 +3901,8 @@ export class Game {
       const lvl = this.selected.rangeLevel||0;
       const costs = [UPGRADE_COSTS.rangeModule, Math.round(UPGRADE_COSTS.rangeModule*1.5), Math.round(UPGRADE_COSTS.rangeModule*2.0)];
       const cost = costs[lvl];
-      if(this.devMode || this.credits >= cost){
-        if(!this.devMode){ this.credits -= cost; }
+      if(this.isCheatMode() || this.credits >= cost){
+        if(!this.isCheatMode()){ this.credits -= cost; }
         this.selected.upgradeRange(); this.selected.invested = (this.selected.invested||0) + cost; this.ui.setCredits(this.credits);
         this.ui.setUpgradePanel(this.selected, this.credits);
       } else {
@@ -3661,8 +3911,8 @@ export class Game {
       }
     }
     if(type==='burn' && !this.selected.hasBurn){
-      if(this.devMode || this.credits >= UPGRADE_COSTS.burnModule){
-        if(!this.devMode){ this.credits -= UPGRADE_COSTS.burnModule; }
+      if(this.isCheatMode() || this.credits >= UPGRADE_COSTS.burnModule){
+        if(!this.isCheatMode()){ this.credits -= UPGRADE_COSTS.burnModule; }
         this.selected.installBurn(); this.selected.invested = (this.selected.invested||0) + UPGRADE_COSTS.burnModule; this.ui.setCredits(this.credits);
         this.ui.setUpgradePanel(this.selected, this.credits);
       } else {
@@ -3673,7 +3923,7 @@ export class Game {
 
   // Dev: instantly max out the selected tower
   upgradeSelectedMax(){
-    if(!this.devMode || !this.selected) return;
+    if(!this.isCheatMode() || !this.selected) return;
     const t = this.selected;
     t.rateLevel = 3;
     t.rangeLevel = 3;
@@ -3701,6 +3951,14 @@ export class Game {
     // Always refresh credits label to reflect ∞ vs numeric appropriately
     if(this.ui.setCredits) this.ui.setCredits(this.credits);
     if(changed) this._writeDevModePref(this.devMode);
+  }
+
+  setAutoSpeedControl(v){
+    const next = !!v;
+    const changed = this.autoSpeedControl !== next;
+    this.autoSpeedControl = next;
+    if(this.ui.setAutoSpeedUI) this.ui.setAutoSpeedUI(this.autoSpeedControl);
+    if(changed) this._writeAutoSpeedPref(this.autoSpeedControl);
   }
 
   devUnlockAllUltimates(){

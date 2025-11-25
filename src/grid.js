@@ -4,6 +4,7 @@ import { worldFromGrid } from './utils.js';
 export class Grid {
   constructor(mapDef=null){
     this.w = GRID_W; this.h = GRID_H; this.tile = TILE_SIZE;
+    this.motif = (mapDef && mapDef.motif) || 'circuit';
     const defaultPath = [
       [0,4],[1,4],[2,4],[3,4],[4,4],[5,4],
       [5,5],[5,6],[5,7],
@@ -16,6 +17,19 @@ export class Grid {
     const sp = mapDef && mapDef.path;
     this.colors = { ...COLORS, ...(mapDef && mapDef.colors ? mapDef.colors : {}) };
     this.occupied = new Set();
+
+    // Optional PCB board texture image, used as the base layer for the
+    // gameboard. Falls back to the procedural gradient if not available.
+    this.boardTexture = null;
+    this.boardTextureLoaded = false;
+    if(typeof Image !== 'undefined'){
+      const img = new Image();
+      img.onload = ()=>{ this.boardTextureLoaded = true; };
+      img.onerror = ()=>{ this.boardTextureLoaded = false; };
+      // Allow per‑map override but default to the shared board art.
+      img.src = (mapDef && mapDef.boardTextureUrl) || 'data/board-bg.png';
+      this.boardTexture = img;
+    }
 
     if(mp && Array.isArray(mp) && mp.length && Array.isArray(mp[0])){
       this.pathsCells = mp; // array of array of [gx,gy]
@@ -56,54 +70,117 @@ export class Grid {
   release(gx,gy){ this.occupied.delete(`${gx},${gy}`); }
 
   draw(ctx, time=0){
-    // grid background
     ctx.save();
     const C = this.colors;
-    ctx.strokeStyle = C.grid;
+    const W = this.w * this.tile;
+    const H = this.h * this.tile;
+    const t = time || 0;
+    const motif = this.motif || 'circuit';
+
+    // --- PCB-style board background (chip on neon traces) ---------------
+    const midX = W / 2;
+    const midY = H / 2;
+    const maxR = Math.max(W, H);
+
+    // If a board texture image is available, use it as the primary
+    // backdrop and lightly tint it; otherwise fall back to the
+    // original gradient/vignette combo.
+    const hasTexture = this.boardTexture && this.boardTextureLoaded &&
+      this.boardTexture.naturalWidth && this.boardTexture.naturalHeight;
+    if(hasTexture){
+      const img = this.boardTexture;
+      const scale = Math.max(W / img.naturalWidth, H / img.naturalHeight);
+      const dw = img.naturalWidth * scale;
+      const dh = img.naturalHeight * scale;
+      const dx = (W - dw) / 2;
+      const dy = (H - dh) / 2;
+      ctx.drawImage(img, dx, dy, dw, dh);
+
+      // Soft vignette to keep focus toward the center of the board
+      const vignette = ctx.createRadialGradient(
+        midX, midY, maxR * 0.25,
+        midX, midY, maxR * 0.85
+      );
+      vignette.addColorStop(0, 'rgba(0, 0, 0, 0)');
+      vignette.addColorStop(1, 'rgba(0, 0, 0, 0.75)');
+      ctx.fillStyle = vignette;
+      ctx.fillRect(0, 0, W, H);
+    } else {
+      // Deep blue/teal gradient base
+      const bgGrad = ctx.createLinearGradient(0, 0, W, H);
+      bgGrad.addColorStop(0, '#020713');
+      bgGrad.addColorStop(0.45, '#041726');
+      bgGrad.addColorStop(1, '#021721');
+      ctx.fillStyle = bgGrad;
+      ctx.fillRect(0, 0, W, H);
+
+      // Soft vignette glow toward the center
+      const vignette = ctx.createRadialGradient(
+        midX, midY, maxR * 0.1,
+        midX, midY, maxR * 0.75
+      );
+      vignette.addColorStop(0, 'rgba(0, 120, 180, 0.35)');
+      vignette.addColorStop(1, 'rgba(0, 0, 0, 0)');
+      ctx.fillStyle = vignette;
+      ctx.fillRect(0, 0, W, H);
+    }
+
+    // Overlay the gameplay grid as a simple lattice so buildable squares are
+    // easy to read on top of the background. Theme: crisp, almost‑black
+    // gridlines instead of blue neon.
+    const gridPulse = 0.2 + 0.2*Math.sin((time||0)*1.8);
     ctx.lineWidth = 1;
+    ctx.shadowColor = 'rgba(0,0,0,0.7)';
+    ctx.shadowBlur = 4;
+    ctx.strokeStyle = '#000000';
+    ctx.globalAlpha = 0.45 + gridPulse;
     for(let x=0;x<=this.w;x++){
+      const px = x*this.tile + 0.5;
       ctx.beginPath();
-      ctx.moveTo(x*this.tile,0);
-      ctx.lineTo(x*this.tile,this.h*this.tile);
+      ctx.moveTo(px,0);
+      ctx.lineTo(px,this.h*this.tile);
       ctx.stroke();
     }
     for(let y=0;y<=this.h;y++){
+      const py = y*this.tile + 0.5;
       ctx.beginPath();
-      ctx.moveTo(0,y*this.tile);
-      ctx.lineTo(this.w*this.tile,y*this.tile);
+      ctx.moveTo(0,py);
+      ctx.lineTo(this.w*this.tile,py);
       ctx.stroke();
     }
+    ctx.shadowBlur = 0;
+    ctx.globalAlpha = 1;
 
-    // path(s)
+    // path(s) – electric blue tiles with glow
     const drawCell = (gx,gy)=>{
       const x = gx*this.tile, y = gy*this.tile;
-      ctx.fillStyle = C.path; ctx.fillRect(x,y,this.tile,this.tile);
-      ctx.strokeStyle = C.pathEdge; ctx.globalAlpha = 0.2; ctx.strokeRect(x+0.5,y+0.5,this.tile-1,this.tile-1); ctx.globalAlpha = 1;
+      const size = this.tile;
+      const cx = x + size/2;
+      const cy = y + size/2;
+      // Deep electric-blue tile with subtle vertical gradient
+      const tileGrad = ctx.createLinearGradient(x, y, x, y + size);
+      tileGrad.addColorStop(0, 'rgba(4, 52, 92, 0.98)');
+      tileGrad.addColorStop(1, 'rgba(3, 20, 40, 0.98)');
+      ctx.fillStyle = tileGrad;
+      ctx.fillRect(x, y, size, size);
+      // Neon cyan edge
+      ctx.strokeStyle = 'rgba(0, 240, 255, 0.9)';
+      ctx.lineWidth = 1.4;
+      ctx.strokeRect(x + 0.7, y + 0.7, size - 1.4, size - 1.4);
+      // Soft inner glow so tiles pop off the board
+      const glow = ctx.createRadialGradient(
+        cx, cy, size * 0.08,
+        cx, cy, size * 0.6
+      );
+      glow.addColorStop(0, 'rgba(210, 250, 255, 0.96)');
+      glow.addColorStop(1, 'rgba(0, 185, 255, 0)');
+      ctx.fillStyle = glow;
+      ctx.globalAlpha = 0.95;
+      ctx.fillRect(x, y, size, size);
+      ctx.globalAlpha = 1;
     };
     if(this.pathsCells){ for(const p of this.pathsCells){ for(const [gx,gy] of p) drawCell(gx,gy); } }
     else { for(const [gx,gy] of this.pathCells) drawCell(gx,gy); }
-
-    // directional neon arrows along each path (skip last cell)
-    const drawArrows = (cells)=>{
-      for(let i=0;i<cells.length-1;i++){
-        const [gx,gy] = cells[i];
-        const [nx,ny] = cells[i+1];
-        const dx = nx-gx, dy = ny-gy;
-        const ang = Math.atan2(dy,dx);
-        const cx = gx*this.tile + this.tile/2;
-        const cy = gy*this.tile + this.tile/2;
-        ctx.save(); ctx.translate(cx,cy); ctx.rotate(ang);
-        const pulse = 0.55 + 0.25*Math.sin(time*4 + i*0.7);
-        ctx.globalAlpha = pulse; ctx.shadowColor = C.accent2; ctx.shadowBlur = 12; ctx.fillStyle = C.accent2;
-        const w = Math.min(16, this.tile*0.28); const h = Math.min(20, this.tile*0.34);
-        ctx.beginPath(); ctx.moveTo(-w*0.6, -w*0.5); ctx.lineTo(-w*0.6, w*0.5); ctx.lineTo(h, 0); ctx.closePath(); ctx.fill();
-        ctx.globalAlpha = pulse*0.6; ctx.shadowBlur = 20; ctx.fillStyle = 'white';
-        ctx.beginPath(); ctx.moveTo(-w*0.2, -w*0.25); ctx.lineTo(-w*0.2, w*0.25); ctx.lineTo(h*0.6, 0); ctx.closePath(); ctx.fill();
-        ctx.restore();
-      }
-    };
-    if(this.pathsCells){ for(const p of this.pathsCells) drawArrows(p); }
-    else drawArrows(this.pathCells);
     ctx.restore();
   }
 }

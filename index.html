@@ -53,7 +53,9 @@
               <span id="stat-lives">HP: 0</span>
               <span class="hpbar"><span class="hpfill" id="hp-fill" style="width:100%"></span></span>
             </div>
-            <div class="control-dev"></div>
+            <div class="control-dev">
+              <button id="btn-sandbox-settings" class="sandbox-btn" style="display:none">Sandbox Settings</button>
+            </div>
           </section>
           <section class="hud-cell hud-controls">
             <div class="control-row">
@@ -217,6 +219,7 @@
             <h3>Paused</h3>
             <div class="actions">
               <button id="btn-resume">Resume</button>
+              <button id="btn-pause-restart">Restart</button>
               <button id="btn-pause-menu">Main Menu</button>
               <button id="btn-settings">Settings</button>
               <button id="btn-pause-login">Sign In</button>
@@ -228,9 +231,13 @@
                 <label for="vol-slider">Volume <span id="vol-label">70%</span></label>
                 <input type="range" id="vol-slider" min="0" max="100" step="1" value="70" />
               </div>
-              <div class="zoom-ctl" style="margin-top:10px; display:flex; align-items:center; gap:8px; justify-content:center">
-                <label for="zoom-slider">Zoom <span id="zoom-label">100%</span></label>
-                <input type="range" id="zoom-slider" min="100" max="200" step="5" value="100" />
+              <div class="dev-toggle" style="margin-top:10px">
+                <span class="dev-label">Automatic Speed Control</span>
+                <label class="switch">
+                  <input type="checkbox" id="autospeed-toggle" checked />
+                  <span class="slider"></span>
+                </label>
+                <span class="dev-hint">Auto slow on bonus &amp; boss waves</span>
               </div>
               <div class="actions" style="margin-top:10px">
                 <button id="btn-settings-back">Back</button>
@@ -256,6 +263,18 @@
               </div>
             </div>
             <p class="hint">P or Esc to toggle</p>
+          </div>
+        </section>
+
+        <!-- Confirm exit overlay (used for browser Back / exit to menu) -->
+        <section id="exitconfirm-overlay" class="overlay">
+          <div class="panel small">
+            <h3 id="exitconfirm-title">Exit to Main Menu?</h3>
+            <p class="tag" id="exitconfirm-tag">Your current run will be lost.</p>
+            <div class="actions">
+              <button id="btn-exit-cancel">Cancel</button>
+              <button id="btn-exit-confirm">Exit</button>
+            </div>
           </div>
         </section>
 
@@ -325,8 +344,8 @@
             <button id="btn-main-leaderboard">Leaderboard</button>
             <button id="btn-main-assembly">Assembly War <span class="badge-uc">Under Construction</span></button>
             <button id="btn-main-loaduser">Sign In</button>
+            <button id="btn-main-sandbox">Sandbox Mode</button>
             <button id="btn-main-settings">Settings</button>
-            <button id="btn-main-exit">Exit</button>
           </div>
         </div>
     </section>
@@ -348,6 +367,147 @@
         </div>
       </section>
 
+      <!-- Fullscreen Sandbox Lab -->
+      <section id="sandbox-overlay" class="overlay mainmenu">
+        <div class="panel mainmenu-panel">
+          <h2>Sandbox Lab</h2>
+          <p class="tag">Tune waves, combat stats, and cheats for this Sandbox run only.</p>
+
+          <div class="sandbox-grid">
+            <!-- Waves & Enemies -->
+            <div class="sandbox-card">
+              <h3>Waves & Enemies</h3>
+              <div class="sb-field">
+                <label for="sb-enemyhp">Enemy HP</label>
+                <input type="range" id="sb-enemyhp" min="0.1" max="10" step="0.1" value="1">
+                <span class="sb-value" id="sb-enemyhp-val">1.0×</span>
+              </div>
+              <div class="sb-field">
+                <label for="sb-enemyspeed">Enemy Speed</label>
+                <input type="range" id="sb-enemyspeed" min="0.25" max="10" step="0.25" value="1">
+                <span class="sb-value" id="sb-enemyspeed-val">1.0×</span>
+              </div>
+              <div class="sb-field">
+                <label for="sb-wavesize">Wave Size</label>
+                <input type="range" id="sb-wavesize" min="0.1" max="10" step="0.1" value="1.0">
+                <span class="sb-value" id="sb-wavesize-val">1.0×</span>
+              </div>
+              <div class="sb-field">
+                <label for="sb-spacing">Spawn Spacing</label>
+                <input type="range" id="sb-spacing" min="0.25" max="10" step="0.25" value="1">
+                <span class="sb-value" id="sb-spacing-val">1.0×</span>
+              </div>
+              <div class="sb-toggle">
+                <label>Boss Every Wave</label>
+                <label class="switch">
+                  <input type="checkbox" id="sb-boss-every">
+                  <span class="slider"></span>
+                </label>
+              </div>
+            </div>
+
+            <!-- Towers & Status Effects -->
+            <div class="sandbox-card">
+              <h3>Tower & Status</h3>
+              <div class="sb-field">
+                <label for="sb-dmg">Tower Damage</label>
+                <input type="range" id="sb-dmg" min="0.25" max="10" step="0.25" value="1">
+                <span class="sb-value" id="sb-dmg-val">1.0×</span>
+              </div>
+              <div class="sb-field">
+                <label for="sb-firerate">Fire Rate</label>
+                <input type="range" id="sb-firerate" min="0.25" max="10" step="0.25" value="1">
+                <span class="sb-value" id="sb-firerate-val">1.0×</span>
+              </div>
+              <div class="sb-field">
+                <label for="sb-range">Range</label>
+                <input type="range" id="sb-range" min="0.5" max="10" step="0.25" value="1">
+                <span class="sb-value" id="sb-range-val">1.0×</span>
+              </div>
+              <div class="sb-field">
+                <label for="sb-slow">Slow Potency</label>
+                <input type="range" id="sb-slow" min="0" max="10" step="0.25" value="1">
+                <span class="sb-value" id="sb-slow-val">1.0×</span>
+              </div>
+              <div class="sb-field">
+                <label for="sb-burndps">Burn DPS</label>
+                <input type="range" id="sb-burndps" min="0" max="10" step="0.25" value="1">
+                <span class="sb-value" id="sb-burndps-val">1.0×</span>
+              </div>
+              <div class="sb-field">
+                <label for="sb-burndur">Burn Duration</label>
+                <input type="range" id="sb-burndur" min="0" max="10" step="0.25" value="1">
+                <span class="sb-value" id="sb-burndur-val">1.0×</span>
+              </div>
+              <div class="sb-field">
+                <label for="sb-puddledps">Puddle DPS</label>
+                <input type="range" id="sb-puddledps" min="0" max="10" step="0.25" value="1">
+                <span class="sb-value" id="sb-puddledps-val">1.0×</span>
+              </div>
+              <div class="sb-field">
+                <label for="sb-puddledur">Puddle Slow Duration</label>
+                <input type="range" id="sb-puddledur" min="0" max="10" step="0.25" value="1">
+                <span class="sb-value" id="sb-puddledur-val">1.0×</span>
+              </div>
+            </div>
+
+            <!-- Economy & Cheats -->
+            <div class="sandbox-card">
+              <h3>Economy</h3>
+              <div class="sb-field">
+                <label for="sb-credits">Credit Gain</label>
+                <input type="range" id="sb-credits" min="0" max="10" step="0.25" value="1">
+                <span class="sb-value" id="sb-credits-val">1.0×</span>
+              </div>
+              <div class="sb-field">
+                <label for="sb-frags">Fragment Gain</label>
+                <input type="range" id="sb-frags" min="0" max="10" step="0.25" value="1">
+                <span class="sb-value" id="sb-frags-val">1.0×</span>
+              </div>
+              <div class="sb-field">
+                <label for="sb-flatcredits">Flat Credits / Kill</label>
+                <input type="range" id="sb-flatcredits" min="0" max="20" step="1" value="0">
+                <span class="sb-value" id="sb-flatcredits-val">0</span>
+              </div>
+              <div class="sb-toggle">
+                <label>Infinite Credits</label>
+                <label class="switch">
+                  <input type="checkbox" id="sb-inf-credits" checked>
+                  <span class="slider"></span>
+                </label>
+              </div>
+              <div class="sb-toggle">
+                <label>Infinite HP</label>
+                <label class="switch">
+                  <input type="checkbox" id="sb-inf-hp" checked>
+                  <span class="slider"></span>
+                </label>
+              </div>
+              <div class="sb-toggle">
+                <label>Free Shop & Rerolls</label>
+                <label class="switch">
+                  <input type="checkbox" id="sb-free-shop" checked>
+                  <span class="slider"></span>
+                </label>
+              </div>
+              <div class="sb-toggle">
+                <label>Leaks Don’t End Run</label>
+                <label class="switch">
+                  <input type="checkbox" id="sb-no-leaks">
+                  <span class="slider"></span>
+                </label>
+              </div>
+            </div>
+          </div>
+
+          <div class="actions" style="margin-top:22px">
+            <button id="btn-sandbox-back">Back</button>
+            <button id="btn-sandbox-reset">Reset Defaults</button>
+            <button id="btn-sandbox-start">Start Sandbox (Map Select)</button>
+          </div>
+        </div>
+      </section>
+
       <!-- Fullscreen Main Settings -->
       <section id="mainsettings-overlay" class="overlay mainmenu">
         <div class="panel mainmenu-panel">
@@ -357,11 +517,15 @@
             <label for="vol-slider-main">Volume <span id="vol-label-main">70%</span></label>
             <input type="range" id="vol-slider-main" min="0" max="100" step="1" value="70" />
           </div>
-          <div class="zoom-ctl" style="margin-top:14px; display:flex; align-items:center; gap:8px; justify-content:center">
-            <label for="zoom-slider-main">Zoom <span id="zoom-label-main">100%</span></label>
-            <input type="range" id="zoom-slider-main" min="100" max="200" step="5" value="100" />
-          </div>
           <div class="dev-toggle" style="margin-top:14px">
+            <span class="dev-label">Automatic Speed Control</span>
+            <label class="switch">
+              <input type="checkbox" id="autospeed-toggle-main" checked />
+              <span class="slider"></span>
+            </label>
+            <span class="dev-hint">Auto slow on bonus & boss waves</span>
+          </div>
+          <div class="dev-toggle" style="margin-top:8px">
             <span class="dev-label">Developer Mode</span>
             <label class="switch">
               <input type="checkbox" id="dev-toggle-main" />

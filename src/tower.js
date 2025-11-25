@@ -3,6 +3,69 @@ import { buffs } from './rogue.js';
 import { audio } from './audio.js';
 import { dist2, clamp } from './utils.js';
 
+// Optional static sprites for tower heads. Each sprite is drawn centered
+// on the tower position and rotated by the tower's tracking angle.
+const TOWER_SPRITES = {
+  cannon: null,
+  laser: null,
+  splash: null
+};
+
+function loadTowerSprite(key, url, angleOffset=0, sizeMul=1.3){
+  if(typeof Image === 'undefined') return;
+  const img = new Image();
+  img.src = url;
+  img.onload = ()=>{
+    let source = img;
+    try{
+      if(typeof document !== 'undefined'){
+        const off = document.createElement('canvas');
+        off.width = img.width;
+        off.height = img.height;
+        const c = off.getContext('2d');
+        if(c){
+          c.drawImage(img, 0, 0);
+          const id = c.getImageData(0, 0, off.width, off.height);
+          const data = id.data;
+          for(let i=0;i<data.length;i+=4){
+            const r = data[i], g = data[i+1], b = data[i+2];
+            const a = data[i+3];
+            // Use luminance so we treat near‑black background as
+            // transparent but leave bright pixels crisp.
+            const lum = 0.2126*r + 0.7152*g + 0.0722*b;
+            let alpha = a;
+            if(lum < 10){
+              alpha = 0;
+            }
+            data[i+3] = alpha;
+          }
+          c.putImageData(id, 0, 0);
+          source = off;
+        }
+      }
+    }catch(e){}
+    TOWER_SPRITES[key] = {
+      img: source,
+      w: source.width,
+      h: source.height,
+      angleOffset,
+      sizeMul,
+      loaded: true
+    };
+  };
+}
+
+  if(typeof Image !== 'undefined'){
+  // Save your images into /data with these filenames, or adjust paths.
+  // Cannon/Splash art is drawn “facing up” in the source, so rotate
+  // them 90° counter‑clockwise to align with our aim direction.
+  const quarterTurnCCW = -Math.PI/2;
+  loadTowerSprite('laser', 'data/tower-laser.png', 0, 1.2);
+  loadTowerSprite('cannon', 'data/tower-cannon.png', quarterTurnCCW, 1.2);
+  // Slightly smaller so it fits comfortably within one tile.
+  loadTowerSprite('splash', 'data/tower-splash.png', quarterTurnCCW, 1.0);
+}
+
 export class Bullet {
   constructor(x,y,tx,ty,speed,damage,{splashRadius=0, slow=null, burn=null, canPierce=false, color=null, cascadeBonus=0, extraChains=0, sourceX=null, sourceY=null, crit=false}={}){
     const dx = tx-x, dy = ty-y; const d = Math.hypot(dx,dy)||1;
@@ -343,29 +406,45 @@ export class CannonTower extends BaseTower{
   }
   tryHit(enemies){ /* hitscan: handled in update */ }
   draw(ctx){
-    // base + turret head (range drawn externally to avoid clutter)
+    // Base + turret head (range drawn externally to avoid clutter)
     this.drawBase(ctx);
-    // base icon
     this.drawIcon(ctx);
+    const spr = TOWER_SPRITES.cannon;
     ctx.save();
     ctx.translate(this.x,this.y);
-    ctx.rotate(this.rotation);
-    // Turret head: beveled trapezoid
-    ctx.fillStyle = COLORS.accent2;
-    ctx.shadowColor = COLORS.accent2; ctx.shadowBlur = 10;
-    ctx.beginPath();
-    ctx.moveTo(4, -7);
-    ctx.lineTo(22, -3.5);
-    ctx.lineTo(22,  3.5);
-    ctx.lineTo(4,  7);
-    ctx.closePath();
-    ctx.fill();
-    ctx.shadowBlur = 0;
-    // Muzzle highlight
-    ctx.fillStyle = 'white';
-    ctx.globalAlpha = 0.7;
-    ctx.fillRect(18,-2,3.5,4);
-    ctx.globalAlpha = 1;
+    ctx.rotate(this.rotation + (spr?.angleOffset || 0));
+    if(spr && spr.loaded){
+      const img = spr.img;
+      const baseSize = Math.max(spr.w, spr.h) || 1;
+      const desired = this.tile * (spr.sizeMul || 1.3);
+      const scale = desired / baseSize;
+      ctx.save();
+      ctx.drawImage(
+        img,
+        -spr.w*scale/2,
+        -spr.h*scale/2,
+        spr.w*scale,
+        spr.h*scale
+      );
+      ctx.restore();
+    } else {
+      // Fallback: original vector cannon head
+      ctx.fillStyle = COLORS.accent2;
+      ctx.shadowColor = COLORS.accent2; ctx.shadowBlur = 10;
+      ctx.beginPath();
+      ctx.moveTo(4, -7);
+      ctx.lineTo(22, -3.5);
+      ctx.lineTo(22,  3.5);
+      ctx.lineTo(4,  7);
+      ctx.closePath();
+      ctx.fill();
+      ctx.shadowBlur = 0;
+      // Muzzle highlight
+      ctx.fillStyle = 'white';
+      ctx.globalAlpha = 0.7;
+      ctx.fillRect(18,-2,3.5,4);
+      ctx.globalAlpha = 1;
+    }
     ctx.restore();
     // effects
     for(const fx of this.effects){
@@ -499,20 +578,38 @@ export class LaserTower extends BaseTower{
     // base + emitter
     this.drawBase(ctx);
     this.drawIcon(ctx);
-    // emitter head: triangular prism
-    ctx.save(); ctx.translate(this.x,this.y); ctx.rotate(this.rotation);
-    ctx.shadowColor = COLORS.accent2; ctx.shadowBlur = 10;
-    ctx.fillStyle = COLORS.accent2;
-    ctx.beginPath();
-    ctx.moveTo(0, -6);
-    ctx.lineTo(16, 0);
-    ctx.lineTo(0,  6);
-    ctx.closePath();
-    ctx.fill();
-    ctx.shadowBlur = 0;
-    // emitter ring
-    ctx.strokeStyle = COLORS.accent2; ctx.lineWidth = 2;
-    ctx.beginPath(); ctx.arc(-2,0,6,0,Math.PI*2); ctx.stroke();
+    const spr = TOWER_SPRITES.laser;
+    ctx.save();
+    ctx.translate(this.x,this.y);
+    ctx.rotate(this.rotation + (spr?.angleOffset || 0));
+    if(spr && spr.loaded){
+      const img = spr.img;
+      const baseSize = Math.max(spr.w, spr.h) || 1;
+      const desired = this.tile * (spr.sizeMul || 1.2);
+      const scale = desired / baseSize;
+      ctx.save();
+      ctx.drawImage(
+        img,
+        -spr.w*scale/2,
+        -spr.h*scale/2,
+        spr.w*scale,
+        spr.h*scale
+      );
+      ctx.restore();
+    } else {
+      // Fallback: original vector emitter head
+      ctx.shadowColor = COLORS.accent2; ctx.shadowBlur = 10;
+      ctx.fillStyle = COLORS.accent2;
+      ctx.beginPath();
+      ctx.moveTo(0, -6);
+      ctx.lineTo(16, 0);
+      ctx.lineTo(0,  6);
+      ctx.closePath();
+      ctx.fill();
+      ctx.shadowBlur = 0;
+      ctx.strokeStyle = COLORS.accent2; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.arc(-2,0,6,0,Math.PI*2); ctx.stroke();
+    }
     ctx.restore();
     // beam
     if(this.target){
@@ -752,20 +849,37 @@ export class SplashTower extends BaseTower{
   draw(ctx){
     this.drawBase(ctx);
     this.drawIcon(ctx);
-    // launcher: angled tube + cradle
-    ctx.save(); ctx.translate(this.x,this.y); ctx.rotate(this.rotation);
-    // cradle ring
-    ctx.strokeStyle = COLORS.accent; ctx.lineWidth = 2;
-    ctx.beginPath(); ctx.arc(-2,0,8,0,Math.PI*2); ctx.stroke();
-    // tube
-    ctx.fillStyle = COLORS.accent;
-    ctx.beginPath();
-    ctx.moveTo(-4, -6);
-    ctx.lineTo(18, -3);
-    ctx.lineTo(18,  3);
-    ctx.lineTo(-4,  6);
-    ctx.closePath();
-    ctx.fill();
+    const spr = TOWER_SPRITES.splash;
+    ctx.save();
+    ctx.translate(this.x,this.y);
+    ctx.rotate(this.rotation + (spr?.angleOffset || 0));
+    if(spr && spr.loaded){
+      const img = spr.img;
+      const baseSize = Math.max(spr.w, spr.h) || 1;
+      const desired = this.tile * (spr.sizeMul || 1.3);
+      const scale = desired / baseSize;
+      ctx.save();
+      ctx.drawImage(
+        img,
+        -spr.w*scale/2,
+        -spr.h*scale/2,
+        spr.w*scale,
+        spr.h*scale
+      );
+      ctx.restore();
+    } else {
+      // Fallback: original launcher tube + cradle
+      ctx.strokeStyle = COLORS.accent; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.arc(-2,0,8,0,Math.PI*2); ctx.stroke();
+      ctx.fillStyle = COLORS.accent;
+      ctx.beginPath();
+      ctx.moveTo(-4, -6);
+      ctx.lineTo(18, -3);
+      ctx.lineTo(18,  3);
+      ctx.lineTo(-4,  6);
+      ctx.closePath();
+      ctx.fill();
+    }
     ctx.restore();
     // bubble shells (purely visual)
     for(const b of this.bubbles){

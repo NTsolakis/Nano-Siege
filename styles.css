@@ -112,9 +112,6 @@ html,body{
 .hpbar .hpfill.low{background:linear-gradient(90deg, var(--danger), #ff8a9a);box-shadow:0 0 10px rgba(255,83,112,.45) inset}
 
 .toolbar{display:flex;align-items:center;gap:12px}
-/* Controls inside toolbar */
-.zoom-ctl{display:flex;align-items:center;gap:6px;color:var(--muted);}
-.zoom-ctl label{font-size:12px}
 button{appearance:none;border:1px solid rgba(255,255,255,.12);background:linear-gradient(180deg,rgba(0,186,255,.2),rgba(23,231,164,.08));color:var(--text);padding:8px 16px;border-radius:10px;cursor:pointer;min-height:42px;font-weight:600;letter-spacing:.04em}
 button:hover{border-color:var(--accent)}
 button:active{transform:translateY(1px)}
@@ -131,6 +128,7 @@ button:disabled{opacity:.55;cursor:not-allowed;filter:grayscale(40%)}
 .dev-toggle{margin-top:10px; display:flex; align-items:center; justify-content:center; gap:10px; color:#8aa7c7; font-size:13px}
 .dev-toggle .dev-label{color:var(--text)}
 .dev-toggle .dev-hint{color:#8aa7c7; font-size:12px}
+.sandbox-btn{margin-top:6px;padding:4px 10px;font-size:11px;letter-spacing:.14em;text-transform:uppercase;border-radius:999px}
 
 /* Wave status pill */
 .wave-status{display:inline-flex;flex-direction:column;align-items:flex-start;gap:4px;padding:6px 10px;border-radius:12px;background:var(--panel);border:1px solid rgba(255,255,255,.08);color:var(--muted);font-size:12px}
@@ -198,62 +196,25 @@ button:disabled{opacity:.55;cursor:not-allowed;filter:grayscale(40%)}
   width:40px;
   height:30px;
   margin-bottom:2px;
+  background-repeat:no-repeat;
+  background-position:center;
+  background-size:contain;
 }
 .tower-icon::before,
 .tower-icon::after{
-  content:"";
-  position:absolute;
-  left:50%;
-  transform:translateX(-50%);
+  content:none;
 }
-.tower-icon-basic::before{
-  bottom:4px;
-  width:26px;
-  height:12px;
-  border-radius:20px;
-  background:radial-gradient(circle at 20% 10%,rgba(255,255,255,.5),rgba(23,231,164,.1)),linear-gradient(135deg,#0e2a20,#17e7a4);
-  box-shadow:0 0 12px rgba(23,231,164,.4);
+/* Use the new tower sprites as button icons.
+ * Mapping: basic -> cannon, laser -> laser, splash -> splash.
+ */
+.tower-icon-basic{
+  background-image:url('data/tower-cannon.png');
 }
-.tower-icon-basic::after{
-  bottom:12px;
-  width:18px;
-  height:10px;
-  border-radius:4px;
-  background:linear-gradient(120deg,#b8fff1,#4bffd1);
-  box-shadow:0 0 10px rgba(0,186,255,.5);
+.tower-icon-laser{
+  background-image:url('data/tower-laser.png');
 }
-.tower-icon-laser::before{
-  bottom:4px;
-  width:26px;
-  height:12px;
-  border-radius:20px;
-  background:radial-gradient(circle at 20% 10%,rgba(255,255,255,.55),rgba(98,240,255,.08)),linear-gradient(135deg,#0b2730,#62f0ff);
-  box-shadow:0 0 12px rgba(98,240,255,.5);
-}
-.tower-icon-laser::after{
-  bottom:12px;
-  width:5px;
-  height:12px;
-  border-radius:999px;
-  background:linear-gradient(180deg,#e0fbff,#62f0ff);
-  box-shadow:0 0 12px rgba(98,240,255,.7);
-}
-.tower-icon-splash::before{
-  bottom:4px;
-  width:26px;
-  height:12px;
-  border-radius:20px;
-  background:radial-gradient(circle at 20% 10%,rgba(255,255,255,.45),rgba(255,158,0,.12)),linear-gradient(135deg,#27160a,#ff9e00);
-  box-shadow:0 0 12px rgba(255,158,0,.45);
-}
-.tower-icon-splash::after{
-  bottom:14px;
-  width:20px;
-  height:8px;
-  border-radius:6px;
-  transform:translateX(-50%) rotate(-10deg);
-  background:linear-gradient(120deg,#ffe8c0,#ffb347);
-  box-shadow:0 0 10px rgba(255,158,0,.6);
+.tower-icon-splash{
+  background-image:url('data/tower-splash.png');
 }
 
 canvas#game{display:block;max-width:100%;width:960px;height:auto;border:1px solid rgba(255,255,255,.08);border-radius:12px;background:linear-gradient(180deg,rgba(0,0,0,.2),rgba(0,0,0,.3));box-shadow:0 20px 60px rgba(0,0,0,.45), inset 0 0 0 1px rgba(255,255,255,.04)}
@@ -261,12 +222,12 @@ canvas#game{display:block;max-width:100%;width:960px;height:auto;border:1px soli
 /* Overlays */
 .overlay{position:absolute;inset:0;display:none;align-items:center;justify-content:center;padding:24px}
 .overlay.visible{display:flex;z-index:2000;}
-.overlay .panel{background:var(--panel);border:1px solid rgba(255,255,255,.12);border-radius:16px;padding:24px 28px;box-shadow:0 20px 60px rgba(0,0,0,.6), inset 0 0 0 1px rgba(255,255,255,.06);text-align:center;max-width:560px;width:100%}
+.overlay .panel{background:var(--panel);border:1px solid rgba(255,255,255,.12);border-radius:16px;padding:24px 32px;box-shadow:0 20px 60px rgba(0,0,0,.6), inset 0 0 0 1px rgba(255,255,255,.06);text-align:center;max-width:560px;width:100%}
 #shop-overlay .panel{max-width:720px}
-.overlay .panel.small{max-width:420px}
+.overlay .panel.small{max-width:520px}
 .overlay h2,.overlay h3{margin:0 0 8px;color:var(--accent-2);letter-spacing:.5px}
 .overlay .tag{margin:0 0 16px;color:var(--muted)}
-.overlay .actions{display:flex;gap:12px;justify-content:center;margin:8px 0 8px}
+.overlay .actions{display:flex;flex-wrap:wrap;gap:10px;justify-content:center;margin:8px 0 8px}
 .overlay .hint{margin:8px 0 0;color:var(--muted);font-size:12px;opacity:.8}
 
 /* Fullscreen main menu */
@@ -325,6 +286,15 @@ canvas#game{display:block;max-width:100%;width:960px;height:auto;border:1px soli
 }
 .mainmenu-panel h2{margin-bottom:6px;color:#b8f9ff;letter-spacing:.35em;text-transform:uppercase;text-align:center}
 .mainmenu-panel .tag{color:#8aa7c7;letter-spacing:.2em;text-transform:uppercase;font-size:12px;margin-bottom:18px}
+.sandbox-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:16px;margin-top:10px}
+.sandbox-card{border-radius:16px;padding:14px 14px 12px;background:rgba(4,10,18,.9);border:1px solid rgba(0,186,255,.22);box-shadow:0 10px 40px rgba(0,0,0,.6),0 0 22px rgba(0,186,255,.18);text-align:left}
+.sandbox-card h3{margin:0 0 10px;font-size:14px;letter-spacing:.18em;text-transform:uppercase;color:#a7f5ff}
+.sb-field{display:grid;grid-template-columns:1.4fr 2fr auto;align-items:center;gap:8px;margin-bottom:8px;font-size:12px;color:#a5d3ff}
+.sb-field label{font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:#8ab6de}
+.sb-field input[type=range]{width:100%}
+.sb-value{min-width:44px;text-align:right;color:#e5f4ff;font-variant-numeric:tabular-nums}
+.sb-toggle{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px;font-size:12px;color:#a5d3ff}
+.sb-toggle label:first-child{letter-spacing:.16em;text-transform:uppercase;font-size:11px;color:#8ab6de}
 .login-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;width:100%}
 .login-field{display:flex;flex-direction:column;gap:4px;font-size:13px;color:#a5d3ff}
 .login-field label{letter-spacing:.15em;text-transform:uppercase;font-size:11px;color:#8ab6de}
@@ -378,6 +348,10 @@ canvas#game{display:block;max-width:100%;width:960px;height:auto;border:1px soli
 #assembly-overlay .mission-card.locked::after{content:\"Locked\";position:absolute;top:16px;right:18px;font-size:12px;letter-spacing:.25em;text-transform:uppercase;color:#ff8a9a;text-shadow:0 0 10px rgba(255,83,112,.5)}
 #assembly-overlay .mission-card.locked:hover{transform:none;box-shadow:0 15px 40px rgba(0,0,0,.45)}
 #assembly-overlay .actions{margin-top:32px}
+
+/* Sandbox Lab overlay */
+#sandbox-overlay{position:fixed;inset:0;min-height:100vh;padding:56px 16px 80px;align-items:flex-start;background:radial-gradient(130% 130% at 20% 0%,#020814 0%,#030611 45%,#010307 100%);overflow-y:auto;z-index:850}
+#sandbox-overlay > *{position:relative;z-index:1}
 #assembly-overlay .actions button{flex:1;background:linear-gradient(120deg,rgba(0,186,255,.25),rgba(23,231,164,.15));border-radius:12px;min-width:160px;font-weight:600;letter-spacing:.1em;text-transform:uppercase}
 
 /* Shop cards */

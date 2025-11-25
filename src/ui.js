@@ -3,7 +3,7 @@ import { MAPS, drawMapPreview } from './maps.js';
 
 export class UIManager{
   constructor(){
-    this.listeners = { startWave: [], startGame: [], pause: [], resume: [], retry: [], toMenu: [], toMissionSelect: [], selectTowerType: [], upgradeSlow: [], upgradeRate: [], upgradeRange: [], upgradeBurn: [], sellTower: [], sellConfirm: [], sellCancel: [], selectMap: [], toggleFast: [], closeUpg: [], toggleVolume: [], setVolume: [], shopBuy: [], shopReroll: [], shopContinue: [], shopBuyAbility: [], useBomb: [], useOverclock: [], useCryo: [], toggleDev: [], openShop: [], closeShop: [], devUnlockUlts: [], devUpgradeMax: [], mainNew: [], mainLoad: [], mainExit: [], mainAssembly: [], loadSlot: [], openAssembly: [], closeAssembly: [], startMission: [], assemblySave: [], assemblyLoad: [], openAssemblyCore: [], menuBack: [], mainSettings: [], mainSettingsBack: [], loadBack: [], loginUser: [], openCreateUser: [], closeCreateUser: [], createUser: [], openLeaderboard: [], closeLeaderboard: [], leaderboardSignIn: [], logout: [], removePassive: [], leaderboardSelectMap: [], pauseLoginOpen: [] };
+    this.listeners = { startWave: [], startGame: [], pause: [], resume: [], retry: [], restart: [], sandboxStart: [], sandboxReset: [], sandboxOpen: [], toMenu: [], toMissionSelect: [], selectTowerType: [], upgradeSlow: [], upgradeRate: [], upgradeRange: [], upgradeBurn: [], sellTower: [], sellConfirm: [], sellCancel: [], selectMap: [], toggleFast: [], closeUpg: [], toggleVolume: [], setVolume: [], shopBuy: [], shopReroll: [], shopContinue: [], shopBuyAbility: [], useBomb: [], useOverclock: [], useCryo: [], toggleDev: [], toggleAutoSpeed: [], exitConfirm: [], exitCancel: [], openShop: [], closeShop: [], devUnlockUlts: [], devUpgradeMax: [], mainNew: [], mainLoad: [], mainAssembly: [], loadSlot: [], openAssembly: [], closeAssembly: [], startMission: [], assemblySave: [], assemblyLoad: [], openAssemblyCore: [], menuBack: [], mainSettings: [], mainSettingsBack: [], loadBack: [], loginUser: [], openCreateUser: [], closeCreateUser: [], createUser: [], openLeaderboard: [], closeLeaderboard: [], leaderboardSignIn: [], logout: [], removePassive: [], leaderboardSelectMap: [], pauseLoginOpen: [] };
     this.$root = document.getElementById('app');
     this.$wave = document.getElementById('stat-wave');
     this.$credits = document.getElementById('stat-credits');
@@ -14,9 +14,6 @@ export class UIManager{
     this.$pause = document.getElementById('btn-pause');
     this.$fast = document.getElementById('btn-fast');
     this.$fastLabel = document.getElementById('fast-label');
-    // Zoom controls in HUD
-    this.$zoom = document.getElementById('zoom-slider');
-    this.$zoomLabel = document.getElementById('zoom-label');
     this.$waveStatus = document.getElementById('wave-status');
     this.$waveStatusLabel = this.$waveStatus ? this.$waveStatus.querySelector('.ws-label') : null;
     this.$waveBarFill = this.$waveStatus ? this.$waveStatus.querySelector('.wave-bar .fill') : null;
@@ -51,12 +48,19 @@ export class UIManager{
     this.$pauseLoginStatus = document.getElementById('pause-login-status');
     this.$pauseLoginSubmit = document.getElementById('btn-pause-login-submit');
     this.$pauseLoginBack = document.getElementById('btn-pause-login-back');
+    this.$pauseRestart = document.getElementById('btn-pause-restart');
     this.$btnSettingsBack = document.getElementById('btn-settings-back');
     this.$gameover = document.getElementById('gameover-overlay');
     this.$sellOverlay = document.getElementById('sell-overlay');
     this.$sellText = document.getElementById('sell-text');
     this.$sellConfirm = document.getElementById('btn-sell-confirm');
     this.$sellCancel = document.getElementById('btn-sell-cancel');
+    // Exit confirmation overlay
+    this.$exitConfirm = document.getElementById('exitconfirm-overlay');
+    this.$exitTitle = document.getElementById('exitconfirm-title');
+    this.$exitTag = document.getElementById('exitconfirm-tag');
+    this.$exitCancel = document.getElementById('btn-exit-cancel');
+    this.$exitConfirmBtn = document.getElementById('btn-exit-confirm');
     // Passive effects side panel (DOM, right of canvas)
     this.$passivePanel = document.getElementById('passive-panel');
     this.$passiveLines = document.getElementById('passive-lines');
@@ -94,8 +98,8 @@ export class UIManager{
     this.$btnMainEndless = document.getElementById('btn-main-endless');
     this.$btnMainLeaderboard = document.getElementById('btn-main-leaderboard');
     this.$btnMainAssembly = document.getElementById('btn-main-assembly');
+    this.$btnMainSandbox = document.getElementById('btn-main-sandbox');
     this.$btnMainSettings = document.getElementById('btn-main-settings');
-    this.$btnMainExit = document.getElementById('btn-main-exit');
     this.$btnLoadBack = document.getElementById('btn-load-back');
     this.$loadSlots = [];
     // Assembly War UI
@@ -123,11 +127,18 @@ export class UIManager{
     this.$volLabel = document.getElementById('vol-label');
     this.$retry = document.getElementById('btn-retry');
     this.$overMenu = document.getElementById('btn-over-menu');
+    this.$sandboxSettings = document.getElementById('btn-sandbox-settings');
+    // Sandbox overlay
+    this.$sandbox = document.getElementById('sandbox-overlay');
+    this.$sandboxBack = document.getElementById('btn-sandbox-back');
+    this.$sandboxReset = document.getElementById('btn-sandbox-reset');
+    this.$sandboxStart = document.getElementById('btn-sandbox-start');
     // Main menu settings controls
     this.$volSliderMain = document.getElementById('vol-slider-main');
     this.$volLabelMain = document.getElementById('vol-label-main');
-    this.$zoomSliderMain = document.getElementById('zoom-slider-main');
-    this.$zoomLabelMain = document.getElementById('zoom-label-main');
+    // Speed control toggles
+    this.$autoSpeed = document.getElementById('autospeed-toggle');
+    this.$autoSpeedMain = document.getElementById('autospeed-toggle-main');
     this.$btnMainLoadUser = document.getElementById('btn-main-loaduser');
     // Load / Login menu elements
     this.$loadTitle = this.$loadMenu ? this.$loadMenu.querySelector('h2') : null;
@@ -332,11 +343,12 @@ export class UIManager{
     if(this.$abilOverclock){ this.$abilOverclock.disabled = true; this.$abilOverclock.classList.add('locked'); this.$abilOverclock.textContent = 'Overclock (Locked)'; }
     if(this.$abilCryo){ this.$abilCryo.disabled = true; this.$abilCryo.classList.add('locked'); this.$abilCryo.textContent = 'Cryo (Locked)'; }
 
-    this.listeners = { startWave: [], startGame: [], pause: [], resume: [], retry: [], toMenu: [], toMissionSelect: [], selectTowerType: [], upgradeSlow: [], upgradeRate: [], upgradeRange: [], upgradeBurn: [], sellTower: [], sellConfirm: [], sellCancel: [], selectMap: [], toggleFast: [], closeUpg: [], toggleVolume: [], setVolume: [], shopBuy: [], shopReroll: [], shopContinue: [], shopBuyAbility: [], useBomb: [], useOverclock: [], useCryo: [], toggleDev: [], openShop: [], closeShop: [], devUnlockUlts: [], devUpgradeMax: [], mainNew: [], mainLoad: [], mainExit: [], mainAssembly: [], loadSlot: [], openAssembly: [], closeAssembly: [], startMission: [], assemblySave: [], assemblyLoad: [], openAssemblyCore: [], menuBack: [], mainSettings: [], mainSettingsBack: [], loadBack: [], loginUser: [], openCreateUser: [], closeCreateUser: [], createUser: [], openLeaderboard: [], closeLeaderboard: [], leaderboardSignIn: [], logout: [], removePassive: [], leaderboardSelectMap: [], pauseLoginOpen: [] };
+    this.listeners = { startWave: [], startGame: [], pause: [], resume: [], retry: [], restart: [], sandboxStart: [], sandboxReset: [], toMenu: [], toMissionSelect: [], selectTowerType: [], upgradeSlow: [], upgradeRate: [], upgradeRange: [], upgradeBurn: [], sellTower: [], sellConfirm: [], sellCancel: [], selectMap: [], toggleFast: [], closeUpg: [], toggleVolume: [], setVolume: [], shopBuy: [], shopReroll: [], shopContinue: [], shopBuyAbility: [], useBomb: [], useOverclock: [], useCryo: [], toggleDev: [], toggleAutoSpeed: [], exitConfirm: [], exitCancel: [], openShop: [], closeShop: [], devUnlockUlts: [], devUpgradeMax: [], mainNew: [], mainLoad: [], mainAssembly: [], loadSlot: [], openAssembly: [], closeAssembly: [], startMission: [], assemblySave: [], assemblyLoad: [], openAssemblyCore: [], menuBack: [], mainSettings: [], mainSettingsBack: [], loadBack: [], loginUser: [], openCreateUser: [], closeCreateUser: [], createUser: [], openLeaderboard: [], closeLeaderboard: [], leaderboardSignIn: [], logout: [], removePassive: [], leaderboardSelectMap: [], pauseLoginOpen: [] };
     // Track dev mode state for UI behavior (e.g., enabling shop buttons and credit label)
     this.devMode = false;
     this.setFragments(0);
     this.setCoreShards(0);
+    this.initSandboxValueBindings();
 
     if(this.$start){
       this.$start.addEventListener('click', ()=> this.emit('startWave'));
@@ -344,8 +356,10 @@ export class UIManager{
     // Main menu buttons
     if(this.$btnMainEndless){
       this.$btnMainEndless.addEventListener('click', ()=>{
+        // Endless Cycle: go straight to map select.
         if(this.showMainMenu) this.showMainMenu(false);
         if(this.showMapSelect) this.showMapSelect(true);
+        if(this.setMapStartLabel) this.setMapStartLabel('Start Endless Cycle');
       });
     }
     if(this.$btnMapBack){
@@ -362,9 +376,13 @@ export class UIManager{
     }
     if(this.$btnMainLeaderboard){ this.$btnMainLeaderboard.addEventListener('click', ()=> this.emit('openLeaderboard')); }
     if(this.$btnMainAssembly){ this.$btnMainAssembly.addEventListener('click', ()=> this.emit('mainAssembly')); }
+    if(this.$btnMainSandbox){
+      this.$btnMainSandbox.addEventListener('click', ()=>{
+        this.emit('mainSandbox');
+      });
+    }
     if(this.$btnMainLoadUser){ this.$btnMainLoadUser.addEventListener('click', ()=> this.emit('mainLoad')); }
     if(this.$btnMainSettings){ this.$btnMainSettings.addEventListener('click', ()=> this.emit('mainSettings')); }
-    if(this.$btnMainExit){ this.$btnMainExit.addEventListener('click', ()=> this.emit('mainExit')); }
     if(this.$btnLoadBack){ this.$btnLoadBack.addEventListener('click', ()=> this.emit('loadBack')); }
     // Legacy slot buttons (load profiles by slot) are no longer used.
     if(this.$pause){
@@ -407,15 +425,24 @@ export class UIManager{
     if(this.$menuStart){ this.$menuStart.addEventListener('click', ()=> this.emit('startGame')); }
     if(this.$resume){ this.$resume.addEventListener('click', ()=> this.emit('resume')); }
     if(this.$pauseMenu){ this.$pauseMenu.addEventListener('click', ()=> this.emit('toMenu')); }
+    if(this.$pauseRestart){ this.$pauseRestart.addEventListener('click', ()=> this.emit('restart')); }
     if(this.$btnSettings){ this.$btnSettings.addEventListener('click', ()=> this.showSettings(true)); }
     if(this.$btnSettingsBack){ this.$btnSettingsBack.addEventListener('click', ()=> this.showSettings(false)); }
     if(this.$volSlider){ this.$volSlider.addEventListener('input', ()=> this.emit('setVolume', parseInt(this.$volSlider.value,10)||0)); }
-    if(this.$zoom){ this.$zoom.addEventListener('input', ()=> this.setZoom(parseInt(this.$zoom.value,10)||100)); }
     if(this.$retry){ this.$retry.addEventListener('click', ()=> this.emit('retry')); }
     if(this.$overMenu){ this.$overMenu.addEventListener('click', ()=> this.emit('toMenu')); }
+    if(this.$sandboxSettings){ this.$sandboxSettings.addEventListener('click', ()=> this.emit('sandboxOpen')); }
+    // Sandbox overlay buttons
+    if(this.$sandboxBack){
+      this.$sandboxBack.addEventListener('click', ()=>{
+        if(this.$sandbox) this.$sandbox.classList.remove('visible');
+        if(this.showMainMenu) this.showMainMenu(true);
+      });
+    }
+    if(this.$sandboxReset){ this.$sandboxReset.addEventListener('click', ()=> this.emit('sandboxReset')); }
+    if(this.$sandboxStart){ this.$sandboxStart.addEventListener('click', ()=> this.emit('sandboxStart')); }
     // Main menu settings controls
     if(this.$volSliderMain){ this.$volSliderMain.addEventListener('input', ()=> this.emit('setVolume', parseInt(this.$volSliderMain.value,10)||0)); }
-    if(this.$zoomSliderMain){ this.$zoomSliderMain.addEventListener('input', ()=> this.setZoom(parseInt(this.$zoomSliderMain.value,10)||100)); }
     const $btnMainSettingsBack = document.getElementById('btn-main-settings-back');
     if($btnMainSettingsBack){ $btnMainSettingsBack.addEventListener('click', ()=> this.emit('mainSettingsBack')); }
     // Abilities
@@ -512,7 +539,7 @@ export class UIManager{
       });
     }
     if(this.$devOpenShop){ this.$devOpenShop.addEventListener('click', ()=> this.emit('openShop')); }
-    // Dev toggles (HUD + pause + main settings)
+    // Dev toggles (main settings only)
     this.$devToggleMain = document.getElementById('dev-toggle-main');
     const onDevChange = (src)=>{
       const v = !!src.checked;
@@ -520,6 +547,20 @@ export class UIManager{
       this.emit('toggleDev', v);
     };
     if(this.$devToggleMain){ this.$devToggleMain.addEventListener('change', ()=> onDevChange(this.$devToggleMain)); }
+
+    // Automatic speed control toggle (main settings + in-game settings)
+    const onAutoSpeedChange = (src)=>{
+      const v = !!src.checked;
+      if(this.$autoSpeedMain && this.$autoSpeedMain!==src) this.$autoSpeedMain.checked = v;
+      if(this.$autoSpeed && this.$autoSpeed!==src) this.$autoSpeed.checked = v;
+      this.emit('toggleAutoSpeed', v);
+    };
+    if(this.$autoSpeedMain){ this.$autoSpeedMain.addEventListener('change', ()=> onAutoSpeedChange(this.$autoSpeedMain)); }
+    if(this.$autoSpeed){ this.$autoSpeed.addEventListener('change', ()=> onAutoSpeedChange(this.$autoSpeed)); }
+
+    // Exit confirmation buttons
+    if(this.$exitCancel){ this.$exitCancel.addEventListener('click', ()=> this.emit('exitCancel')); }
+    if(this.$exitConfirmBtn){ this.$exitConfirmBtn.addEventListener('click', ()=> this.emit('exitConfirm')); }
 
     // Build map carousel in the menu (full-width selector)
     this.$mapList = document.getElementById('map-list');
@@ -741,21 +782,69 @@ export class UIManager{
     if(this.$volSlider) this.$volSlider.value = val;
     if(this.$volSliderMain) this.$volSliderMain.value = val;
   }
-  setZoomLabel(pct){
-    const txt = `${Math.max(50, Math.min(300, pct|0))}%`;
-    if(this.$zoomLabel) this.$zoomLabel.textContent = txt;
-    if(this.$zoomLabelMain) this.$zoomLabelMain.textContent = txt;
+  setAutoSpeedUI(on){
+    const v = !!on;
+    if(this.$autoSpeedMain) this.$autoSpeedMain.checked = v;
+    if(this.$autoSpeed) this.$autoSpeed.checked = v;
   }
-  setZoom(pct){
-    const clamped = Math.max(50, Math.min(300, pct|0));
-    const root = document.documentElement;
-    if(root && root.style){
-      root.style.setProperty('--canvas-zoom', String(clamped/100));
+  setSandboxSettingsVisible(on){
+    if(this.$sandboxSettings){
+      this.$sandboxSettings.style.display = on ? 'inline-flex' : 'none';
     }
-    this.setZoomLabel(clamped);
-    if(typeof window !== 'undefined' && typeof window.dispatchEvent === 'function'){
-      // Re-run layout sizing so the canvas resizes immediately.
-      window.dispatchEvent(new Event('resize'));
+  }
+  setMapStartLabel(text){
+    if(this.$btnMapStart && typeof text === 'string'){
+      this.$btnMapStart.textContent = text;
+    }
+  }
+  initSandboxValueBindings(){
+    if(typeof document === 'undefined') return;
+    const defs = [
+      ['sb-enemyhp','sb-enemyhp-val','mul'],
+      ['sb-enemyspeed','sb-enemyspeed-val','mul'],
+      ['sb-wavesize','sb-wavesize-val','mul'],
+      ['sb-spacing','sb-spacing-val','mul'],
+      ['sb-dmg','sb-dmg-val','mul'],
+      ['sb-firerate','sb-firerate-val','mul'],
+      ['sb-range','sb-range-val','mul'],
+      ['sb-slow','sb-slow-val','mul'],
+      ['sb-burndps','sb-burndps-val','mul'],
+      ['sb-burndur','sb-burndur-val','mul'],
+      ['sb-puddledps','sb-puddledps-val','mul'],
+      ['sb-puddledur','sb-puddledur-val','mul'],
+      ['sb-credits','sb-credits-val','mul'],
+      ['sb-frags','sb-frags-val','mul'],
+      ['sb-flatcredits','sb-flatcredits-val','int'],
+    ];
+    const fmt = (v, kind)=>{
+      const num = parseFloat(v);
+      if(!Number.isFinite(num)) return kind === 'int' ? '0' : '1.0×';
+      if(kind === 'int') return String(Math.round(num));
+      return `${num.toFixed(1)}×`;
+    };
+    for(const [id, valId, kind] of defs){
+      const input = document.getElementById(id);
+      const label = document.getElementById(valId);
+      if(!input || !label) continue;
+      const sync = ()=>{ label.textContent = fmt(input.value, kind); };
+      input.addEventListener('input', sync);
+      sync();
+    }
+  }
+  showExitConfirm(show, mode='exit'){
+    this.show(this.$exitConfirm, show);
+    if(!show) return;
+    const kind = mode === 'restart' ? 'restart' : 'exit';
+    if(this.$exitTitle){
+      this.$exitTitle.textContent = (kind === 'restart') ? 'Restart Run?' : 'Exit to Main Menu?';
+    }
+    if(this.$exitTag){
+      this.$exitTag.textContent = (kind === 'restart')
+        ? 'Are you sure you want to restart?'
+        : 'Your current run will be lost.';
+    }
+    if(this.$exitConfirmBtn){
+      this.$exitConfirmBtn.textContent = (kind === 'restart') ? 'Restart' : 'Exit';
     }
   }
 
@@ -994,6 +1083,7 @@ export class UIManager{
   showSell(show, text){ if(this.$sellText && typeof text==='string') this.$sellText.textContent = text; this.show(this.$sellOverlay, show); }
   showSell(show, text){ if(this.$sellText && typeof text==='string') this.$sellText.textContent = text; this.show(this.$sellOverlay, show); }
   showShop(show){ this.show(this.$shop, show); }
+  showSandbox(show){ this.show(this.$sandbox, show); }
   setLeaderboard(entries=[]){
     if(!this.$leaderboardList) return;
     this.$leaderboardList.innerHTML = '';
