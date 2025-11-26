@@ -11,6 +11,12 @@ const TOWER_SPRITES = {
   splash: null
 };
 
+// Shared pedestal art used under towers (and scaled up for the reactor).
+export const PEDESTAL_SPRITE = {
+  img: null,
+  loaded: false
+};
+
 function loadTowerSprite(key, url, angleOffset=0, sizeMul=1.3){
   if(typeof Image === 'undefined') return;
   const img = new Image();
@@ -55,7 +61,7 @@ function loadTowerSprite(key, url, angleOffset=0, sizeMul=1.3){
   };
 }
 
-  if(typeof Image !== 'undefined'){
+if(typeof Image !== 'undefined'){
   // Save your images into /data with these filenames, or adjust paths.
   // Cannon/Splash art is drawn “facing up” in the source, so rotate
   // them 90° counter‑clockwise to align with our aim direction.
@@ -64,6 +70,22 @@ function loadTowerSprite(key, url, angleOffset=0, sizeMul=1.3){
   loadTowerSprite('cannon', 'data/tower-cannon.png', quarterTurnCCW, 1.2);
   // Slightly smaller so it fits comfortably within one tile.
   loadTowerSprite('splash', 'data/tower-splash.png', quarterTurnCCW, 1.0);
+
+  // Pedestal image shared by towers and the reactor.
+  (()=>{
+    try{
+      const img = new Image();
+      img.onload = ()=>{
+        PEDESTAL_SPRITE.img = img;
+        PEDESTAL_SPRITE.loaded = true;
+      };
+      img.onerror = ()=>{
+        PEDESTAL_SPRITE.img = null;
+        PEDESTAL_SPRITE.loaded = false;
+      };
+      img.src = 'data/reactor-pedestal.png';
+    }catch(e){}
+  })();
 }
 
 export class Bullet {
@@ -249,14 +271,50 @@ class BaseTower {
     return { dmg, crit:false };
   }
   drawBase(ctx){
-    // Beveled hex base instead of a circle
+    // Concrete pedestal + beveled hex so towers feel anchored into the
+    // board rather than floating directly on the tiles. The pedestal art
+    // is shared with the reactor and comes from data/reactor-pedestal.png.
     ctx.save();
     ctx.translate(this.x,this.y);
-    const r = 16;
-    // Outer glow
     const baseCol = this.baseColor || COLORS.tower;
-    ctx.shadowColor = baseCol; ctx.shadowBlur = 10;
-    // Hexagon
+    const tile = this.tile || 60;
+    // Square footprint so the pedestal sits neatly inside a single grid cell.
+    if(PEDESTAL_SPRITE && PEDESTAL_SPRITE.loaded && PEDESTAL_SPRITE.img){
+      const img = PEDESTAL_SPRITE.img;
+      const baseSize = Math.max(img.width, img.height) || 1;
+      const desired = tile * 0.9;
+      const scale = desired / baseSize;
+      const dw = img.width * scale;
+      const dh = img.height * scale;
+      ctx.drawImage(img, -dw/2, -dh/2, dw, dh);
+    } else {
+      // Fallback: simple flat slab
+      const pedSize = tile * 0.9;
+      const pedW = pedSize;
+      const pedH = pedSize;
+      const corner = 7;
+      ctx.fillStyle = '#181f26';
+      ctx.strokeStyle = 'rgba(255,255,255,0.10)';
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.moveTo(-pedW/2 + corner, -pedH/2);
+      ctx.lineTo(pedW/2 - corner, -pedH/2);
+      ctx.quadraticCurveTo(pedW/2, -pedH/2, pedW/2, -pedH/2 + corner);
+      ctx.lineTo(pedW/2, pedH/2 - corner);
+      ctx.quadraticCurveTo(pedW/2, pedH/2, pedW/2 - corner, pedH/2);
+      ctx.lineTo(-pedW/2 + corner, pedH/2);
+      ctx.quadraticCurveTo(-pedW/2, pedH/2, -pedW/2, pedH/2 - corner);
+      ctx.lineTo(-pedW/2, -pedH/2 + corner);
+      ctx.quadraticCurveTo(-pedW/2, -pedH/2, -pedW/2 + corner, -pedH/2);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+    }
+
+    // Hex turret base sitting on the pedestal
+    const r = Math.min(16, tile * 0.24);
+    ctx.shadowColor = baseCol;
+    ctx.shadowBlur = 10;
     const sides = 6;
     ctx.beginPath();
     for(let i=0;i<sides;i++){
@@ -666,6 +724,9 @@ export class SplashTower extends BaseTower{
     this.telegraph = null; // ground target hint before firing
     this.retargetDelay = 0.6;
     this._telegraphLocked = false;
+    // While a shell is in flight we lock the aim direction so the barrel
+    // does not sweep to new targets until the shot has landed.
+    this._aimLock = null; // { x, y, ttl }
   }
   getLeadDistance(){
     // Aim roughly 1.5 tiles ahead of the current target along its path.
@@ -684,6 +745,12 @@ export class SplashTower extends BaseTower{
   }
   update(dt,enemies){
     this.tickIdleTimer(dt);
+    // Decay any active aim lock (used while a shell is travelling so the
+    // launcher does not retarget mid‑shot).
+    if(this._aimLock){
+      this._aimLock.ttl -= dt;
+      if(this._aimLock.ttl <= 0) this._aimLock = null;
+    }
     // update bubble visuals (purely cosmetic)
     this.bubbles = this.bubbles.filter(b=> (b.t += dt) < b.ttl);
     // update explosions visuals
@@ -693,8 +760,12 @@ export class SplashTower extends BaseTower{
     for(const s of this.sparks){ s.x += s.vx*dt; s.y += s.vy*dt; s.vy += 120*dt; }
     // telegraph age is driven by cooldown window; no free-running timer needed
 
-    // Acquire / maintain target with extended vision so we can aim ahead
-    this.acquireTarget(enemies, dt);
+    // Acquire / maintain target with extended vision so we can aim ahead,
+    // but avoid switching targets while a shell is in flight. That keeps
+    // the puddle trajectory consistent with the barrel direction.
+    if(!this._aimLock){
+      this.acquireTarget(enemies, dt);
+    }
     this.tickPerkTimers(dt);
     this.cooldown = Math.max(0, this.cooldown - dt);
 
@@ -728,8 +799,9 @@ export class SplashTower extends BaseTower{
 
     // Ground telegraph: only show when we're close to firing, and lock the
     // chosen impact tile so the ring doesn't slide between cells while the
-    // enemy moves.
-    if(this.target && impact){
+    // enemy moves. While a shell is in flight we skip telegraph updates so
+    // we don't start aiming the next shot until the current one lands.
+    if(!this._aimLock && this.target && impact){
       const cycle = this.lastShotInterval || (1 / this.fireRate);
       const leadWindow = Math.min(1.0, cycle * 0.4); // up to ~1s of warning
       if(this.cooldown <= leadWindow){
@@ -752,7 +824,7 @@ export class SplashTower extends BaseTower{
         this.telegraph = null;
         this._telegraphLocked = false;
       }
-    } else {
+    } else if(!this._aimLock){
       this.telegraph = null;
       this._telegraphLocked = false;
     }
@@ -766,19 +838,19 @@ export class SplashTower extends BaseTower{
       this.rotation = Math.atan2(ady, adx);
     }
 
-      if(this.target && impact && this.cooldown<=0){
+    if(this.target && impact && this.cooldown<=0){
       const rateMul = (1 + 0.2*this.rateLevel) * (buffs.fireRateMul||1) * this.getFireRateBuff();
-	      const baseInterval = 1 / (this.fireRate*rateMul);
+      const baseInterval = 1 / (this.fireRate*rateMul);
       const slow = this.hasSlow? { pct:0.35*(buffs.slowPotencyMul||1), dur:1.6 } : null;
       const burn = this.hasBurn? { dps: 5*(buffs.burnDpsMul||1), dur: 2.2 } : null;
-	      const splashR = puddleBaseR;
+      const splashR = puddleBaseR;
       const adaptive = this.consumeAdaptiveBonus();
       const baseDmg = (this.damage||0) * (buffs.baseDamageMul||1);
       let dmg = baseDmg * (buffs.dmgMul||1) * adaptive;
       dmg = this.applyResonanceBonus(this.target, dmg);
       const tp = this.applyTargetPainter(this.target, dmg);
       dmg = tp.dmg;
-	      const isCrit = tp.crit;
+      const isCrit = tp.crit;
       // Use telegraphed impact point if present, otherwise the latest computed one.
       const sx = this.telegraph ? this.telegraph.x : impact.x;
       const sy = this.telegraph ? this.telegraph.y : impact.y;
@@ -797,6 +869,9 @@ export class SplashTower extends BaseTower{
       const dy = sy - this.y;
       const dist = Math.hypot(dx,dy) || 1;
       const travel = Math.min(0.7, Math.max(0.3, dist/320));
+      // Lock aim along this trajectory until the shell has landed so the
+      // barrel does not swing away while the bubbles are mid‑air.
+      this._aimLock = { x:sx, y:sy, ttl:travel };
       const bubbleCount = 4;
       for(let i=0;i<bubbleCount;i++){
         this.bubbles.push({

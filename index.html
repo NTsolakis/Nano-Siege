@@ -8,6 +8,15 @@
     <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
+    <div id="loading-overlay" class="loading-overlay">
+      <div class="loading-panel">
+        <div class="loading-title">Nano‑Siege</div>
+        <div class="loading-sub" id="loading-text">Initializing reactor grid…</div>
+        <div class="loading-bar">
+          <span class="fill" id="loading-bar-fill"></span>
+        </div>
+      </div>
+    </div>
     <div id="game-container">
       <div id="scale-root">
       <div id="game-frame">
@@ -622,7 +631,7 @@
       <span id="signin-username" class="name">Guest</span>
     </div>
 
-    <script type="module" src="src/main.js"></script>
+    <script type="module" src="src/boot.js"></script>
     <script>
       (() => {
         const frame = document.getElementById('game-frame');

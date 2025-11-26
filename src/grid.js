@@ -31,6 +31,18 @@ export class Grid {
       this.boardTexture = img;
     }
 
+    // Optional per-tile image for the enemy path. If present, this will be
+    // drawn instead of the procedural gradient/glow tile artwork.
+    this.pathTileImg = null;
+    this.pathTileLoaded = false;
+    if (typeof Image !== 'undefined') {
+      const tileImg = new Image();
+      tileImg.onload = () => { this.pathTileLoaded = true; };
+      tileImg.onerror = () => { this.pathTileLoaded = false; };
+      tileImg.src = (mapDef && mapDef.pathTileUrl) || 'data/path-tile.png';
+      this.pathTileImg = tileImg;
+    }
+
     if(mp && Array.isArray(mp) && mp.length && Array.isArray(mp[0])){
       this.pathsCells = mp; // array of array of [gx,gy]
       // Union set of all path cells
@@ -151,33 +163,59 @@ export class Grid {
     ctx.shadowBlur = 0;
     ctx.globalAlpha = 1;
 
-    // path(s) – electric blue tiles with glow
+    // path(s) – electric blue tiles with glow, rendered as if they are
+    // floating slightly above the board with a soft "void" shadow.
+    const hasPathTile = this.pathTileImg && this.pathTileLoaded &&
+      this.pathTileImg.naturalWidth && this.pathTileImg.naturalHeight;
     const drawCell = (gx,gy)=>{
       const x = gx*this.tile, y = gy*this.tile;
       const size = this.tile;
+      // Subtle circular shadow under each tile so the path reads as a
+      // separate layer above the board background.
       const cx = x + size/2;
       const cy = y + size/2;
-      // Deep electric-blue tile with subtle vertical gradient
-      const tileGrad = ctx.createLinearGradient(x, y, x, y + size);
-      tileGrad.addColorStop(0, 'rgba(4, 52, 92, 0.98)');
-      tileGrad.addColorStop(1, 'rgba(3, 20, 40, 0.98)');
-      ctx.fillStyle = tileGrad;
-      ctx.fillRect(x, y, size, size);
-      // Neon cyan edge
-      ctx.strokeStyle = 'rgba(0, 240, 255, 0.9)';
-      ctx.lineWidth = 1.4;
-      ctx.strokeRect(x + 0.7, y + 0.7, size - 1.4, size - 1.4);
-      // Soft inner glow so tiles pop off the board
-      const glow = ctx.createRadialGradient(
-        cx, cy, size * 0.08,
-        cx, cy, size * 0.6
+      const shadowR = size * 0.55;
+      const shadowGrad = ctx.createRadialGradient(
+        cx, cy + size*0.06, shadowR*0.1,
+        cx, cy + size*0.18, shadowR
       );
-      glow.addColorStop(0, 'rgba(210, 250, 255, 0.96)');
-      glow.addColorStop(1, 'rgba(0, 185, 255, 0)');
-      ctx.fillStyle = glow;
-      ctx.globalAlpha = 0.95;
-      ctx.fillRect(x, y, size, size);
-      ctx.globalAlpha = 1;
+      shadowGrad.addColorStop(0, 'rgba(0,0,0,0.7)');
+      shadowGrad.addColorStop(1, 'rgba(0,0,0,0)');
+      ctx.save();
+      ctx.globalAlpha = 0.85;
+      ctx.fillStyle = shadowGrad;
+      ctx.beginPath();
+      ctx.arc(cx, cy + size*0.08, shadowR, 0, Math.PI*2);
+      ctx.fill();
+      ctx.restore();
+
+      if (hasPathTile) {
+        ctx.drawImage(this.pathTileImg, x, y, size, size);
+      } else {
+        const cx2 = x + size/2;
+        const cy2 = y + size/2;
+        // Deep electric-blue tile with subtle vertical gradient
+        const tileGrad = ctx.createLinearGradient(x, y, x, y + size);
+        tileGrad.addColorStop(0, 'rgba(4, 52, 92, 0.98)');
+        tileGrad.addColorStop(1, 'rgba(3, 20, 40, 0.98)');
+        ctx.fillStyle = tileGrad;
+        ctx.fillRect(x, y, size, size);
+        // Neon cyan edge
+        ctx.strokeStyle = 'rgba(0, 240, 255, 0.9)';
+        ctx.lineWidth = 1.4;
+        ctx.strokeRect(x + 0.7, y + 0.7, size - 1.4, size - 1.4);
+        // Soft inner glow so tiles pop off the board
+        const glow = ctx.createRadialGradient(
+          cx2, cy2, size * 0.08,
+          cx2, cy2, size * 0.6
+        );
+        glow.addColorStop(0, 'rgba(210, 250, 255, 0.96)');
+        glow.addColorStop(1, 'rgba(0, 185, 255, 0)');
+        ctx.fillStyle = glow;
+        ctx.globalAlpha = 0.95;
+        ctx.fillRect(x, y, size, size);
+        ctx.globalAlpha = 1;
+      }
     };
     if(this.pathsCells){ for(const p of this.pathsCells){ for(const [gx,gy] of p) drawCell(gx,gy); } }
     else { for(const [gx,gy] of this.pathCells) drawCell(gx,gy); }

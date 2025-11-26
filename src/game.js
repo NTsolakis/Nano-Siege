@@ -2,7 +2,7 @@ import { CANVAS_W, CANVAS_H, TILE_SIZE, GAME_RULES, COLORS } from './config.js';
 import { now, dist2 } from './utils.js';
 import { Grid } from './grid.js';
 import { Enemy } from './enemy.js';
-import { createTower } from './tower.js';
+import { createTower, PEDESTAL_SPRITE } from './tower.js';
 import { buildWave } from './waves.js';
 import { UIManager } from './ui.js';
 import { audio } from './audio.js';
@@ -3548,8 +3548,46 @@ export class Game {
     ctx.fillStyle = glow;
     ctx.beginPath(); ctx.arc(x,y,r*1.6,0,Math.PI*2); ctx.fill();
 
-    // Base hex core
+    // Solid slab under the core: use the shared pedestal texture scaled
+    // up to almost a 3x3 tile footprint so it feels like the anchor of
+    // the arena. Falls back to a simple vector slab if the image is not
+    // available yet.
     ctx.translate(x,y);
+    ctx.save();
+    const pedSize = TILE_SIZE * 2.8; // just under 3x3 tiles
+    if(PEDESTAL_SPRITE && PEDESTAL_SPRITE.loaded && PEDESTAL_SPRITE.img){
+      const img = PEDESTAL_SPRITE.img;
+      const baseSize = Math.max(img.width, img.height) || 1;
+      const scale = pedSize / baseSize;
+      const dw = img.width * scale;
+      const dh = img.height * scale;
+      ctx.drawImage(img, -dw/2, -dh/2, dw, dh);
+    } else {
+      const pedW = pedSize;
+      const pedH = pedSize;
+      const corner = 18;
+      const edgeColor = 'rgba(255,255,255,0.14)';
+      const topColor = '#181f26';
+      ctx.fillStyle = topColor;
+      ctx.strokeStyle = edgeColor;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(-pedW/2 + corner, -pedH/2);
+      ctx.lineTo(pedW/2 - corner, -pedH/2);
+      ctx.quadraticCurveTo(pedW/2, -pedH/2, pedW/2, -pedH/2 + corner);
+      ctx.lineTo(pedW/2, pedH/2 - corner);
+      ctx.quadraticCurveTo(pedW/2, pedH/2, pedW/2 - corner, pedH/2);
+      ctx.lineTo(-pedW/2 + corner, pedH/2);
+      ctx.quadraticCurveTo(-pedW/2, pedH/2, -pedW/2, pedH/2 - corner);
+      ctx.lineTo(-pedW/2, -pedH/2 + corner);
+      ctx.quadraticCurveTo(-pedW/2, -pedH/2, -pedW/2 + corner, -pedH/2);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+    }
+    ctx.restore();
+
+    // Base hex core (wobbles on top of the pedestal)
     ctx.rotate( (Math.sin(t*0.8)*0.2) );
     ctx.shadowColor = COLORS.accent2;
     ctx.shadowBlur = 18;

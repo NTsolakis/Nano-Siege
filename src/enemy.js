@@ -126,6 +126,38 @@ if(typeof Image !== 'undefined'){
     NANO_SPRITE.frameW = img.width / cols;
     NANO_SPRITE.frameH = img.height / rows;
     NANO_SPRITE.frameOffsets = computeNanoFrameOffsets(source, cols, rows, NANO_SPRITE.frames||0);
+    // Optionally pre‑warm tinted variants for the most common enemy
+    // colors so the first time each type spawns in a run we avoid a
+    // small hitch from generating its tint on the fly.
+    try{
+      const palette = (COLORS && Array.isArray(COLORS.typePalette)) ? COLORS.typePalette.slice() : [];
+      const extras = [
+        COLORS.enemy,
+        COLORS.enemy2,
+        COLORS.enemy3,
+        COLORS.blob1,
+        COLORS.blob2,
+        COLORS.blob3,
+        COLORS.boss
+      ].filter(Boolean);
+      const colors = [...palette, ...extras];
+      let idx = 0;
+      const step = ()=>{
+        if(idx >= colors.length) return;
+        const c = colors[idx++];
+        if(c) getNanoTintedSheet(c);
+        if(idx < colors.length){
+          if(typeof window !== 'undefined' && typeof window.requestIdleCallback === 'function'){
+            window.requestIdleCallback(step);
+          } else {
+            setTimeout(step, 0);
+          }
+        }
+      };
+      if(colors.length){
+        step();
+      }
+    }catch(e){}
   };
 }
 

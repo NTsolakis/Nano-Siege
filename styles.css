@@ -16,7 +16,7 @@ html,body{
   margin:0;
   padding:0;
   overflow:hidden;
-  background:radial-gradient(1200px 800px at 20% 20%,#0f1a23 0,#091118 40%,#060b10 100%) fixed;
+  background:#020713 url('data/loading-bg.gif') center center/cover fixed no-repeat;
   font-family:Inter,system-ui,Segoe UI,Roboto,Helvetica,Arial,sans-serif;
   color:var(--text);
 }
@@ -56,6 +56,12 @@ html,body{
   overflow:hidden;
   pointer-events:auto;
   z-index:1;
+}
+/* When fullscreen menus are visible, fade out the in-game board/HUD
+ * so the global neon background shows cleanly behind the menus. */
+body.mainmenu-visible #game-container{
+  opacity:0;
+  pointer-events:none;
 }
 
 #game-root{
@@ -230,8 +236,87 @@ canvas#game{display:block;max-width:100%;width:960px;height:auto;border:1px soli
 .overlay .actions{display:flex;flex-wrap:wrap;gap:10px;justify-content:center;margin:8px 0 8px}
 .overlay .hint{margin:8px 0 0;color:var(--muted);font-size:12px;opacity:.8}
 
+/* Initial fullscreen loading screen */
+.loading-overlay{
+  position:fixed;
+  inset:0;
+  width:100vw;
+  height:100vh;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  padding:24px;
+  background:rgba(3,7,20,.6);
+  z-index:100000;
+  transition:opacity .35s ease, visibility .35s ease;
+}
+.loading-overlay.hidden{
+  opacity:0;
+  visibility:hidden;
+}
+.loading-panel{
+  background:rgba(3,7,18,.82);
+  border-radius:20px;
+  padding:24px 32px;
+  border:1px solid rgba(0,186,255,.3);
+  box-shadow:0 26px 80px rgba(0,0,0,.85),0 0 40px rgba(0,186,255,.4),inset 0 0 0 1px rgba(255,255,255,.05);
+  text-align:center;
+  max-width:420px;
+  width:100%;
+  backdrop-filter:blur(10px);
+}
+.loading-title{
+  font-size:22px;
+  letter-spacing:.35em;
+  text-transform:uppercase;
+  color:#a7f5ff;
+  margin-bottom:6px;
+}
+.loading-sub{
+  font-size:13px;
+  color:#8aa7c7;
+  margin-bottom:16px;
+}
+.loading-bar{
+  position:relative;
+  width:100%;
+  height:6px;
+  border-radius:999px;
+  background:rgba(0,0,0,.55);
+  overflow:hidden;
+}
+.loading-bar .fill{
+  position:absolute;
+  inset:0;
+  width:10%;
+  border-radius:inherit;
+  background:linear-gradient(90deg,#17e7a4,#00baff,#81f5ff);
+  box-shadow:0 0 18px rgba(0,186,255,.7);
+  transition:width .18s ease-out;
+}
+
+/* While the loading overlay is visible, hide the in-game frame and
+ * fullscreen main menu so only the loading card + global background
+ * are visible. */
+#loading-overlay:not(.hidden) + #game-container{
+  opacity:0;
+  pointer-events:none;
+}
+#loading-overlay:not(.hidden) ~ #mainmenu-overlay{
+  opacity:0;
+  pointer-events:none;
+}
+
 /* Fullscreen main menu */
-.overlay.mainmenu{position:fixed;inset:0;min-height:100vh;padding:40px 16px 32px;background:radial-gradient(120% 120% at 15% 10%,#0b1622 0%,#04070d 55%,#010307 100%);overflow:auto;z-index:900}
+.overlay.mainmenu{
+  position:fixed;
+  inset:0;
+  min-height:100vh;
+  padding:40px 16px 32px;
+  background:rgba(3,7,20,.65);
+  overflow:auto;
+  z-index:900;
+}
 .overlay.mainmenu::before{content:\"\";position:absolute;inset:-25%;background:conic-gradient(from 0deg,#00baff22,#00ffa02a,#0062ff22,#00ffa02a,#00baff22);filter:blur(60px);opacity:.7;animation:menuFlow 18s linear infinite}
 .overlay.mainmenu::after{content:\"\";position:absolute;inset:0;background-image:linear-gradient(rgba(255,255,255,.03) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.03) 1px,transparent 1px);background-size:120px 120px;opacity:.15;mix-blend-mode:screen;animation:gridPulse 6s ease-in-out infinite}
 .overlay.mainmenu > *{position:relative;z-index:1}
