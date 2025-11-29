@@ -1,6 +1,17 @@
 const { app, BrowserWindow, shell } = require('electron');
 const path = require('path');
 
+// On some Linux setups (including many desktop distros without a
+// properly configured SUID sandbox binary), Electron will refuse to
+// start unless the sandbox is disabled. For this standalone game
+// build we explicitly opt out of the sandbox so the AppImage runs
+// without requiring root-owned helpers.
+try {
+  app.commandLine.appendSwitch('no-sandbox');
+} catch (e) {
+  // best-effort; if this fails we fall back to default behavior
+}
+
 function createWindow() {
   const win = new BrowserWindow({
     width: 1600,
@@ -39,4 +50,3 @@ app.on('window-all-closed', () => {
     app.quit();
   }
 });
-

@@ -689,12 +689,12 @@
     </div>
 
     <script>
-      // Hosted build: zip is served alongside the main game.
-      window.NANO_DOWNLOAD_URL = 'nano-siege-local.zip';
-      // Remote download endpoint used by the local (unzipped) build
-      // when the button shows "Check for Updates". Update this to
-      // match your public Nano-Siege URL if it changes.
-      window.NANO_REMOTE_DOWNLOAD_URL = 'https://tower.nicksminecraft.net:3339/nano-siege-local.zip';
+      // Main Download button: ship the Nano‑Siege launcher binary
+      // from the same domain the browser game is hosted on.
+      window.NANO_DOWNLOAD_URL = 'downloads/NanoSiegeLauncher-linux';
+      // When a local copy of the HTML is opened (e.g. from a zip),
+      // "Check for Updates" will point back to the public launcher.
+      window.NANO_REMOTE_DOWNLOAD_URL = 'https://nano.nicksminecraft.net/downloads/NanoSiegeLauncher-linux';
     </script>
     <script type="module" src="src/boot.js"></script>
     <script>

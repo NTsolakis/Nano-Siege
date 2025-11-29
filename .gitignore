@@ -6,3 +6,8 @@ package-lock.json
 nano-siege-local.zip
 *.log
 
+# Electron build outputs
+dist/
+release/
+*.AppImage
+*.exe

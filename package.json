@@ -5,8 +5,13 @@
   "main": "electron-main.js",
   "scripts": {
     "start": "node server/server.js",
-    "desktop": "electron .",
-    "deploy:unraid": "bash scripts/deploy-unraid.sh"
+    "desktop": "electron --no-sandbox .",
+    "deploy:unraid": "bash scripts/deploy-unraid.sh",
+    "launcher": "node launcher/index.js",
+    "build:launcher:linux": "pkg launcher/index.js --targets node18-linux-x64 --output dist/NanoSiegeLauncher-linux",
+    "build:linux": "electron-builder --linux AppImage",
+    "build:win": "electron-builder --win nsis",
+    "build:all": "electron-builder -mwl"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",
@@ -15,6 +20,37 @@
     "jsonwebtoken": "^9.0.2"
   },
   "devDependencies": {
-    "electron": "^30.0.0"
+    "electron": "^30.0.0",
+    "electron-builder": "^24.13.3",
+    "pkg": "^5.8.1"
+  },
+  "build": {
+    "appId": "net.nicksminecraft.nano-siege",
+    "productName": "Nano-Siege",
+    "files": [
+      "index.html",
+      "styles.css",
+      "sandbox-config.js",
+      "data/**/*",
+      "src/**/*",
+      "electron-main.js",
+      "electron-preload.js",
+      "package.json"
+    ],
+    "asar": true,
+    "directories": {
+      "output": "dist"
+    },
+    "linux": {
+      "target": [
+        "AppImage"
+      ],
+      "category": "Game"
+    },
+    "win": {
+      "target": [
+        "nsis"
+      ]
+    }
   }
 }
