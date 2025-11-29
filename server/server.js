@@ -220,9 +220,12 @@ app.post('/api/leaderboard', requireAuth, (req, res) => {
 // Static game files
 app.use(express.static(PUBLIC_DIR));
 
-// Fallback to index.html for SPA-style routing (optional)
-app.get('*', (req, res) => {
-  res.sendFile(path.join(PUBLIC_DIR, 'index.html'));
+// Fallback to index.html for SPA-style routing, but only for routes
+// that don't look like direct asset requests (no file extension).
+app.get('*', (req, res, next) => {
+  const ext = path.extname(req.path || '');
+  if (ext) return next();
+  return res.sendFile(path.join(PUBLIC_DIR, 'index.html'));
 });
 
 app.listen(PORT, () => {
