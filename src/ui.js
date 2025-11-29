@@ -759,9 +759,9 @@ export class UIManager{
       // Hosted build vs local build: flip label and route to the
       // appropriate download endpoint. When running as a plain
       // file:// page (unzipped local build), we send players to the
-      // hosted server's nano-siege-local.zip so they can grab a
-      // fresh copy; when running on the hosted server, we point at
-      // the zip relative to the current origin.
+      // public launcher so they can grab a fresh copy; when running
+      // on the hosted server, we point at the launcher alongside the
+      // web build.
       let isLocal = false;
       try{
         if(typeof window !== 'undefined'){
@@ -771,7 +771,7 @@ export class UIManager{
       }catch(e){}
       const hostedUrl = (typeof window !== 'undefined' && window.NANO_DOWNLOAD_URL)
         ? window.NANO_DOWNLOAD_URL
-        : 'nano-siege-local.zip';
+        : 'downloads/NanoSiegeLauncher-linux';
       const remoteUrl = (typeof window !== 'undefined' && window.NANO_REMOTE_DOWNLOAD_URL)
         ? window.NANO_REMOTE_DOWNLOAD_URL
         : hostedUrl;
@@ -779,7 +779,16 @@ export class UIManager{
       this.$btnMainDownload.addEventListener('click', ()=>{
         try{
           const target = isLocal ? remoteUrl : hostedUrl;
-          window.location.href = target;
+          // Trigger a download without navigating the page so the
+          // game shell stays at the correct / index instead of a
+          // subdirectory like /downloads/.
+          const a = document.createElement('a');
+          a.href = target;
+          a.download = '';
+          a.style.display = 'none';
+          document.body.appendChild(a);
+          a.click();
+          a.remove();
         }catch(e){}
       });
     }
