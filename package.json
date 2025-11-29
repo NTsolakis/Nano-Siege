@@ -2,14 +2,19 @@
   "name": "nano-siege-backend",
   "version": "1.0.0",
   "description": "Backend + static server for Nano-Siege",
-  "main": "server/server.js",
+  "main": "electron-main.js",
   "scripts": {
-    "start": "node server/server.js"
+    "start": "node server/server.js",
+    "desktop": "electron .",
+    "deploy:unraid": "bash scripts/deploy-unraid.sh"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",
     "cookie-parser": "^1.4.6",
     "express": "^4.19.0",
     "jsonwebtoken": "^9.0.2"
+  },
+  "devDependencies": {
+    "electron": "^30.0.0"
   }
 }
