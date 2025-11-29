@@ -756,41 +756,55 @@ export class UIManager{
     }
     // Main menu buttons
     if(this.$btnMainDownload){
-      // Hosted build vs local build: flip label and route to the
-      // appropriate download endpoint. When running as a plain
-      // file:// page (unzipped local build), we send players to the
-      // public launcher so they can grab a fresh copy; when running
-      // on the hosted server, we point at the launcher alongside the
-      // web build.
+      // Hosted build vs local build vs desktop build:
+      // - Hosted: "Download" (grab launcher from same domain)
+      // - Local file:// copy: "Check for Updates" (points at public launcher)
+      // - Desktop (Electron) build: repurpose as an Exit button so
+      //   players rely on the launcher for updates.
       let isLocal = false;
+      let isDesktop = false;
       try{
         if(typeof window !== 'undefined'){
-          if(window.NANO_BUILD_FLAVOR === 'local') isLocal = true;
+          const flavor = window.NANO_BUILD_FLAVOR;
+          if(flavor === 'desktop') isDesktop = true;
+          else if(flavor === 'local') isLocal = true;
           else if(window.location && window.location.protocol === 'file:') isLocal = true;
         }
       }catch(e){}
-      const hostedUrl = (typeof window !== 'undefined' && window.NANO_DOWNLOAD_URL)
-        ? window.NANO_DOWNLOAD_URL
-        : 'downloads/NanoSiegeLauncher-linux';
-      const remoteUrl = (typeof window !== 'undefined' && window.NANO_REMOTE_DOWNLOAD_URL)
-        ? window.NANO_REMOTE_DOWNLOAD_URL
-        : hostedUrl;
-      this.$btnMainDownload.textContent = isLocal ? 'Check for Updates' : 'Download';
-      this.$btnMainDownload.addEventListener('click', ()=>{
-        try{
-          const target = isLocal ? remoteUrl : hostedUrl;
-          // Trigger a download without navigating the page so the
-          // game shell stays at the correct / index instead of a
-          // subdirectory like /downloads/.
-          const a = document.createElement('a');
-          a.href = target;
-          a.download = '';
-          a.style.display = 'none';
-          document.body.appendChild(a);
-          a.click();
-          a.remove();
-        }catch(e){}
-      });
+
+      if(isDesktop){
+        this.$btnMainDownload.textContent = 'Exit';
+        this.$btnMainDownload.addEventListener('click', ()=>{
+          try{
+            if(typeof window !== 'undefined' && window.close){
+              window.close();
+            }
+          }catch(e){}
+        });
+      }else{
+        const hostedUrl = (typeof window !== 'undefined' && window.NANO_DOWNLOAD_URL)
+          ? window.NANO_DOWNLOAD_URL
+          : 'downloads/NanoSiegeLauncher-linux.AppImage';
+        const remoteUrl = (typeof window !== 'undefined' && window.NANO_REMOTE_DOWNLOAD_URL)
+          ? window.NANO_REMOTE_DOWNLOAD_URL
+          : hostedUrl;
+        this.$btnMainDownload.textContent = isLocal ? 'Check for Updates' : 'Download';
+        this.$btnMainDownload.addEventListener('click', ()=>{
+          try{
+            const target = isLocal ? remoteUrl : hostedUrl;
+            // Trigger a download without navigating the page so the
+            // game shell stays at the correct / index instead of a
+            // subdirectory like /downloads/.
+            const a = document.createElement('a');
+            a.href = target;
+            a.download = '';
+            a.style.display = 'none';
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+          }catch(e){}
+        });
+      }
     }
     if(this.$btnMainModes){
       this.$btnMainModes.addEventListener('click', ()=>{

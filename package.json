@@ -5,9 +5,11 @@
   "main": "electron-main.js",
   "scripts": {
     "start": "node server/server.js",
-    "desktop": "electron --no-sandbox .",
+    "desktop": "electron .",
     "deploy:unraid": "bash scripts/deploy-unraid.sh",
-    "launcher": "node launcher/index.js",
+    "launcher": "electron launcher",
+    "build:launcher:electron:linux": "electron-builder --config launcher/electron-builder.launcher.json --linux AppImage",
+    "build:launcher:electron:win": "electron-builder --config launcher/electron-builder.launcher.json --win portable",
     "build:launcher:linux": "pkg launcher/index.js --targets node18-linux-x64 --output dist/NanoSiegeLauncher-linux",
     "build:launcher:win": "pkg launcher/index.js --targets node18-win-x64 --output dist/NanoSiegeLauncher.exe",
     "build:linux": "electron-builder --linux AppImage",

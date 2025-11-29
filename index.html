@@ -691,10 +691,21 @@
     <script>
       // Main Download button: ship the Nano‑Siege launcher binary
       // from the same domain the browser game is hosted on.
-      window.NANO_DOWNLOAD_URL = 'downloads/NanoSiegeLauncher-linux';
-      // When a local copy of the HTML is opened (e.g. from a zip),
-      // "Check for Updates" will point back to the public launcher.
-      window.NANO_REMOTE_DOWNLOAD_URL = 'https://nano.nicksminecraft.net/downloads/NanoSiegeLauncher-linux';
+      // Choose the correct launcher for the player's OS.
+      (function(){
+        var basePath = 'downloads/';
+        var isWindows = false;
+        try{
+          var nav = window.navigator || {};
+          var plat = (nav.platform || '').toLowerCase();
+          isWindows = plat.indexOf('win') !== -1 || /windows/.test((nav.userAgent || '').toLowerCase());
+        }catch(e){}
+        var fileName = isWindows ? 'NanoSiegeLauncher.exe' : 'NanoSiegeLauncher-linux.AppImage';
+        window.NANO_DOWNLOAD_URL = basePath + fileName;
+        // When a local copy of the HTML is opened (e.g. from a zip),
+        // "Check for Updates" will point back to the public launcher.
+        window.NANO_REMOTE_DOWNLOAD_URL = 'https://nano.nicksminecraft.net/downloads/' + fileName;
+      })();
     </script>
     <script type="module" src="src/boot.js"></script>
     <script>

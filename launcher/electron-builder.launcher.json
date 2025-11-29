@@ -1,0 +1,26 @@
+{
+  "appId": "net.nicksminecraft.nano-siege-launcher",
+  "productName": "NanoSiegeLauncher",
+  "directories": {
+    "app": "launcher",
+    "output": "dist"
+  },
+  "files": [
+    "**/*"
+  ],
+  "asar": true,
+  "linux": {
+    "target": [
+      "AppImage"
+    ],
+    "category": "Game",
+    "artifactName": "NanoSiegeLauncher-linux.${ext}"
+  },
+  "win": {
+    "target": [
+      "portable"
+    ],
+    "artifactName": "NanoSiegeLauncher.${ext}"
+  }
+}
+

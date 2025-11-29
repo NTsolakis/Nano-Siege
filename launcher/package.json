@@ -1,0 +1,6 @@
+{
+  "name": "nano-siege-launcher",
+  "version": "1.0.0",
+  "main": "electron-launcher-main.js"
+}
+

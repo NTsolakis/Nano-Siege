@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Nano‑Siege Launcher</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <style>
+    *{box-sizing:border-box;margin:0;padding:0}
+    html,body{height:100%;width:100%;background:#050611;color:#e6f7ff;font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica,Arial,sans-serif;overflow:hidden}
+    body{display:flex;align-items:center;justify-content:center}
+    .bg{position:fixed;inset:0;background:url('../data/loading-bg.gif') center center/cover no-repeat;background-color:#050611;filter:brightness(0.45);z-index:0}
+    .overlay{position:relative;z-index:1;display:flex;align-items:center;justify-content:center;width:100%;height:100%;padding:12px}
+    .card{min-width:320px;max-width:520px;background:rgba(8,10,26,0.92);border-radius:14px;border:1px solid rgba(96,255,255,0.5);box-shadow:0 0 40px rgba(0,0,0,0.85);padding:20px 24px;text-align:center}
+    .title{font-size:26px;letter-spacing:0.12em;text-transform:uppercase;margin-bottom:4px;color:#8cf5ff;text-shadow:0 0 12px rgba(0,255,255,0.55)}
+    .subtitle{font-size:13px;color:#9fb4ff;margin-bottom:16px}
+    .status{font-size:14px;color:#e6f7ff;margin-bottom:4px}
+    .version{font-size:12px;color:#8fb7ff;margin-bottom:16px}
+    .buttons{display:flex;justify-content:center;gap:10px;margin-top:8px}
+    button{min-width:90px;padding:8px 18px;border-radius:999px;border:1px solid rgba(96,255,255,0.7);background:linear-gradient(135deg,#12b5ff,#54ffe6);color:#02131f;font-weight:600;font-size:14px;cursor:pointer;box-shadow:0 0 12px rgba(0,255,255,0.35);transition:transform 0.1s ease,box-shadow 0.1s ease,filter 0.1s ease,background 0.2s}
+    button.secondary{background:rgba(4,10,24,0.9);color:#c7d7ff;border-color:rgba(142,189,255,0.8);box-shadow:none}
+    button:disabled{opacity:0.6;cursor:default;box-shadow:none}
+    button:not(:disabled):hover{transform:translateY(-1px);box-shadow:0 0 16px rgba(0,255,255,0.5);filter:brightness(1.05)}
+    button.secondary:not(:disabled):hover{box-shadow:0 0 14px rgba(150,190,255,0.45)}
+    .footer{margin-top:12px;font-size:11px;color:#6f88b5;opacity:0.9}
+  </style>
+</head>
+<body>
+  <div class="bg"></div>
+  <div class="overlay">
+    <div class="card">
+      <h1 class="title">Nano‑Siege</h1>
+      <p class="subtitle">Reactor Defense Launcher</p>
+      <div id="status-line" class="status">Starting launcher…</div>
+      <div id="version-line" class="version"></div>
+      <div class="buttons">
+        <button id="btn-play" disabled>Play</button>
+        <button id="btn-exit" class="secondary">Exit</button>
+      </div>
+      <div class="footer">The launcher keeps Nano‑Siege up to date automatically.</div>
+    </div>
+  </div>
+
+  <script>
+    const statusEl = document.getElementById('status-line');
+    const versionEl = document.getElementById('version-line');
+    const playBtn = document.getElementById('btn-play');
+    const exitBtn = document.getElementById('btn-exit');
+    const http = require('http');
+    const https = require('https');
+    const fs = require('fs');
+    const path = require('path');
+    const os = require('os');
+    const { spawn } = require('child_process');
+
+    const PLATFORM = process.platform === 'win32'
+      ? 'windows'
+      : (process.platform === 'linux' ? 'linux' : null);
+
+    const DEFAULT_MANIFEST_URL = 'https://nano.nicksminecraft.net/launcher/manifest.json';
+    const MANIFEST_URL = process.env.NANO_SIEGE_MANIFEST_URL || DEFAULT_MANIFEST_URL;
+
+    const baseDir = path.join(os.homedir(), '.nano-siege');
+    const binDir = path.join(baseDir, 'bin');
+    const stateFile = path.join(baseDir, 'installed.json');
+
+    let currentBinaryPath = null;
+    let canPlay = false;
+
+    function setStatus(text, version, ready){
+      statusEl.textContent = text || '';
+      versionEl.textContent = version ? ('Version ' + version) : '';
+      canPlay = !!ready;
+      playBtn.disabled = !canPlay;
+    }
+
+    function getHttpModule(url){
+      return url.startsWith('https:') ? https : http;
+    }
+
+    function fetchJson(url){
+      return new Promise((resolve, reject) => {
+        getHttpModule(url)
+          .get(url, (res) => {
+            if (res.statusCode && res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
+              return resolve(fetchJson(res.headers.location));
+            }
+            if (res.statusCode !== 200) {
+              return reject(new Error('HTTP ' + res.statusCode + ' for ' + url));
+            }
+            const chunks = [];
+            res.on('data', (c) => chunks.push(c));
+            res.on('end', () => {
+              try {
+                const buf = Buffer.concat(chunks);
+                const json = JSON.parse(buf.toString('utf8'));
+                resolve(json);
+              } catch (e) {
+                reject(e);
+              }
+            });
+          })
+          .on('error', reject);
+      });
+    }
+
+    function readState(){
+      try{
+        const raw = fs.readFileSync(stateFile, 'utf8');
+        return JSON.parse(raw);
+      }catch(e){
+        return null;
+      }
+    }
+
+    function writeState(obj){
+      fs.mkdirSync(baseDir, { recursive: true });
+      fs.writeFileSync(stateFile, JSON.stringify(obj, null, 2), 'utf8');
+    }
+
+    function downloadFile(url, dest){
+      return new Promise((resolve, reject) => {
+        fs.mkdirSync(path.dirname(dest), { recursive: true });
+        const file = fs.createWriteStream(dest);
+        getHttpModule(url)
+          .get(url, (res) => {
+            if (res.statusCode && res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
+              file.close(() => {
+                fs.unlink(dest, () => {
+                  resolve(downloadFile(res.headers.location, dest));
+                });
+              });
+              return;
+            }
+            if (res.statusCode !== 200) {
+              file.close(() => {
+                fs.unlink(dest, () => reject(new Error('HTTP ' + res.statusCode + ' for ' + url)));
+              });
+              return;
+            }
+            res.pipe(file);
+            file.on('finish', () => file.close(() => resolve(dest)));
+          })
+          .on('error', (err) => {
+            file.close(() => {
+              fs.unlink(dest, () => reject(err));
+            });
+          });
+      });
+    }
+
+    function versionChanged(current, next){
+      if (!current) return true;
+      if (!current.version) return true;
+      return String(current.version) !== String(next.version);
+    }
+
+    async function launchGame(binaryPath){
+      if(!binaryPath) return;
+      const args = PLATFORM === 'linux' ? ['--no-sandbox'] : [];
+      let env = Object.assign({}, process.env);
+      try{
+        const sx = (typeof window !== 'undefined' && typeof window.screenX === 'number') ? window.screenX : 0;
+        const sy = (typeof window !== 'undefined' && typeof window.screenY === 'number') ? window.screenY : 0;
+        env.NANO_LAUNCHER_SCREEN_X = String(sx|0);
+        env.NANO_LAUNCHER_SCREEN_Y = String(sy|0);
+      }catch(e){}
+      const child = spawn(binaryPath, args, {
+        detached: true,
+        stdio: 'ignore',
+        env
+      });
+      try{ child.unref(); }catch(e){}
+      // Close the launcher immediately so it feels like
+      // a hand-off into the main game.
+      window.close();
+    }
+
+    async function runUpdateFlow(){
+      if (!PLATFORM) {
+        setStatus('Unsupported platform: ' + process.platform, '', false);
+        return;
+      }
+      try{
+        setStatus('Checking for updates…', '', false);
+        const manifest = await fetchJson(MANIFEST_URL);
+        const info = manifest && manifest[PLATFORM];
+        if (!info || !info.url || !info.version) {
+          throw new Error('Manifest missing entry for platform "' + PLATFORM + '"');
+        }
+
+        const current = readState();
+        const needsUpgrade = versionChanged(current, info);
+        const keepPath = current && current.binaryPath && fs.existsSync(current.binaryPath);
+
+        let binaryPath = current && current.binaryPath;
+
+        if (needsUpgrade || !keepPath) {
+          setStatus('Downloading Nano‑Siege ' + info.version + '…', info.version, false);
+          fs.mkdirSync(binDir, { recursive: true });
+          const filename = path.basename(new URL(info.url).pathname || ('nano-siege-' + info.version));
+          binaryPath = path.join(binDir, filename);
+          await downloadFile(info.url, binaryPath);
+          if (PLATFORM === 'linux') {
+            try { fs.chmodSync(binaryPath, 0o755); } catch (e) {}
+          }
+          writeState({ platform: PLATFORM, version: info.version, binaryPath });
+          setStatus('Finishing install…', info.version, false);
+        } else {
+          setStatus('Up to date — Nano‑Siege ' + info.version + ' is installed.', info.version, true);
+        }
+
+        if (needsUpgrade || !keepPath) {
+          setStatus('Ready — Nano‑Siege ' + info.version + ' installed. Click Play to start.', info.version, true);
+        }
+
+        currentBinaryPath = binaryPath;
+      }catch(err){
+        console.error('Launcher error:', err);
+        setStatus('Launcher error — see console for details.', '', false);
+      }
+    }
+
+    runUpdateFlow();
+
+    playBtn.addEventListener('click', async () => {
+      if(playBtn.disabled || !canPlay || !currentBinaryPath) return;
+      await launchGame(currentBinaryPath);
+    });
+
+    exitBtn.addEventListener('click', () => {
+      window.close();
+    });
+  </script>
+</body>
+</html>
