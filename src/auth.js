@@ -1,16 +1,22 @@
 // Simple API helpers for user login + save.
 
+// In the hosted browser build we talk to the backend on the same
+// origin ("/api/..."). In the standalone desktop build the game is
+// loaded from file:// so relative "/api" URLs would fail; detect that
+// case and pin the API base to the public Nano‑Siege domain instead.
 const API_BASE = (() => {
   try {
     if (typeof window !== 'undefined') {
-      // Desktop/Electron build: talk to the hosted backend directly
-      // instead of relying on a local /api server.
-      if (window.NANO_BUILD_FLAVOR === 'desktop') {
+      const loc = window.location || {};
+      const isFile = String(loc.protocol || '').toLowerCase() === 'file:';
+      const ua = (typeof navigator !== 'undefined' && navigator.userAgent) ? navigator.userAgent : '';
+      const isElectron = ua.includes('Electron');
+      if (isFile || isElectron) {
         return 'https://nano.nicksminecraft.net';
       }
     }
   } catch (e) {}
-  // Browser build (online): same origin.
+  // Browser build at https://nano.nicksminecraft.net uses same-origin.
   return '';
 })();
 
