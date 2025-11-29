@@ -9,9 +9,11 @@
     "deploy:unraid": "bash scripts/deploy-unraid.sh",
     "launcher": "node launcher/index.js",
     "build:launcher:linux": "pkg launcher/index.js --targets node18-linux-x64 --output dist/NanoSiegeLauncher-linux",
+    "build:launcher:win": "pkg launcher/index.js --targets node18-win-x64 --output dist/NanoSiegeLauncher.exe",
     "build:linux": "electron-builder --linux AppImage",
-    "build:win": "electron-builder --win nsis",
-    "build:all": "electron-builder -mwl"
+    "build:win": "electron-builder --win portable",
+    "build:all": "electron-builder -mwl",
+    "build:desktop:release": "bash scripts/build-desktop-release.sh"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",
@@ -49,7 +51,7 @@
     },
     "win": {
       "target": [
-        "nsis"
+        "portable"
       ]
     }
   }
