@@ -13,7 +13,7 @@ const https = require('https');
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
-const { spawn } = require('child_process');
+const { spawn, spawnSync } = require('child_process');
 
 const PLATFORM = process.platform === 'win32'
   ? 'windows'
@@ -124,6 +124,30 @@ function prompt(message) {
   });
 }
 
+function showGuiPrompt(version) {
+  if (PLATFORM === 'linux') {
+    try {
+      // Use KDE's kdialog when available to present a simple
+      // Play / Exit launcher window so double‑clicking the
+      // launcher from a file manager feels like a normal app.
+      const args = [
+        '--yesno',
+        `Nano‑Siege is ready.\nVersion: ${version}`,
+        '--yes-label', 'Play',
+        '--no-label', 'Exit',
+        '--title', 'Nano‑Siege Launcher'
+      ];
+      const res = spawnSync('kdialog', args, { stdio: 'ignore' });
+      if (res && res.status === 0) return 'play';
+      return 'exit';
+    } catch (e) {
+      // Fall through to CLI prompt if kdialog is unavailable.
+    }
+  }
+  // Default: always play (or let the caller use CLI prompt).
+  return 'play';
+}
+
 function launchGame(binaryPath) {
   console.log(`\nLaunching: ${binaryPath}`);
   const args = PLATFORM === 'linux' ? ['--no-sandbox'] : [];
@@ -178,8 +202,17 @@ async function main() {
     console.log(`Already up to date (version ${current.version}).`);
   }
 
-  await prompt('\nPress Enter to play...');
-  launchGame(binaryPath);
+  if (PLATFORM === 'linux') {
+    const choice = showGuiPrompt(info.version);
+    if (choice === 'play') {
+      launchGame(binaryPath);
+    } else {
+      process.exit(0);
+    }
+  } else {
+    await prompt('\nPress Enter to play...');
+    launchGame(binaryPath);
+  }
 }
 
 main().catch((err) => {

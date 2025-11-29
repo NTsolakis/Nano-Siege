@@ -1,6 +1,18 @@
 // Simple API helpers for user login + save.
 
-const API_BASE = ''; // same origin
+const API_BASE = (() => {
+  try {
+    if (typeof window !== 'undefined') {
+      // Desktop/Electron build: talk to the hosted backend directly
+      // instead of relying on a local /api server.
+      if (window.NANO_BUILD_FLAVOR === 'desktop') {
+        return 'https://nano.nicksminecraft.net';
+      }
+    }
+  } catch (e) {}
+  // Browser build (online): same origin.
+  return '';
+})();
 
 async function apiRequest(path, body) {
   const res = await fetch(API_BASE + path, {

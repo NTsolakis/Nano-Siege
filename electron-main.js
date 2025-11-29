@@ -21,7 +21,11 @@ function createWindow() {
     webPreferences: {
       preload: path.join(__dirname, 'electron-preload.js'),
       contextIsolation: true,
-      nodeIntegration: false
+      nodeIntegration: false,
+      // Allow the desktop build to call the hosted backend API
+      // (https://nano.nicksminecraft.net) without being blocked by
+      // CORS / same-origin checks when running from file://.
+      webSecurity: false
     }
   });
 
