@@ -30,7 +30,18 @@ const updateStageSizing = ()=>{
   const isNarrowScreen = viewportWidth <= 860;
 
   const sideWidth = passiveWidth + waveWidth + gapValue * 2;
-  const minCanvasWidth = isNarrowScreen ? 320 : 220;
+  // Keep the playfield comfortably readable on desktop and avoid it
+  // collapsing to a tiny strip on ultra‑wide or when side panels take
+  // more space. On narrow/mobile screens we cap by viewport width and
+  // allow the map to grow as large as possible in the center column.
+  let minCanvasWidth;
+  if(isNarrowScreen){
+    const vw = viewportWidth || 320;
+    const clamped = Math.min(480, vw - 32);
+    minCanvasWidth = Math.max(320, clamped);
+  } else {
+    minCanvasWidth = 480;
+  }
   const usableWidth = isColumnLayout
     ? Math.max(minCanvasWidth, stageWidth)
     : Math.max(minCanvasWidth, stageWidth - sideWidth);
@@ -84,28 +95,23 @@ if(window.history && window.history.pushState){
       // Let the browser handle non-game history entries.
       return;
     }
-    const isInRun = game.state === 'playing' || game.state === 'paused' || game.state === 'exitConfirm';
-    if(isInRun){
-      if(backInFlight) return;
-      backInFlight = true;
-      if(typeof game.requestExitConfirm === 'function'){
-        game.requestExitConfirm((ok)=>{
-          if(ok){
-            game.toMenu();
-          } else {
-            // Re‑assert game state in history so Back again re-prompts.
-            pushStateSafe('game');
-          }
-          backInFlight = false;
-        });
-      } else {
+    if(backInFlight) return;
+    backInFlight = true;
+    if(typeof game.requestExitConfirm === 'function'){
+      game.requestExitConfirm((ok)=>{
+        if(ok){
+          try{
+            window.location.reload();
+          }catch(e){}
+        } else {
+          // Re‑assert a state so subsequent Back presses stay inside the game.
+          const screen = (evt.state && evt.state.screen) || 'menu';
+          pushStateSafe(screen);
+        }
         backInFlight = false;
-      }
+      });
     } else {
-      // From any menu/overlay, return to fullscreen main menu instead of leaving the page.
-      if(typeof game.handleMenuBack === 'function') game.handleMenuBack();
-      else game.toMenu();
-      pushStateSafe('menu');
+      backInFlight = false;
     }
   });
 

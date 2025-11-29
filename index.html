@@ -50,7 +50,7 @@
                 <div class="currency-chip core">
                   <span class="chip-icon" aria-hidden="true"></span>
                   <div class="chip-copy">
-                    <span class="chip-label">Shards</span>
+                    <span class="chip-label">Cores</span>
                     <span class="chip-value" id="stat-core">0</span>
                   </div>
                 </div>
@@ -58,10 +58,18 @@
             </div>
           </section>
           <section class="hud-cell hud-hp">
-            <div class="hud-hpbar">
-              <span id="stat-lives">HP: 0</span>
-              <span class="hpbar"><span class="hpfill" id="hp-fill" style="width:100%"></span></span>
+            <div class="hud-hpframe">
+              <div class="hp-char-icon" id="hp-char-icon">
+                <div class="hp-char-inner" id="hp-char-inner">
+                  <span class="hp-char-sprite" id="hp-char-sprite"></span>
+                </div>
+              </div>
+              <div class="hud-hpbar">
+                <span id="stat-lives">HP: 0</span>
+                <span class="hpbar"><span class="hpfill" id="hp-fill" style="width:100%"></span></span>
+              </div>
             </div>
+            <div id="pilot-dialog" class="pilot-dialog" aria-live="polite"></div>
             <div class="control-dev">
               <button id="btn-sandbox-settings" class="sandbox-btn" style="display:none">Sandbox Settings</button>
             </div>
@@ -84,21 +92,21 @@
                 <span class="tower-icon tower-icon-basic" aria-hidden="true"></span>
                 <span class="tower-label">
                   <span class="tower-name">Cannon</span>
-                  <span class="tower-cost">(30)</span>
+                  <span class="tower-cost">(25)</span>
                 </span>
               </button>
               <button class="tower-btn" data-tower="laser">
                 <span class="tower-icon tower-icon-laser" aria-hidden="true"></span>
                 <span class="tower-label">
                   <span class="tower-name">Laser</span>
-                  <span class="tower-cost">(60)</span>
+                  <span class="tower-cost">(50)</span>
                 </span>
               </button>
               <button class="tower-btn" data-tower="splash">
                 <span class="tower-icon tower-icon-splash" aria-hidden="true"></span>
                 <span class="tower-label">
                   <span class="tower-name">Splash</span>
-                  <span class="tower-cost">(90)</span>
+                  <span class="tower-cost">(75)</span>
                 </span>
               </button>
             </div>
@@ -139,7 +147,10 @@
         </aside>
         <div id="canvas-shell" class="canvas-shell">
           <div id="combat-stats" class="combat-stats-card">
-            <div class="cs-title">Combat Stats</div>
+            <div class="cs-title">
+              <span>Combat Stats</span>
+              <button id="combat-stats-toggle" type="button" aria-label="Minimize combat stats">−</button>
+            </div>
             <div class="cs-row"><span>Base Damage</span><span id="stat-basedmg">+0%</span></div>
             <div class="cs-row"><span>Crit Chance</span><span id="stat-crit">+0%</span></div>
             <div class="cs-row"><span>Crit Damage</span><span id="stat-critdmg">+0%</span></div>
@@ -147,12 +158,7 @@
             <div class="cs-row"><span>Burn DPS</span><span id="stat-burn">+0%</span></div>
             <div class="cs-row"><span>Targeting Speed</span><span id="stat-target">+0%</span></div>
           </div>
-          <canvas id="game" width="960" height="540"></canvas>
-        </div>
-        <aside id="passive-panel" class="passive-panel">
-          <div id="passive-lines" class="pp-lines"></div>
-        </aside>
-        <aside id="upgrade-panel" class="upgrade" style="display:none">
+          <aside id="upgrade-panel" class="upgrade" style="display:none">
           <button id="btn-upg-close" class="upg-close" aria-label="Close">×</button>
           <div class="upg-title">Selected:
             <span id="upg-icon" class="upg-icon" aria-hidden="true"></span>
@@ -163,7 +169,7 @@
             <button id="btn-upg-burn">Install Burn Module (90)</button>
           </div>
           <div class="upg-actions">
-            <button id="btn-upg-rate">Upgrade Fire Rate (60)</button>
+            <button id="btn-upg-rate">Upgrade Tower Damage (60)</button>
             <button id="btn-upg-range">Upgrade Fire Range (80)</button>
           </div>
           <!-- Dev: instant max upgrade -->
@@ -174,6 +180,11 @@
             <button id="btn-sell" class="sell-btn">Sell Tower</button>
           </div>
           <div class="upg-hint">Click a placed tower to upgrade</div>
+        </aside>
+          <canvas id="game" width="960" height="540"></canvas>
+        </div>
+        <aside id="passive-panel" class="passive-panel">
+          <div id="passive-lines" class="pp-lines"></div>
         </aside>
         <!-- Overlays -->
         <!-- Assembly War Missions -->
@@ -349,15 +360,30 @@
           <p class="mainmenu-sub">Neon Reactor Defense Protocol</p>
         </div>
           <div class="mainmenu-actions">
-            <button id="btn-main-endless">Endless Cycle</button>
+            <button id="btn-main-modes">Game Modes</button>
             <button id="btn-main-leaderboard">Leaderboard</button>
-            <button id="btn-main-assembly">Assembly War <span class="badge-uc">Under Construction</span></button>
-            <button id="btn-main-loaduser">Sign In</button>
-            <button id="btn-main-sandbox">Sandbox Mode</button>
             <button id="btn-main-settings">Settings</button>
+            <button id="btn-main-loaduser">Sign In</button>
+            <button id="btn-main-download">Download</button>
           </div>
         </div>
     </section>
+
+      <!-- Game Mode select (under main menu) -->
+      <section id="gamemodes-overlay" class="overlay mainmenu">
+        <div class="panel mainmenu-panel">
+          <div class="mainmenu-logo-wrap" style="margin-bottom:24px">
+            <h2 class="mainmenu-sub" style="margin:0; letter-spacing:.35em; text-transform:uppercase">Select Game Mode</h2>
+          </div>
+          <p class="tag" style="text-align:center;margin-bottom:18px">Choose how you want to defend the core.</p>
+          <div class="mainmenu-actions">
+            <button id="btn-main-endless">Endless Cycle</button>
+            <button id="btn-main-assembly">Assembly War <span class="badge-uc">Under Construction</span></button>
+            <button id="btn-main-sandbox">Sandbox Mode</button>
+            <button id="btn-modes-back">Back</button>
+          </div>
+        </div>
+      </section>
 
       <!-- Fullscreen Map Select (Endless Cycle) -->
       <section id="mapselect-overlay" class="overlay mainmenu">
@@ -368,6 +394,29 @@
           <div class="map-meta">
             <div id="map-title" class="map-title"></div>
             <div id="map-desc" class="map-desc"></div>
+          </div>
+          <div class="character-select">
+            <h3 class="character-title">Select Character</h3>
+            <div class="character-row" id="character-row">
+              <button class="character-btn selected" data-character="volt">
+                <span class="character-icon">
+                  <img src="data/Volt.png" alt="Volt">
+                </span>
+                <span class="character-name">Volt</span>
+              </button>
+              <button class="character-btn" data-character="torque">
+                <span class="character-icon">
+                  <img src="data/Torque.png" alt="Torque">
+                </span>
+                <span class="character-name">Torque</span>
+              </button>
+              <button class="character-btn" data-character="lumen">
+                <span class="character-icon">
+                  <img src="data/Lumen.png" alt="Lumen">
+                </span>
+                <span class="character-name">Lumen</span>
+              </button>
+            </div>
           </div>
           <div class="actions" style="margin-top:18px">
             <button id="btn-map-back">Back</button>
@@ -541,6 +590,14 @@
               <span class="slider"></span>
             </label>
             <span class="dev-hint">∞ money, rerolls, HP</span>
+          </div>
+          <div class="dev-toggle" style="margin-top:8px">
+            <span class="dev-label">Debug Mode</span>
+            <label class="switch">
+              <input type="checkbox" id="debug-toggle-main" />
+              <span class="slider"></span>
+            </label>
+            <span class="dev-hint">Tune nano‑bot sprite frames</span>
           </div>
           <div class="actions" style="margin-top:18px">
             <button id="btn-main-settings-back">Back</button>

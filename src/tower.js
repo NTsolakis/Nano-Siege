@@ -17,6 +17,73 @@ export const PEDESTAL_SPRITE = {
   loaded: false
 };
 
+// Optional reactor core sprite. When present, the base rendering code
+// will draw this on top of the pedestal, treating the flat background
+// as transparent (using the same punch‑out helper as tower heads).
+export const REACTOR_SPRITE = {
+  img: null,
+  loaded: false
+};
+
+// Reusable helper: treat a sprite's flat background as transparent by
+// sampling corner pixels and zeroing out near‑background colors. This
+// lets us use the same art on both the game grid and UI without the
+// grey backing boxes.
+export function punchOutSpriteBackground(img){
+  if(typeof document === 'undefined') return img;
+  try{
+    const off = document.createElement('canvas');
+    off.width = img.width;
+    off.height = img.height;
+    const c = off.getContext('2d');
+    if(!c) return img;
+    c.drawImage(img, 0, 0);
+    const id = c.getImageData(0, 0, off.width, off.height);
+    const data = id.data;
+    let bgR = 0, bgG = 0, bgB = 0, bgCount = 0;
+    const samplePixel = (x,y)=>{
+      if(x<0 || y<0 || x>=off.width || y>=off.height) return;
+      const idx = (y*off.width + x)*4;
+      const a = data[idx+3];
+      if(a===0) return;
+      bgR += data[idx];
+      bgG += data[idx+1];
+      bgB += data[idx+2];
+      bgCount++;
+    };
+    samplePixel(0,0);
+    samplePixel(off.width-1,0);
+    samplePixel(0,off.height-1);
+    samplePixel(off.width-1,off.height-1);
+    if(bgCount>0){
+      bgR /= bgCount;
+      bgG /= bgCount;
+      bgB /= bgCount;
+    }
+    const bgSampled = bgCount>0;
+    const bgThreshSq = 20*20;
+    for(let i=0;i<data.length;i+=4){
+      const r = data[i], g = data[i+1], b = data[i+2];
+      const a = data[i+3];
+      let alpha = a;
+      if(a>0){
+        if(bgSampled){
+          const dr = r-bgR, dg = g-bgG, db = b-bgB;
+          const distSq = dr*dr + dg*dg + db*db;
+          if(distSq <= bgThreshSq){
+            alpha = 0;
+          }
+        }
+      }
+      data[i+3] = alpha;
+    }
+    c.putImageData(id, 0, 0);
+    return off;
+  }catch(e){
+    return img;
+  }
+}
+
 function loadTowerSprite(key, url, angleOffset=0, sizeMul=1.3){
   if(typeof Image === 'undefined') return;
   const img = new Image();
@@ -24,31 +91,8 @@ function loadTowerSprite(key, url, angleOffset=0, sizeMul=1.3){
   img.onload = ()=>{
     let source = img;
     try{
-      if(typeof document !== 'undefined'){
-        const off = document.createElement('canvas');
-        off.width = img.width;
-        off.height = img.height;
-        const c = off.getContext('2d');
-        if(c){
-          c.drawImage(img, 0, 0);
-          const id = c.getImageData(0, 0, off.width, off.height);
-          const data = id.data;
-          for(let i=0;i<data.length;i+=4){
-            const r = data[i], g = data[i+1], b = data[i+2];
-            const a = data[i+3];
-            // Use luminance so we treat near‑black background as
-            // transparent but leave bright pixels crisp.
-            const lum = 0.2126*r + 0.7152*g + 0.0722*b;
-            let alpha = a;
-            if(lum < 10){
-              alpha = 0;
-            }
-            data[i+3] = alpha;
-          }
-          c.putImageData(id, 0, 0);
-          source = off;
-        }
-      }
+      const processed = punchOutSpriteBackground(img);
+      if(processed) source = processed;
     }catch(e){}
     TOWER_SPRITES[key] = {
       img: source,
@@ -66,17 +110,23 @@ if(typeof Image !== 'undefined'){
   // Cannon/Splash art is drawn “facing up” in the source, so rotate
   // them 90° counter‑clockwise to align with our aim direction.
   const quarterTurnCCW = -Math.PI/2;
-  loadTowerSprite('laser', 'data/tower-laser.png', 0, 1.2);
-  loadTowerSprite('cannon', 'data/tower-cannon.png', quarterTurnCCW, 1.2);
-  // Slightly smaller so it fits comfortably within one tile.
-  loadTowerSprite('splash', 'data/tower-splash.png', quarterTurnCCW, 1.0);
+  // Size multipliers keep tower heads comfortably inside the pedestal
+  // circle. Adjust per‑tower factors if you update art.
+  loadTowerSprite('laser', 'data/tower-laser.png', quarterTurnCCW, 0.9);
+  loadTowerSprite('cannon', 'data/tower-cannon.png', quarterTurnCCW, 0.95);
+  loadTowerSprite('splash', 'data/tower-splash.png', quarterTurnCCW, 0.9);
 
   // Pedestal image shared by towers and the reactor.
   (()=>{
     try{
       const img = new Image();
       img.onload = ()=>{
-        PEDESTAL_SPRITE.img = img;
+        let source = img;
+        try{
+          const processed = punchOutSpriteBackground(img);
+          if(processed) source = processed;
+        }catch(e){}
+        PEDESTAL_SPRITE.img = source;
         PEDESTAL_SPRITE.loaded = true;
       };
       img.onerror = ()=>{
@@ -84,6 +134,28 @@ if(typeof Image !== 'undefined'){
         PEDESTAL_SPRITE.loaded = false;
       };
       img.src = 'data/reactor-pedestal.png';
+    }catch(e){}
+  })();
+
+  // Reactor core sprite (optional). Uses a black/flat background in the
+  // source PNG which we treat as transparent via punchOutSpriteBackground.
+  (()=>{
+    try{
+      const img = new Image();
+      img.onload = ()=>{
+        let source = img;
+        try{
+          const processed = punchOutSpriteBackground(img);
+          if(processed) source = processed;
+        }catch(e){}
+        REACTOR_SPRITE.img = source;
+        REACTOR_SPRITE.loaded = true;
+      };
+      img.onerror = ()=>{
+        REACTOR_SPRITE.img = null;
+        REACTOR_SPRITE.loaded = false;
+      };
+      img.src = 'data/reactor-core.png';
     }catch(e){}
   })();
 }
@@ -278,18 +350,47 @@ class BaseTower {
     ctx.translate(this.x,this.y);
     const baseCol = this.baseColor || COLORS.tower;
     const tile = this.tile || 60;
-    // Square footprint so the pedestal sits neatly inside a single grid cell.
+
+     // Steel rail ring around the pedestal so tower pads feel like
+     // they sit in a recessed track similar to the path rails.
+     {
+     // Keep the rail almost exactly on the outer ring of the pedestal
+     // art; just a touch inside so it doesn't peek past the sprite.
+     const railR = tile * 0.46;
+     ctx.save();
+     ctx.lineCap = 'round';
+       // Outer ring tinted to the tower's base color with a subtle shadow
+       ctx.shadowColor = baseCol;
+      ctx.shadowBlur = 6;
+       ctx.strokeStyle = baseCol;
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.arc(0, 0, railR, 0, Math.PI*2);
+      ctx.stroke();
+       // Inner highlight so the rail catches the light, using a slightly
+       // thinner stroke of the same tower color.
+       ctx.shadowBlur = 0;
+       ctx.strokeStyle = baseCol;
+       ctx.lineWidth = 1.4;
+       ctx.beginPath();
+       ctx.arc(0, 0, railR-0.5, 0, Math.PI*2);
+       ctx.stroke();
+       ctx.restore();
+     }
+
+    // Footprint sized so the circular pedestal is clearly visible and
+    // slightly larger than the tile while not overwhelming neighbouring cells.
     if(PEDESTAL_SPRITE && PEDESTAL_SPRITE.loaded && PEDESTAL_SPRITE.img){
       const img = PEDESTAL_SPRITE.img;
       const baseSize = Math.max(img.width, img.height) || 1;
-      const desired = tile * 0.9;
+      const desired = tile * 1.2;
       const scale = desired / baseSize;
       const dw = img.width * scale;
       const dh = img.height * scale;
       ctx.drawImage(img, -dw/2, -dh/2, dw, dh);
     } else {
       // Fallback: simple flat slab
-      const pedSize = tile * 0.9;
+      const pedSize = tile * 1.2;
       const pedW = pedSize;
       const pedH = pedSize;
       const corner = 7;
@@ -311,33 +412,37 @@ class BaseTower {
       ctx.stroke();
     }
 
-    // Hex turret base sitting on the pedestal
-    const r = Math.min(16, tile * 0.24);
-    ctx.shadowColor = baseCol;
-    ctx.shadowBlur = 10;
-    const sides = 6;
-    ctx.beginPath();
-    for(let i=0;i<sides;i++){
-      const a = i*(Math.PI*2/sides) + Math.PI/6;
-      const px = Math.cos(a)*r, py = Math.sin(a)*r;
-      if(i===0) ctx.moveTo(px,py); else ctx.lineTo(px,py);
+    // Optional hex turret base sitting on the pedestal. Towers that use
+    // full sprite art can disable this by setting this.useHexBase=false.
+    const useHex = this.useHexBase !== false;
+    if(useHex){
+      const r = Math.min(16, tile * 0.24);
+      ctx.shadowColor = baseCol;
+      ctx.shadowBlur = 10;
+      const sides = 6;
+      ctx.beginPath();
+      for(let i=0;i<sides;i++){
+        const a = i*(Math.PI*2/sides) + Math.PI/6;
+        const px = Math.cos(a)*r, py = Math.sin(a)*r;
+        if(i===0) ctx.moveTo(px,py); else ctx.lineTo(px,py);
+      }
+      ctx.closePath();
+      // Fill with slight gradient illusion
+      const grad = ctx.createLinearGradient(-r,-r,r,r);
+      grad.addColorStop(0, '#0e2a20');
+      grad.addColorStop(1, baseCol);
+      ctx.fillStyle = grad;
+      ctx.fill();
+      ctx.shadowBlur = 0;
+      ctx.lineWidth = 2;
+      ctx.strokeStyle = baseCol;
+      ctx.stroke();
+      // Center bolt/cap
+      ctx.fillStyle = baseCol;
+      ctx.globalAlpha = 0.8;
+      ctx.beginPath(); ctx.arc(0,0,3.5,0,Math.PI*2); ctx.fill();
+      ctx.globalAlpha = 1;
     }
-    ctx.closePath();
-    // Fill with slight gradient illusion
-    const grad = ctx.createLinearGradient(-r,-r,r,r);
-    grad.addColorStop(0, '#0e2a20');
-    grad.addColorStop(1, baseCol);
-    ctx.fillStyle = grad;
-    ctx.fill();
-    ctx.shadowBlur = 0;
-    ctx.lineWidth = 2;
-    ctx.strokeStyle = baseCol;
-    ctx.stroke();
-    // Center bolt/cap
-    ctx.fillStyle = COLORS.accent2;
-    ctx.globalAlpha = 0.8;
-    ctx.beginPath(); ctx.arc(0,0,3.5,0,Math.PI*2); ctx.fill();
-    ctx.globalAlpha = 1;
     ctx.restore();
   }
   drawIcon(ctx){ /* default: none */ }
@@ -375,6 +480,8 @@ export class CannonTower extends BaseTower{
     super('basic',gx,gy,tile);
     const def=TOWER_TYPES.basic;
     this.baseColor = COLORS.towerBasic;
+    // Use sprite art for the turret head; keep only the shared pedestal.
+    this.useHexBase = false;
     this.fireRate = def.fireRate;
     this.cooldown = 0;
     this.damage = def.damage;
@@ -407,15 +514,24 @@ export class CannonTower extends BaseTower{
       if(d2v > range*range) return;
     }
     if(this.target && this.cooldown<=0){
-      const rateMul = (1 + 0.2*this.rateLevel) * (buffs.fireRateMul||1) * this.getFireRateBuff();
+      const rateCharMul = this.game && typeof this.game.getTowerFireRateMul === 'function'
+        ? this.game.getTowerFireRateMul('cannon')
+        : 1;
+      const rateMul = (1 + 0.2*this.rateLevel) * (buffs.fireRateMul||1) * this.getFireRateBuff() * rateCharMul;
       const interval = 1 / (this.fireRate*rateMul);
       this.cooldown = interval;
       this.lastShotInterval = interval;
-      const slow = this.hasSlow? { pct:0.25*(buffs.slowPotencyMul||1), dur:1.8 } : null;
-      const burn = this.hasBurn? { dps: 6*(buffs.burnDpsMul||1), dur: 2.0 } : null;
+      const statusMul = this.game && typeof this.game.getStatusEffectMul === 'function'
+        ? this.game.getStatusEffectMul()
+        : 1;
+      const slow = this.hasSlow? { pct:0.25*(buffs.slowPotencyMul||1)*statusMul, dur:1.8 } : null;
+      const burn = this.hasBurn? { dps: 6*(buffs.burnDpsMul||1)*statusMul, dur: 2.0 } : null;
       const adaptive = this.consumeAdaptiveBonus();
       const baseDmg = (this.damage||0) * (buffs.baseDamageMul||1);
-      let dmg = baseDmg * (buffs.dmgMul||1) * adaptive;
+      const charMul = this.game && typeof this.game.getTowerDamageMul === 'function'
+        ? this.game.getTowerDamageMul('cannon')
+        : 1;
+      let dmg = baseDmg * (buffs.dmgMul||1) * adaptive * charMul;
       dmg = this.applyResonanceBonus(this.target, dmg);
       const tp = this.applyTargetPainter(this.target, dmg);
       dmg = tp.dmg;
@@ -423,7 +539,7 @@ export class CannonTower extends BaseTower{
       const target = this.target;
       if(target && target.alive){
         const color = this.baseColor || COLORS.towerBasic;
-        target.damage(dmg, 'bullet', { slowPct: slow?.pct, burnDps: burn?.dps, color, source:{x:this.x,y:this.y}, hitDamage:dmg, crit:isCrit });
+        target.damage(dmg, 'bullet', { slowPct: slow?.pct, burnDps: burn?.dps, color, source:{x:this.x,y:this.y}, hitDamage:dmg, crit:isCrit, towerKind:'cannon' });
         if(isCrit && this.game && typeof this.game.registerCrit === 'function'){
           this.game.registerCrit(dmg);
         }
@@ -464,17 +580,21 @@ export class CannonTower extends BaseTower{
   }
   tryHit(enemies){ /* hitscan: handled in update */ }
   draw(ctx){
-    // Base + turret head (range drawn externally to avoid clutter)
-    this.drawBase(ctx);
-    this.drawIcon(ctx);
     const spr = TOWER_SPRITES.cannon;
+    const hasSprite = spr && spr.loaded;
+    // Always keep the pedestal so towers still feel anchored on the
+    // grid, but skip the procedural head when a sprite is present.
+    this.drawBase(ctx);
+    if(!hasSprite){
+      this.drawIcon(ctx);
+    }
     ctx.save();
     ctx.translate(this.x,this.y);
     ctx.rotate(this.rotation + (spr?.angleOffset || 0));
-    if(spr && spr.loaded){
+    if(hasSprite){
       const img = spr.img;
       const baseSize = Math.max(spr.w, spr.h) || 1;
-      const desired = this.tile * (spr.sizeMul || 1.3);
+      const desired = this.tile * (spr.sizeMul || 1.0);
       const scale = desired / baseSize;
       ctx.save();
       ctx.drawImage(
@@ -486,7 +606,7 @@ export class CannonTower extends BaseTower{
       );
       ctx.restore();
     } else {
-      // Fallback: original vector cannon head
+      // Fallback: original vector cannon head (base + icon drawn above)
       ctx.fillStyle = COLORS.accent2;
       ctx.shadowColor = COLORS.accent2; ctx.shadowBlur = 10;
       ctx.beginPath();
@@ -570,10 +690,23 @@ export class LaserTower extends BaseTower{
     super('laser',gx,gy,tile);
     const def=TOWER_TYPES.laser;
     this.baseColor = COLORS.towerLaser;
+    this.useHexBase = false;
     this.dps = def.dps;
     this.burnCooldown = 0;
     this._buzz = null;
     this.hitSparks = [];
+  }
+  // Beam origin is very slightly offset so the laser lines up with the
+  // central aperture in the sprite art rather than the exact tile center.
+  getBeamOrigin(){
+    const angle = this.rotation || 0;
+    // Place the origin a bit in front of the tower along its aim
+    // direction so the beam appears to fire from the emitter pod at
+    // the edge of the sprite.
+    const forward = (this.tile || 60) * 0.3;
+    const dx = Math.cos(angle) * forward;
+    const dy = Math.sin(angle) * forward;
+    return { x:this.x + dx, y:this.y + dy };
   }
   drawIcon(ctx){
     // Lightning bolt
@@ -605,17 +738,36 @@ export class LaserTower extends BaseTower{
       // damage over time
       const adaptive = this.consumeAdaptiveBonus();
       const baseDps = this.dps * (buffs.baseDamageMul||1);
-      let dps = baseDps * (1 + 0.2*this.rateLevel) * (buffs.dmgMul||1) * this.getFireRateBuff() * adaptive;
+      const charMul = this.game && typeof this.game.getTowerDamageMul === 'function'
+        ? this.game.getTowerDamageMul('laser')
+        : 1;
+      let dps = baseDps * (1 + 0.2*this.rateLevel) * (buffs.dmgMul||1) * this.getFireRateBuff() * adaptive * charMul;
       dps = this.applyResonanceBonus(this.target, dps);
       const tp = this.applyTargetPainter(this.target, dps);
       dps = tp.dmg;
       const isCrit = tp.crit;
-      this.target.damage(dps*dt, 'laser', { dps, color: this.baseColor || COLORS.towerLaser, source:{x:this.x,y:this.y}, hitDamage:dps*dt, crit: isCrit });
+      const origin = this.getBeamOrigin();
+      this.target.damage(dps*dt, 'laser', {
+        dps,
+        color: this.baseColor || COLORS.towerLaser,
+        source:{ x:origin.x, y:origin.y },
+        hitDamage:dps*dt,
+        crit: isCrit
+      });
       if(isCrit && this.game && typeof this.game.registerCrit === 'function'){
         this.game.registerCrit(dps*dt);
       }
-      if(this.hasSlow){ this.target.applySlow(0.35*(buffs.slowPotencyMul||1), 0.2); }
-      if(this.hasBurn){ this.burnCooldown -= dt; if(this.burnCooldown<=0){ this.target.applyBurn(8*(buffs.burnDpsMul||1), 2.0); this.burnCooldown = 0.3; } }
+      const statusMul = this.game && typeof this.game.getStatusEffectMul === 'function'
+        ? this.game.getStatusEffectMul()
+        : 1;
+      if(this.hasSlow){ this.target.applySlow(0.35*(buffs.slowPotencyMul||1)*statusMul, 0.2); }
+      if(this.hasBurn){
+        this.burnCooldown -= dt;
+        if(this.burnCooldown<=0){
+          this.target.applyBurn(8*(buffs.burnDpsMul||1)*statusMul, 2.0);
+          this.burnCooldown = 0.3;
+        }
+      }
       if(!this._buzz){ this._buzz = audio.buzz(); }
       // spawn endpoint spark (throttled)
       if(!this._sparkCooldown) this._sparkCooldown = 0;
@@ -633,17 +785,22 @@ export class LaserTower extends BaseTower{
   stopAudio(){ if(this._buzz){ try{ this._buzz.stop(); }catch(e){} this._buzz=null; } }
   tryHit(enemies){/* no bullets */}
   draw(ctx){
-    // base + emitter
-    this.drawBase(ctx);
-    this.drawIcon(ctx);
     const spr = TOWER_SPRITES.laser;
+    const hasSprite = spr && spr.loaded;
+    // Always draw the pedestal so the emitter doesn't float directly
+    // above the path; hide the icon when using a sprite.
+    this.drawBase(ctx);
+    if(!hasSprite){
+      this.drawIcon(ctx);
+    }
     ctx.save();
     ctx.translate(this.x,this.y);
-    ctx.rotate(this.rotation + (spr?.angleOffset || 0));
-    if(spr && spr.loaded){
+    const offset = spr?.angleOffset || 0;
+    ctx.rotate(this.rotation + offset);
+    if(hasSprite){
       const img = spr.img;
       const baseSize = Math.max(spr.w, spr.h) || 1;
-      const desired = this.tile * (spr.sizeMul || 1.2);
+      const desired = this.tile * (spr.sizeMul || 1.0);
       const scale = desired / baseSize;
       ctx.save();
       ctx.drawImage(
@@ -655,7 +812,7 @@ export class LaserTower extends BaseTower{
       );
       ctx.restore();
     } else {
-      // Fallback: original vector emitter head
+      // Fallback: original vector emitter head (icon already drawn above)
       ctx.shadowColor = COLORS.accent2; ctx.shadowBlur = 10;
       ctx.fillStyle = COLORS.accent2;
       ctx.beginPath();
@@ -671,21 +828,22 @@ export class LaserTower extends BaseTower{
     ctx.restore();
     // beam
     if(this.target){
+      const origin = this.getBeamOrigin();
       ctx.save();
       ctx.strokeStyle = COLORS.accent2;
       ctx.lineWidth = this.hasSlow? 4 : 3;
       ctx.shadowColor = COLORS.accent2; ctx.shadowBlur = 12;
-      ctx.beginPath(); ctx.moveTo(this.x,this.y); ctx.lineTo(this.target.x, this.target.y); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(origin.x,origin.y); ctx.lineTo(this.target.x, this.target.y); ctx.stroke();
       // inner highlight
-      ctx.globalAlpha = 0.6; ctx.strokeStyle = 'white'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(this.x,this.y); ctx.lineTo(this.target.x, this.target.y); ctx.stroke();
+      ctx.globalAlpha = 0.6; ctx.strokeStyle = 'white'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(origin.x,origin.y); ctx.lineTo(this.target.x, this.target.y); ctx.stroke();
       ctx.restore();
       // beam sparkles
-      const dx = this.target.x - this.x, dy = this.target.y - this.y;
+      const dx = this.target.x - origin.x, dy = this.target.y - origin.y;
       const d = Math.hypot(dx,dy)||1; const ux = dx/d, uy = dy/d;
       for(let i=0;i<6;i++){
         const t = (i+1)/7;
-        const px = this.x + ux*d*t + (Math.random()*2-1)*4;
-        const py = this.y + uy*d*t + (Math.random()*2-1)*4;
+        const px = origin.x + ux*d*t + (Math.random()*2-1)*4;
+        const py = origin.y + uy*d*t + (Math.random()*2-1)*4;
         ctx.save();
         ctx.globalAlpha = 0.7;
         ctx.shadowColor = COLORS.accent2; ctx.shadowBlur = 10;
@@ -716,6 +874,7 @@ export class SplashTower extends BaseTower{
     super('splash',gx,gy,tile);
     const def=TOWER_TYPES.splash;
     this.baseColor = COLORS.towerSplash;
+    this.useHexBase = false;
     this.fireRate = def.fireRate; this.cooldown=0;
     this.damage = def.damage; this.splashRadius = def.splashRadius; this.baseBulletSpeed = def.bulletSpeed;
     this.bubbles = []; // purely visual shells
@@ -769,7 +928,10 @@ export class SplashTower extends BaseTower{
     this.tickPerkTimers(dt);
     this.cooldown = Math.max(0, this.cooldown - dt);
 
-    const puddleBaseR = this.tile * 0.6 * (buffs.splashRadiusMul||1); // a bit wider than one tile
+    const splashRadiusMul = this.game && typeof this.game.getSplashRadiusMul === 'function'
+      ? this.game.getSplashRadiusMul()
+      : (buffs.splashRadiusMul||1);
+    const puddleBaseR = this.tile * 0.6 * splashRadiusMul; // a bit wider than one tile
     const range = this.getRange();
     // For actual shots, keep impact tiles within the real attack radius shown to the player.
     const r2 = range*range;
@@ -841,12 +1003,18 @@ export class SplashTower extends BaseTower{
     if(this.target && impact && this.cooldown<=0){
       const rateMul = (1 + 0.2*this.rateLevel) * (buffs.fireRateMul||1) * this.getFireRateBuff();
       const baseInterval = 1 / (this.fireRate*rateMul);
-      const slow = this.hasSlow? { pct:0.35*(buffs.slowPotencyMul||1), dur:1.6 } : null;
-      const burn = this.hasBurn? { dps: 5*(buffs.burnDpsMul||1), dur: 2.2 } : null;
+      const statusMul = this.game && typeof this.game.getStatusEffectMul === 'function'
+        ? this.game.getStatusEffectMul()
+        : 1;
+      const slow = this.hasSlow? { pct:0.35*(buffs.slowPotencyMul||1)*statusMul, dur:1.6 } : null;
+      const burn = this.hasBurn? { dps: 5*(buffs.burnDpsMul||1)*statusMul, dur: 2.2 } : null;
       const splashR = puddleBaseR;
       const adaptive = this.consumeAdaptiveBonus();
       const baseDmg = (this.damage||0) * (buffs.baseDamageMul||1);
-      let dmg = baseDmg * (buffs.dmgMul||1) * adaptive;
+      const charMul = this.game && typeof this.game.getTowerDamageMul === 'function'
+        ? this.game.getTowerDamageMul('splash')
+        : 1;
+      let dmg = baseDmg * (buffs.dmgMul||1) * adaptive * charMul;
       dmg = this.applyResonanceBonus(this.target, dmg);
       const tp = this.applyTargetPainter(this.target, dmg);
       dmg = tp.dmg;
@@ -922,16 +1090,21 @@ export class SplashTower extends BaseTower{
   }
   tryHit(enemies){ /* hitscan AoE handled in update */ }
   draw(ctx){
-    this.drawBase(ctx);
-    this.drawIcon(ctx);
     const spr = TOWER_SPRITES.splash;
+    const hasSprite = spr && spr.loaded;
+    // Keep the shared pedestal for grounding but hide the procedural
+    // launcher art whenever a sprite is present.
+    this.drawBase(ctx);
+    if(!hasSprite){
+      this.drawIcon(ctx);
+    }
     ctx.save();
     ctx.translate(this.x,this.y);
     ctx.rotate(this.rotation + (spr?.angleOffset || 0));
-    if(spr && spr.loaded){
+    if(hasSprite){
       const img = spr.img;
       const baseSize = Math.max(spr.w, spr.h) || 1;
-      const desired = this.tile * (spr.sizeMul || 1.3);
+      const desired = this.tile * (spr.sizeMul || 1.0);
       const scale = desired / baseSize;
       ctx.save();
       ctx.drawImage(
@@ -943,7 +1116,7 @@ export class SplashTower extends BaseTower{
       );
       ctx.restore();
     } else {
-      // Fallback: original launcher tube + cradle
+      // Fallback: original launcher tube + cradle (base + icon drawn above)
       ctx.strokeStyle = COLORS.accent; ctx.lineWidth = 2;
       ctx.beginPath(); ctx.arc(-2,0,8,0,Math.PI*2); ctx.stroke();
       ctx.fillStyle = COLORS.accent;

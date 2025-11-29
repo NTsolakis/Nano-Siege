@@ -1,9 +1,10 @@
-import { GAME_RULES, COLORS, UPGRADE_COSTS } from './config.js';
+import { GAME_RULES, COLORS, UPGRADE_COSTS, getHpColor, TOWER_TYPES } from './config.js';
 import { MAPS, drawMapPreview } from './maps.js';
+import { punchOutSpriteBackground } from './tower.js';
 
 export class UIManager{
   constructor(){
-    this.listeners = { startWave: [], startGame: [], pause: [], resume: [], retry: [], restart: [], sandboxStart: [], sandboxReset: [], sandboxOpen: [], toMenu: [], toMissionSelect: [], selectTowerType: [], upgradeSlow: [], upgradeRate: [], upgradeRange: [], upgradeBurn: [], sellTower: [], sellConfirm: [], sellCancel: [], selectMap: [], toggleFast: [], closeUpg: [], toggleVolume: [], setVolume: [], shopBuy: [], shopReroll: [], shopContinue: [], shopBuyAbility: [], useBomb: [], useOverclock: [], useCryo: [], toggleDev: [], toggleAutoSpeed: [], exitConfirm: [], exitCancel: [], openShop: [], closeShop: [], devUnlockUlts: [], devUpgradeMax: [], mainNew: [], mainLoad: [], mainAssembly: [], loadSlot: [], openAssembly: [], closeAssembly: [], startMission: [], assemblySave: [], assemblyLoad: [], openAssemblyCore: [], menuBack: [], mainSettings: [], mainSettingsBack: [], loadBack: [], loginUser: [], openCreateUser: [], closeCreateUser: [], createUser: [], openLeaderboard: [], closeLeaderboard: [], leaderboardSignIn: [], logout: [], removePassive: [], leaderboardSelectMap: [], pauseLoginOpen: [] };
+    this.listeners = { startWave: [], startGame: [], pause: [], resume: [], retry: [], restart: [], sandboxStart: [], sandboxReset: [], sandboxOpen: [], toMenu: [], toMissionSelect: [], selectTowerType: [], upgradeSlow: [], upgradeRate: [], upgradeRange: [], upgradeBurn: [], sellTower: [], sellConfirm: [], sellCancel: [], selectMap: [], toggleFast: [], closeUpg: [], toggleVolume: [], setVolume: [], shopBuy: [], shopReroll: [], shopContinue: [], shopBuyAbility: [], useBomb: [], useOverclock: [], useCryo: [], toggleDev: [], toggleDebug: [], toggleAutoSpeed: [], exitConfirm: [], exitCancel: [], openShop: [], closeShop: [], devUnlockUlts: [], devUpgradeMax: [], mainNew: [], mainLoad: [], mainAssembly: [], loadSlot: [], openAssembly: [], closeAssembly: [], startMission: [], assemblySave: [], assemblyLoad: [], openAssemblyCore: [], menuBack: [], mainSettings: [], mainSettingsBack: [], loadBack: [], loginUser: [], openCreateUser: [], closeCreateUser: [], createUser: [], openLeaderboard: [], closeLeaderboard: [], leaderboardSignIn: [], logout: [], removePassive: [], leaderboardSelectMap: [], pauseLoginOpen: [], mainDownload: [] };
     this.$root = document.getElementById('app');
     this.$wave = document.getElementById('stat-wave');
     this.$credits = document.getElementById('stat-credits');
@@ -24,6 +25,18 @@ export class UIManager{
     this.$bannerFeed = document.getElementById('banner-feed');
     this.$palette = document.querySelector('.tower-palette');
     this.$towerBtns = Array.from(document.querySelectorAll('.tower-palette .tower-btn'));
+    this.$towerIcons = Array.from(document.querySelectorAll('.tower-palette .tower-icon'));
+    // Keep tower palette prices in sync with config so any tuning to
+    // TOWER_TYPES costs is reflected automatically in the UI labels.
+    if(this.$towerBtns && this.$towerBtns.length){
+      for(const btn of this.$towerBtns){
+        const key = btn?.dataset?.tower;
+        const def = key && TOWER_TYPES[key];
+        if(!def) continue;
+        const span = btn.querySelector('.tower-cost');
+        if(span) span.textContent = `(${def.cost})`;
+      }
+    }
     // Upgrade panel
     this.$upg = document.getElementById('upgrade-panel');
     this.$upgTitle = this.$upg ? this.$upg.querySelector('.upg-title') : null;
@@ -70,6 +83,8 @@ export class UIManager{
     this.$statSlow = document.getElementById('stat-slow');
     this.$statBurn = document.getElementById('stat-burn');
     this.$statTarget = document.getElementById('stat-target');
+    this.$combatStats = document.getElementById('combat-stats');
+    this.$combatToggle = document.getElementById('combat-stats-toggle');
     // Fullscreen main menus
     this.$mainMenu = document.getElementById('mainmenu-overlay');
     this.$loadMenu = document.getElementById('loadmenu-overlay');
@@ -81,6 +96,11 @@ export class UIManager{
     this.$leaderboardStatus = document.getElementById('leaderboard-status');
     this.$leaderboardWarning = document.getElementById('leaderboard-warning');
     this.$leaderboardDevWarning = document.getElementById('leaderboard-dev-warning');
+    this.$leaderboardLoading = document.getElementById('leaderboard-loading');
+    // Mode loading overlay (for Endless / Sandbox / Assembly transitions)
+    this.$modeLoading = document.getElementById('mode-loading-overlay');
+    this.$modeLoadingTitle = document.getElementById('mode-loading-title');
+    this.$modeLoadingSub = document.getElementById('mode-loading-sub');
     if(this.$mainMenu && this.$mainMenu.classList.contains('visible')){
       document.body.classList.add('mainmenu-visible');
     }
@@ -95,6 +115,14 @@ export class UIManager{
     this.$mapOverlay = document.getElementById('mapselect-overlay');
     this.$btnMapStart = document.getElementById('btn-map-start');
     this.$btnMapBack = document.getElementById('btn-map-back');
+    // Character select under map carousel
+    this.$characterRow = document.getElementById('character-row');
+    this.$characterButtons = Array.from(document.querySelectorAll('.character-btn'));
+    this.selectedCharacterKey = 'volt';
+    this.$modesOverlay = document.getElementById('gamemodes-overlay');
+    this.$btnMainModes = document.getElementById('btn-main-modes');
+    this.$btnMainDownload = document.getElementById('btn-main-download');
+    this.$btnModesBack = document.getElementById('btn-modes-back');
     this.$btnMainEndless = document.getElementById('btn-main-endless');
     this.$btnMainLeaderboard = document.getElementById('btn-main-leaderboard');
     this.$btnMainAssembly = document.getElementById('btn-main-assembly');
@@ -165,8 +193,12 @@ export class UIManager{
     this.updateLeaderboardWarning(null);
     this.setLeaderboardDevWarning(false);
     // Assembly menu legacy buttons removed
-    // HP bar
+    // HP bar + character portrait + pilot dialogue
     this.$hpFill = document.getElementById('hp-fill');
+    this.$hpCharSprite = document.getElementById('hp-char-sprite');
+    this.$hpCharIcon = document.getElementById('hp-char-icon');
+    this.$hpCharInner = document.getElementById('hp-char-inner');
+    this.$pilotDialog = document.getElementById('pilot-dialog');
     this.maxLives = (GAME_RULES && GAME_RULES.startingLives) ? GAME_RULES.startingLives : 30;
     // Ability buttons (visible, locked by default)
     this.$abilBomb = document.getElementById('btn-abil-bomb');
@@ -181,10 +213,11 @@ export class UIManager{
       cryo: { title:'Cryo Burst', lines:['Slows all enemies in the chamber.', 'Duration up, cooldown down per level.'] },
       slow: { title:'Slow Module', lines:['Bullets briefly slow enemies.', 'Single install; pairs well with splash.'] },
       burn: { title:'Burn Module', lines:['Bullets apply burning damage over time.', 'Single install; stacks with other towers.'] },
-      rate: { title:'Upgrade DPS', lines:['Increase sustained damage per second.', 'Max 3 levels.'] },
+      rate: { title:'Upgrade Tower Damage', lines:['Increase this tower\'s damage.', 'Max 3 levels.'] },
       range: { title:'Upgrade Fire Range', lines:['Increase range by 15% per level.', 'Max 3 levels.'] },
       start: { title:'Start Wave', lines:['Begin spawning the next wave of enemies.'] },
       fast: { title:'Speed', lines:['Cycles 1x → 2x → 3x → 4x.', 'Resets to 1x on bosses/bonus/difficulty.'] },
+      character: { title:'Pilot', lines:['Character-specific passive bonuses.'] },
       // Tower palette tooltips
       tower_basic: { title:'Cannon', lines:['Single‑target ballistic turret.', 'Solid all‑rounder; supports slow/burn.'] },
       tower_laser: { title:'Laser', lines:['Continuous beam damage over time.', 'Great vs tough enemies; precise aim.'] },
@@ -247,6 +280,199 @@ export class UIManager{
     attachTip(this.$abilBomb, 'bomb', { preferBelow:true });
     attachTip(this.$abilOverclock, 'overclock', { preferBelow:true });
     attachTip(this.$abilCryo, 'cryo', { preferBelow:true });
+
+    // Character select tooltips (map select)
+    this.characterTips = {
+      volt: {
+        title: 'Volt — Cannon Specialist',
+        lines: [
+          '+10% Cannon damage.',
+          '+3% Cannon fire rate every 5 waves.',
+          '+5 NanoCredits per 10 Cannon kills.'
+        ]
+      },
+      lumen: {
+        title: 'Lumen — Laser Specialist',
+        lines: [
+          '+10% Laser DPS.',
+          '+3% Laser DPS every 5 waves.',
+          'All tower upgrades cost 20% less.'
+        ]
+      },
+      torque: {
+        title: 'Torque — Splash Specialist',
+        lines: [
+          '+10% Splash radius.',
+          '+5% Splash damage every 5 waves.',
+          'Burn and slow effects are 20% stronger.'
+        ]
+      }
+    };
+    if(this.$characterButtons && this.$characterButtons.length){
+      const characterTips = this.characterTips;
+      this.$characterButtons.forEach((btn)=>{
+        const key = (btn.dataset && btn.dataset.character) || '';
+        const tip = characterTips[key];
+        if(tip) attachTip(btn, tip, { preferBelow:true });
+      });
+    }
+    // Player portrait tooltip (uses dynamic character data)
+    attachTip(this.$hpCharIcon, 'character', { preferBelow:true });
+
+    // Make the combat stats card draggable within the canvas area only.
+    if(this.$combatStats){
+      const shell = document.getElementById('canvas-shell');
+      const card = this.$combatStats;
+      const canvas = document.getElementById('game');
+      let drag = null;
+      const onPointerDown = (e)=>{
+        const isTouch = e.pointerType === 'touch';
+        if(!isTouch && e.button !== 0) return;
+        // Don't start a drag when clicking the minimize/expand toggle or other buttons.
+        if(e.target && (e.target.closest('#combat-stats-toggle') || e.target.closest('button'))){
+          return;
+        }
+        if(!shell || !canvas) return;
+        const rect = card.getBoundingClientRect();
+        const shellRect = shell.getBoundingClientRect();
+        drag = {
+          pointerId: e.pointerId,
+          offsetX: e.clientX - rect.left,
+          offsetY: e.clientY - rect.top,
+          shellLeft: shellRect.left,
+          shellTop: shellRect.top
+        };
+        card.classList.add('dragging');
+        card.setPointerCapture?.(e.pointerId);
+        e.preventDefault();
+      };
+      const onPointerMove = (e)=>{
+        if(!drag || e.pointerId !== drag.pointerId || !shell || !canvas) return;
+        const canvasRect = canvas.getBoundingClientRect();
+        const cardRect = card.getBoundingClientRect();
+        // Desired viewport position for the card's top-left based on pointer + offset.
+        let vLeft = e.clientX - drag.offsetX;
+        let vTop = e.clientY - drag.offsetY;
+        const margin = 4;
+        const minLeft = canvasRect.left + margin;
+        const maxLeft = canvasRect.right - cardRect.width - margin;
+        const minTop = canvasRect.top + margin;
+        const maxTop = canvasRect.bottom - cardRect.height - margin;
+        vLeft = Math.max(minLeft, Math.min(maxLeft, vLeft));
+        vTop = Math.max(minTop, Math.min(maxTop, vTop));
+        // Convert back to shell-relative coordinates.
+        const left = vLeft - drag.shellLeft;
+        const top = vTop - drag.shellTop;
+        card.style.left = `${left}px`;
+        card.style.top = `${top}px`;
+      };
+      const endDrag = (e)=>{
+        if(!drag || (e && typeof e.pointerId === 'number' && e.pointerId !== drag.pointerId)) return;
+        drag = null;
+        card.classList.remove('dragging');
+        if(e && typeof e.pointerId === 'number'){
+          card.releasePointerCapture?.(e.pointerId);
+        }
+      };
+      card.addEventListener('pointerdown', onPointerDown);
+      window.addEventListener('pointermove', onPointerMove);
+      window.addEventListener('pointerup', endDrag);
+      window.addEventListener('pointercancel', endDrag);
+    }
+    // Minimize / expand toggle for combat stats: when minimized, only the
+    // title bar with the toggle button is visible (small bar).
+    if(this.$combatStats && this.$combatToggle){
+      const card = this.$combatStats;
+      const toggle = this.$combatToggle;
+      const setMinimized = (min)=>{
+        if(min){
+          card.classList.add('minimized');
+          toggle.textContent = '+';
+          toggle.setAttribute('aria-label','Expand combat stats');
+        } else {
+          card.classList.remove('minimized');
+          toggle.textContent = '−';
+          toggle.setAttribute('aria-label','Minimize combat stats');
+        }
+      };
+      let minimized = false;
+      setMinimized(minimized);
+      toggle.addEventListener('click', (e)=>{
+        e.preventDefault();
+        e.stopPropagation();
+        minimized = !minimized;
+        setMinimized(minimized);
+      });
+    }
+    // Make the tower upgrade panel draggable, clamped to the game board
+    // so it never covers HUD controls or drifts off-screen. Behaviour
+    // mirrors the combat stats card: left‑button drag, pointer capture,
+    // and clamping to the canvas, but clicks on buttons still work.
+    if(this.$upg){
+      const panel = this.$upg;
+      const shell = document.getElementById('canvas-shell');
+      const canvas = document.getElementById('game');
+      let drag = null;
+      const onPointerDownUpg = (e)=>{
+        const isTouch = e.pointerType === 'touch';
+        if(!isTouch && e.button !== 0) return;
+        // Don't hijack clicks on interactive controls (upgrade buttons,
+        // sell, close, etc.) so they still behave normally.
+        const target = e.target;
+        if(target && (target.closest('button') || target.closest('a') || target.closest('input') || target.closest('textarea') || target.closest('select'))){
+          return;
+        }
+        if(!shell || !canvas) return;
+        const rect = panel.getBoundingClientRect();
+        const shellRect = shell.getBoundingClientRect();
+        drag = {
+          pointerId: e.pointerId,
+          offsetX: e.clientX - rect.left,
+          offsetY: e.clientY - rect.top,
+          shellLeft: shellRect.left,
+          shellTop: shellRect.top
+        };
+        panel.classList.add('dragging');
+        // Switch to explicit top/left anchoring for the duration of the drag.
+        panel.style.right = 'auto';
+        panel.style.bottom = 'auto';
+        panel.style.transform = 'none';
+        panel.setPointerCapture?.(e.pointerId);
+        e.preventDefault();
+      };
+      const onPointerMoveUpg = (e)=>{
+        if(!drag || e.pointerId !== drag.pointerId || !shell || !canvas) return;
+        const canvasRect = canvas.getBoundingClientRect();
+        const panelRect = panel.getBoundingClientRect();
+        // Desired viewport position for the panel's top-left based on pointer + offset.
+        let vLeft = e.clientX - drag.offsetX;
+        let vTop = e.clientY - drag.offsetY;
+        const margin = 4;
+        const minLeft = canvasRect.left + margin;
+        const maxLeft = canvasRect.right - panelRect.width - margin;
+        const minTop = canvasRect.top + margin;
+        const maxTop = canvasRect.bottom - panelRect.height - margin;
+        vLeft = Math.max(minLeft, Math.min(maxLeft, vLeft));
+        vTop = Math.max(minTop, Math.min(maxTop, vTop));
+        // Convert back to shell-relative coordinates.
+        const left = vLeft - drag.shellLeft;
+        const top = vTop - drag.shellTop;
+        panel.style.left = `${left}px`;
+        panel.style.top = `${top}px`;
+      };
+      const endDragUpg = (e)=>{
+        if(!drag || (e && typeof e.pointerId === 'number' && e.pointerId !== drag.pointerId)) return;
+        drag = null;
+        panel.classList.remove('dragging');
+        if(e && typeof e.pointerId === 'number'){
+          panel.releasePointerCapture?.(e.pointerId);
+        }
+      };
+      panel.addEventListener('pointerdown', onPointerDownUpg);
+      window.addEventListener('pointermove', onPointerMoveUpg);
+      window.addEventListener('pointerup', endDragUpg);
+      window.addEventListener('pointercancel', endDragUpg);
+    }
     // Currency hover tips use dynamic cards for readability
     const currencyTips = {
       credits: {
@@ -258,8 +484,8 @@ export class UIManager{
         lines:['Awarded on waves and bonuses.', 'Used for rerolls and shop purchases.']
       },
       cores: {
-        title:'Core Shards (✦)',
-        lines:['Recovered from bosses.', 'Unlock ultimate abilities and reactor perks.']
+        title:'Cores (✦)',
+        lines:['Recovered from major bosses.', 'Unlock ultimate abilities and reactor perks.']
       }
     };
     const creditsTipTarget = (this.$credits && this.$credits.closest?.('.currency-chip')) ? this.$credits.closest('.currency-chip') : this.$credits;
@@ -277,6 +503,126 @@ export class UIManager{
         if(tipKey) attachTip(btn, tipKey, { preferBelow: true });
       }
     }
+    // Tower palette icons: reuse the same sprites as in-game towers,
+    // but punch out their flat backgrounds so the buttons don't show
+    // the grey/white squares behind the art.
+    const initTowerIcons = ()=>{
+      if(!this.$palette || !this.$towerIcons || !this.$towerIcons.length) return;
+      if(typeof Image === 'undefined' || typeof document === 'undefined') return;
+      const iconDefs = [
+        { selector: '.tower-icon-basic', url: 'data/tower-cannon.png' },
+        { selector: '.tower-icon-laser', url: 'data/tower-laser.png' },
+        { selector: '.tower-icon-splash', url: 'data/tower-splash.png' }
+      ];
+      for(const def of iconDefs){
+        const el = this.$palette.querySelector(def.selector);
+        if(!el) continue;
+        try{
+          const img = new Image();
+          img.src = def.url;
+          img.onload = ()=>{
+            try{
+              const source = punchOutSpriteBackground ? punchOutSpriteBackground(img) || img : img;
+              const iconCanvas = document.createElement('canvas');
+              // Slightly larger internal framebuffer so downscaling looks clean.
+              iconCanvas.width = 96;
+              iconCanvas.height = 96;
+              const ctx = iconCanvas.getContext('2d');
+              if(!ctx || !source) return;
+              ctx.clearRect(0, 0, iconCanvas.width, iconCanvas.height);
+              const srcW = source.width || 1;
+              const srcH = source.height || 1;
+              const srcMax = Math.max(srcW, srcH) || 1;
+              const targetSize = 70; // leave a small margin inside the frame
+              const scale = targetSize / srcMax;
+              const drawW = srcW * scale;
+              const drawH = srcH * scale;
+              const dx = (iconCanvas.width - drawW) / 2;
+              const dy = (iconCanvas.height - drawH) / 2;
+              ctx.drawImage(source, dx, dy, drawW, drawH);
+              iconCanvas.style.width = '100%';
+              iconCanvas.style.height = '100%';
+              iconCanvas.style.display = 'block';
+              iconCanvas.style.imageRendering = 'auto';
+              el.innerHTML = '';
+              el.style.backgroundImage = 'none';
+              el.style.backgroundColor = 'transparent';
+              el.appendChild(iconCanvas);
+            }catch(e){}
+          };
+        }catch(e){}
+      }
+    };
+    initTowerIcons();
+    // Character select icons: use the Volt / Torque / Lumen art and
+    // treat their flat backgrounds as transparent, similar to tower icons.
+    const drawProcessedSpriteInto = (url, targetEl, opts={})=>{
+      if(!targetEl || !url) return;
+      if(typeof Image === 'undefined' || typeof document === 'undefined') return;
+      try{
+        const img = new Image();
+        img.src = url;
+        img.onload = ()=>{
+          try{
+            const source = punchOutSpriteBackground ? punchOutSpriteBackground(img) || img : img;
+            const size = opts.size || 96;
+            const targetSize = opts.targetSize || 70;
+            const canvas = document.createElement('canvas');
+            canvas.width = size;
+            canvas.height = size;
+            const ctx = canvas.getContext('2d');
+            if(!ctx || !source) return;
+            ctx.clearRect(0, 0, size, size);
+            const srcW = source.width || 1;
+            const srcH = source.height || 1;
+            const srcMax = Math.max(srcW, srcH) || 1;
+            const scale = targetSize / srcMax;
+            const drawW = srcW * scale;
+            const drawH = srcH * scale;
+            const dx = (size - drawW) / 2;
+            const dy = (size - drawH) / 2;
+            ctx.drawImage(source, dx, dy, drawW, drawH);
+            canvas.style.width = '100%';
+            canvas.style.height = '100%';
+            canvas.style.display = 'block';
+            canvas.style.imageRendering = opts.pixelated ? 'pixelated' : 'auto';
+            if(opts.replaceChildren){
+              targetEl.innerHTML = '';
+              targetEl.appendChild(canvas);
+            } else {
+              targetEl.appendChild(canvas);
+            }
+          }catch(e){}
+        };
+      }catch(e){}
+    };
+    // expose helper for use by other methods (e.g., HP portrait)
+    this._drawProcessedSpriteInto = drawProcessedSpriteInto;
+
+    const initCharacterIcons = ()=>{
+      if(!this.$characterButtons || !this.$characterButtons.length) return;
+      if(typeof Image === 'undefined' || typeof document === 'undefined') return;
+      this.$characterButtons.forEach((btn)=>{
+        const key = (btn.dataset && btn.dataset.character) || '';
+        const iconEl = btn.querySelector('.character-icon');
+        if(!key || !iconEl) return;
+        const imgTag = iconEl.querySelector('img');
+        const url = imgTag ? imgTag.src : (
+          key === 'volt' ? 'data/Volt.png' :
+          key === 'torque' ? 'data/Torque.png' :
+          key === 'lumen' ? 'data/Lumen.png' : null
+        );
+        if(!url) return;
+        // Scale characters so their portraits feel bold and readable
+        // inside the map-select icons. Volt/Lumen are ~1.45×, Torque
+        // slightly larger (2×) since his sprite is visually smaller.
+        const targetSize = key === 'torque'
+          ? Math.round(70 * 2.0)
+          : Math.round(70 * 1.45);
+        drawProcessedSpriteInto(url, iconEl, { size:96, targetSize, pixelated:true, replaceChildren:true });
+      });
+    };
+    initCharacterIcons();
     // Upgrade panel button tips
     attachTip(this.$upgSlow, 'slow');
     attachTip(this.$upgBurn, 'burn');
@@ -315,11 +661,22 @@ export class UIManager{
     };
     this.setUpgradeTips = (tower)=>{
       if(!tower) return;
+      const kind = tower.kind || 'basic';
       const rateLvl = tower.rateLevel||0;
       const nextRate = Math.min(3, rateLvl+1);
       const rateCosts = [UPGRADE_COSTS.rateModule, Math.round(UPGRADE_COSTS.rateModule*1.5), Math.round(UPGRADE_COSTS.rateModule*2.0)];
       const nextRateCost = rateLvl<3 ? rateCosts[rateLvl] : null;
+      // Per-tower damage description
+      let rateDesc = 'Increase this tower\'s damage.';
+      if(kind === 'basic'){
+        rateDesc = 'Cannon shells deal increased damage.';
+      } else if(kind === 'laser'){
+        rateDesc = 'Laser beam deals increased damage over time.';
+      } else if(kind === 'splash'){
+        rateDesc = 'Splash explosions and puddles deal increased damage.';
+      }
       this.tipText.rate.lines = [
+        rateDesc,
         `Level: ${rateLvl}/3`,
         rateLvl<3 ? `Next: ${nextRate}/3 (+20%)` : 'Maxed',
         rateLvl<3 ? `Cost: ${nextRateCost}⚛` : ''
@@ -334,8 +691,24 @@ export class UIManager{
         rangeLvl<3 ? `Next: ${nextRangeLvl}/3 (+15%)` : 'Maxed',
         rangeLvl<3 ? `Cost: ${nextRangeCost}⚛` : ''
       ].filter(Boolean);
-      this.tipText.slow.lines = [ tower.hasSlow? 'Installed' : 'Not installed', 'Bullets briefly slow enemies.' ];
-      this.tipText.burn.lines = [ tower.hasBurn? 'Installed' : 'Not installed', 'Bullets apply burn over time.' ];
+      // Slow / Burn module descriptions per tower type
+      let slowDesc = 'Bullets briefly slow enemies.';
+      let burnDesc = 'Bullets apply burning damage over time.';
+      if(kind === 'laser'){
+        slowDesc = 'Laser beam slows enemies it hits.';
+        burnDesc = 'Laser beam applies burning damage over time.';
+      } else if(kind === 'splash'){
+        slowDesc = 'Splash puddles briefly slow enemies standing in them.';
+        burnDesc = 'Splash puddles apply burning damage over time.';
+      }
+      this.tipText.slow.lines = [
+        tower.hasSlow ? 'Installed' : 'Not installed',
+        slowDesc
+      ];
+      this.tipText.burn.lines = [
+        tower.hasBurn ? 'Installed' : 'Not installed',
+        burnDesc
+      ];
     };
     this.$devOpenShop = document.getElementById('btn-dev-open-shop');
     // Initialize as locked/disabled by default; game unlocks via setAbilityVisible
@@ -343,21 +716,72 @@ export class UIManager{
     if(this.$abilOverclock){ this.$abilOverclock.disabled = true; this.$abilOverclock.classList.add('locked'); this.$abilOverclock.textContent = 'Overclock (Locked)'; }
     if(this.$abilCryo){ this.$abilCryo.disabled = true; this.$abilCryo.classList.add('locked'); this.$abilCryo.textContent = 'Cryo (Locked)'; }
 
-    this.listeners = { startWave: [], startGame: [], pause: [], resume: [], retry: [], restart: [], sandboxStart: [], sandboxReset: [], toMenu: [], toMissionSelect: [], selectTowerType: [], upgradeSlow: [], upgradeRate: [], upgradeRange: [], upgradeBurn: [], sellTower: [], sellConfirm: [], sellCancel: [], selectMap: [], toggleFast: [], closeUpg: [], toggleVolume: [], setVolume: [], shopBuy: [], shopReroll: [], shopContinue: [], shopBuyAbility: [], useBomb: [], useOverclock: [], useCryo: [], toggleDev: [], toggleAutoSpeed: [], exitConfirm: [], exitCancel: [], openShop: [], closeShop: [], devUnlockUlts: [], devUpgradeMax: [], mainNew: [], mainLoad: [], mainAssembly: [], loadSlot: [], openAssembly: [], closeAssembly: [], startMission: [], assemblySave: [], assemblyLoad: [], openAssemblyCore: [], menuBack: [], mainSettings: [], mainSettingsBack: [], loadBack: [], loginUser: [], openCreateUser: [], closeCreateUser: [], createUser: [], openLeaderboard: [], closeLeaderboard: [], leaderboardSignIn: [], logout: [], removePassive: [], leaderboardSelectMap: [], pauseLoginOpen: [] };
+    this.listeners = { startWave: [], startGame: [], pause: [], resume: [], retry: [], restart: [], sandboxStart: [], sandboxReset: [], toMenu: [], toMissionSelect: [], selectTowerType: [], upgradeSlow: [], upgradeRate: [], upgradeRange: [], upgradeBurn: [], sellTower: [], sellConfirm: [], sellCancel: [], selectMap: [], toggleFast: [], closeUpg: [], toggleVolume: [], setVolume: [], shopBuy: [], shopReroll: [], shopContinue: [], shopBuyAbility: [], useBomb: [], useOverclock: [], useCryo: [], toggleDev: [], toggleDebug: [], toggleAutoSpeed: [], exitConfirm: [], exitCancel: [], openShop: [], closeShop: [], devUnlockUlts: [], devUpgradeMax: [], mainNew: [], mainLoad: [], mainAssembly: [], loadSlot: [], openAssembly: [], closeAssembly: [], startMission: [], assemblySave: [], assemblyLoad: [], openAssemblyCore: [], menuBack: [], mainSettings: [], mainSettingsBack: [], loadBack: [], loginUser: [], openCreateUser: [], closeCreateUser: [], createUser: [], openLeaderboard: [], closeLeaderboard: [], leaderboardSignIn: [], logout: [], removePassive: [], leaderboardSelectMap: [], pauseLoginOpen: [], mainDownload: [] };
     // Track dev mode state for UI behavior (e.g., enabling shop buttons and credit label)
     this.devMode = false;
     this.setFragments(0);
     this.setCoreShards(0);
     this.initSandboxValueBindings();
 
+    if(this.$characterButtons && this.$characterButtons.length){
+      const initialSelected = this.$characterButtons.find(btn=> btn.classList.contains('selected'));
+      const initialKey = initialSelected && initialSelected.dataset ? initialSelected.dataset.character : null;
+      if(initialKey){
+        this.selectedCharacterKey = initialKey;
+      } else {
+        const first = this.$characterButtons[0];
+        const firstKey = first && first.dataset ? first.dataset.character : null;
+        if(firstKey) this.selectedCharacterKey = firstKey;
+      }
+      const updateCharacterHighlight = ()=>{
+        this.$characterButtons.forEach((btn)=>{
+          const key = btn.dataset ? btn.dataset.character : null;
+          btn.classList.toggle('selected', key === this.selectedCharacterKey);
+        });
+      };
+      updateCharacterHighlight();
+      this.$characterButtons.forEach((btn)=>{
+        btn.addEventListener('click', ()=>{
+          const key = btn.dataset ? btn.dataset.character : null;
+          if(!key || key === this.selectedCharacterKey) return;
+          this.selectedCharacterKey = key;
+          updateCharacterHighlight();
+          this.emit('selectCharacter', key);
+        });
+      });
+    }
+
     if(this.$start){
       this.$start.addEventListener('click', ()=> this.emit('startWave'));
     }
     // Main menu buttons
+    if(this.$btnMainDownload){
+      // Hosted build vs local build: flip label
+      let isLocal = false;
+      try{
+        if(typeof window !== 'undefined'){
+          if(window.NANO_BUILD_FLAVOR === 'local') isLocal = true;
+          else if(window.location && window.location.protocol === 'file:') isLocal = true;
+        }
+      }catch(e){}
+      this.$btnMainDownload.textContent = isLocal ? 'Check for Updates' : 'Download';
+      this.$btnMainDownload.addEventListener('click', ()=>{
+        try{
+          const url = (typeof window !== 'undefined' && window.NANO_DOWNLOAD_URL) ? window.NANO_DOWNLOAD_URL : 'nano-siege-local.zip';
+          window.location.href = url;
+        }catch(e){}
+      });
+    }
+    if(this.$btnMainModes){
+      this.$btnMainModes.addEventListener('click', ()=>{
+        if(this.showMainMenu) this.showMainMenu(false);
+        if(this.showGameModes) this.showGameModes(true);
+      });
+    }
     if(this.$btnMainEndless){
       this.$btnMainEndless.addEventListener('click', ()=>{
-        // Endless Cycle: go straight to map select.
-        if(this.showMainMenu) this.showMainMenu(false);
+        // Endless Cycle: go straight to map select (from game modes).
+        if(this.showGameModes) this.showGameModes(false);
         if(this.showMapSelect) this.showMapSelect(true);
         if(this.setMapStartLabel) this.setMapStartLabel('Start Endless Cycle');
       });
@@ -365,7 +789,8 @@ export class UIManager{
     if(this.$btnMapBack){
       this.$btnMapBack.addEventListener('click', ()=>{
         if(this.showMapSelect) this.showMapSelect(false);
-        if(this.showMainMenu) this.showMainMenu(true);
+        // Return to game mode selection from map select
+        if(this.showGameModes) this.showGameModes(true);
       });
     }
     if(this.$btnMapStart){
@@ -374,10 +799,22 @@ export class UIManager{
         this.emit('startGame');
       });
     }
+    if(this.$btnModesBack){
+      this.$btnModesBack.addEventListener('click', ()=>{
+        if(this.showGameModes) this.showGameModes(false);
+        if(this.showMainMenu) this.showMainMenu(true);
+      });
+    }
     if(this.$btnMainLeaderboard){ this.$btnMainLeaderboard.addEventListener('click', ()=> this.emit('openLeaderboard')); }
-    if(this.$btnMainAssembly){ this.$btnMainAssembly.addEventListener('click', ()=> this.emit('mainAssembly')); }
+    if(this.$btnMainAssembly){
+      this.$btnMainAssembly.addEventListener('click', ()=>{
+        if(this.showGameModes) this.showGameModes(false);
+        this.emit('mainAssembly');
+      });
+    }
     if(this.$btnMainSandbox){
       this.$btnMainSandbox.addEventListener('click', ()=>{
+        if(this.showGameModes) this.showGameModes(false);
         this.emit('mainSandbox');
       });
     }
@@ -547,6 +984,14 @@ export class UIManager{
       this.emit('toggleDev', v);
     };
     if(this.$devToggleMain){ this.$devToggleMain.addEventListener('change', ()=> onDevChange(this.$devToggleMain)); }
+    // Debug sprite tuning toggle (main settings only)
+    this.$debugToggleMain = document.getElementById('debug-toggle-main');
+    const onDebugChange = (src)=>{
+      const v = !!src.checked;
+      if(this.$debugToggleMain && this.$debugToggleMain!==src) this.$debugToggleMain.checked = v;
+      this.emit('toggleDebug', v);
+    };
+    if(this.$debugToggleMain){ this.$debugToggleMain.addEventListener('change', ()=> onDebugChange(this.$debugToggleMain)); }
 
     // Automatic speed control toggle (main settings + in-game settings)
     const onAutoSpeedChange = (src)=>{
@@ -737,20 +1182,131 @@ export class UIManager{
       const pct = Math.max(0, Math.min(1, n / base));
       this.$hpFill.style.width = `${pct*100}%`;
       // Smoothly blend bar color from accent (green) to danger (red)
-      const accent = COLORS.accent || '#17e7a4';
-      const danger = COLORS.danger || '#ff5370';
-      const t = 1 - pct; // 0 => green, 1 => red
-      const hexToRgb = (h)=>{ const n=parseInt(h.slice(1),16); return {r:(n>>16)&255,g:(n>>8)&255,b:n&255}; };
-      const rgbToHex = ({r,g,b})=>{ const n=(r<<16)|(g<<8)|b; return '#'+n.toString(16).padStart(6,'0'); };
-      const mix = (a,b,u)=>({ r:Math.round(a.r+(b.r-a.r)*u), g:Math.round(a.g+(b.g-a.g)*u), b:Math.round(a.b+(b.b-a.b)*u) });
-      const col = rgbToHex(mix(hexToRgb(accent), hexToRgb(danger), t));
+      const col = getHpColor(pct);
       this.$hpFill.style.background = `linear-gradient(90deg, ${col}, ${col})`;
-      this.$hpFill.style.boxShadow = `inset 0 0 10px rgba(${parseInt(col.slice(1,3),16)}, ${parseInt(col.slice(3,5),16)}, ${parseInt(col.slice(5,7),16)}, 0.45)`;
+      const r = parseInt(col.slice(1,3),16);
+      const g = parseInt(col.slice(3,5),16);
+      const b = parseInt(col.slice(5,7),16);
+      this.$hpFill.style.boxShadow = `inset 0 0 10px rgba(${r}, ${g}, ${b}, 0.45)`;
       this.$hpFill.classList.remove('low');
     }
   }
   setMaxLives(max){ this.maxLives = Math.max(1, max|0); this.setLives(this.maxLives); }
+  setUpgradeCostMultiplier(mul){
+    const v = Number.isFinite(mul) && mul>0 ? mul : 1;
+    this.upgradeCostMul = v;
+  }
+  setCharacterPortrait(key){
+    if(!this.$hpCharSprite) return;
+    const map = {
+      volt: 'data/Volt.png',
+      torque: 'data/Torque.png',
+      lumen: 'data/Lumen.png'
+    };
+    const safeKey = (key === 'torque' || key === 'lumen' || key === 'volt') ? key : 'volt';
+    const url = map[safeKey] || map.volt;
+    // Keep HUD tooltip in sync with the active character.
+    if(this.characterTips && this.characterTips[safeKey]){
+      this.tipText.character = this.characterTips[safeKey];
+    }
+    if(this.$hpCharIcon){
+      this.$hpCharIcon.classList.remove('theme-volt','theme-lumen','theme-torque');
+      this.$hpCharIcon.classList.add(`theme-${safeKey}`);
+    }
+    if(!url) return;
+    // Torque: use a tighter crop of the non‑transparent pixels so the
+    // turtle fills the portrait frame (effectively ~2× larger), without
+    // affecting menu icons.
+    if(safeKey === 'torque' && typeof Image !== 'undefined' && typeof document !== 'undefined'){
+      try{
+        const img = new Image();
+        img.src = url;
+        img.onload = ()=>{
+          try{
+            const source = punchOutSpriteBackground ? punchOutSpriteBackground(img) || img : img;
+            const off = document.createElement('canvas');
+            off.width = source.width;
+            off.height = source.height;
+            const oc = off.getContext('2d');
+            if(!oc){ return; }
+            oc.clearRect(0,0,off.width,off.height);
+            oc.drawImage(source,0,0);
+            const id = oc.getImageData(0,0,off.width,off.height);
+            const data = id.data;
+            let minX = off.width, minY = off.height, maxX = -1, maxY = -1;
+            for(let y=0;y<off.height;y++){
+              for(let x=0;x<off.width;x++){
+                const idx = (y*off.width + x)*4;
+                const a = data[idx+3];
+                if(a>20){
+                  if(x<minX) minX = x;
+                  if(y<minY) minY = y;
+                  if(x>maxX) maxX = x;
+                  if(y>maxY) maxY = y;
+                }
+              }
+            }
+            if(maxX < minX || maxY < minY){
+              // Fallback to generic path if crop fails
+              if(this._drawProcessedSpriteInto){
+                this._drawProcessedSpriteInto(url, this.$hpCharSprite, { size:128, targetSize:128, pixelated:true, replaceChildren:true });
+              }
+              return;
+            }
+            const pad = 4;
+            minX = Math.max(0, minX - pad);
+            minY = Math.max(0, minY - pad);
+            maxX = Math.min(off.width-1, maxX + pad);
+            maxY = Math.min(off.height-1, maxY + pad);
+            const cropW = maxX - minX + 1;
+            const cropH = maxY - minY + 1;
 
+            const size = 128;
+            const canvas = document.createElement('canvas');
+            canvas.width = size;
+            canvas.height = size;
+            const ctx = canvas.getContext('2d');
+            if(!ctx) return;
+            ctx.clearRect(0,0,size,size);
+            const srcMax = Math.max(cropW, cropH) || 1;
+            const targetSize = size * 0.9; // leave slight border
+            const scale = targetSize / srcMax;
+            const drawW = cropW * scale;
+            const drawH = cropH * scale;
+            const dx = (size - drawW) / 2;
+            const dy = (size - drawH) / 2;
+            ctx.drawImage(source, minX, minY, cropW, cropH, dx, dy, drawW, drawH);
+            canvas.style.width = '100%';
+            canvas.style.height = '100%';
+            canvas.style.display = 'block';
+            canvas.style.imageRendering = 'pixelated';
+            this.$hpCharSprite.innerHTML = '';
+            this.$hpCharSprite.appendChild(canvas);
+          }catch(e){}
+        };
+      }catch(e){}
+      return;
+    }
+    if(!this._drawProcessedSpriteInto) return;
+    // In the in-game HUD portrait, fill most of the frame so each
+    // character reads clearly. Volt/Lumen use a slightly inset crop.
+    const targetSize = 118;
+    this._drawProcessedSpriteInto(url, this.$hpCharSprite, { size:128, targetSize, pixelated:true, replaceChildren:true });
+  }
+
+  showPilotLine(text, key='volt'){
+    if(!this.$pilotDialog || !text) return;
+    const el = this.$pilotDialog;
+    el.textContent = text;
+    el.dataset.char = key || 'volt';
+    el.classList.add('visible');
+    if(this._pilotTimer){
+      try{ clearTimeout(this._pilotTimer); }catch(e){}
+    }
+    this._pilotTimer = setTimeout(()=>{
+      el.classList.remove('visible');
+    }, 4200);
+  }
   
   setStartEnabled(v){ this.$start.disabled = !v; }
   setPauseLabel(text){
@@ -1033,8 +1589,10 @@ export class UIManager{
     const createVisible = this.$createMenu && this.$createMenu.classList.contains('visible');
     const boardVisible = this.$leaderboard && this.$leaderboard.classList.contains('visible');
     const mapSelVisible = this.$mapOverlay && this.$mapOverlay.classList.contains('visible');
+    const modesVisible = this.$modesOverlay && this.$modesOverlay.classList.contains('visible');
     const assemblyVisible = this.$assembly && this.$assembly.classList.contains('visible');
-    const modalActive = !!(loadVisible || createVisible || boardVisible || mapSelVisible || assemblyVisible);
+    const mainSettingsVisible = this.$mainSettings && this.$mainSettings.classList.contains('visible');
+    const modalActive = !!(loadVisible || createVisible || boardVisible || mapSelVisible || modesVisible || assemblyVisible || mainSettingsVisible);
     this.$root.classList.toggle('modal-overlay', modalActive);
     const menuVisible = this.$mainMenu && this.$mainMenu.classList.contains('visible');
     document.body.classList.toggle('mainmenu-visible', modalActive || menuVisible);
@@ -1043,7 +1601,10 @@ export class UIManager{
     if(this.$leaderboard) this.$leaderboard.classList.toggle('visible', !!show);
     this.updateModalMask();
   }
-  showMainSettings(show){ if(this.$mainSettings) this.$mainSettings.classList.toggle('visible', !!show); }
+  showMainSettings(show){
+    if(this.$mainSettings) this.$mainSettings.classList.toggle('visible', !!show);
+    this.updateModalMask();
+  }
   showMenu(show){ this.show(this.$menu, show); }
   showAssembly(show){
     if(this.$assembly) this.$assembly.classList.toggle('visible', !!show);
@@ -1051,6 +1612,10 @@ export class UIManager{
   }
   showMapSelect(show){
     if(this.$mapOverlay) this.$mapOverlay.classList.toggle('visible', !!show);
+    this.updateModalMask();
+  }
+  showGameModes(show){
+    if(this.$modesOverlay) this.$modesOverlay.classList.toggle('visible', !!show);
     this.updateModalMask();
   }
   showPause(show){
@@ -1121,6 +1686,24 @@ export class UIManager{
     if(!this.$leaderboardStatus) return;
     this.$leaderboardStatus.textContent = message || '';
     this.$leaderboardStatus.style.color = ok ? (COLORS.accent || '#17e7a4') : (COLORS.danger || '#ff5370');
+  }
+  setLeaderboardLoading(on){
+    if(!this.$leaderboardLoading) return;
+    this.$leaderboardLoading.classList.toggle('visible', !!on);
+  }
+  showModeLoading(title, sub){
+    if(!this.$modeLoading) return;
+    if(this.$modeLoadingTitle && typeof title==='string'){
+      this.$modeLoadingTitle.textContent = title;
+    }
+    if(this.$modeLoadingSub && typeof sub==='string'){
+      this.$modeLoadingSub.textContent = sub;
+    }
+    this.$modeLoading.classList.add('visible');
+  }
+  hideModeLoading(){
+    if(!this.$modeLoading) return;
+    this.$modeLoading.classList.remove('visible');
   }
   setLeaderboardMap(key, suppressEmit=false){
     if(!this.lbMaps || !this.lbMaps.length) return;
@@ -1244,6 +1827,13 @@ export class UIManager{
     // Credits label is refreshed by game via setCredits after this call
   }
 
+  // Debug: keep Debug Mode toggle in sync (no gameplay effects here;
+  // game code reads the flag and applies sprite tuning behaviour).
+  setDebugModeUI(on){
+    const v = !!on;
+    if(this.$debugToggleMain) this.$debugToggleMain.checked = v;
+  }
+
   setLeaderboardDevWarning(on){
     if(!this.$leaderboardDevWarning) return;
     if(on){
@@ -1350,25 +1940,47 @@ export class UIManager{
     applyTint(this.$upgRate);
     applyTint(this.$upgRange);
     applyTint(this.$upgBurn);
+    const costMul = this.upgradeCostMul || 1;
+    const applyCostMul = (base)=>{
+      const v = Math.max(0, Number(base)||0);
+      const scaled = Math.round(v * costMul);
+      return scaled > 0 ? scaled : v;
+    };
     // Update button labels and states
     if(tower.hasSlow){ this.$upgSlow.textContent = 'Slow Module'; this.$upgSlow.disabled = true; }
-    else { this.$upgSlow.textContent = `Install Slow Module (${UPGRADE_COSTS.slowModule})`; this.$upgSlow.disabled = false; }
+    else {
+      const cost = applyCostMul(UPGRADE_COSTS.slowModule);
+      this.$upgSlow.textContent = `Install Slow Module (${cost})`;
+      this.$upgSlow.disabled = false;
+    }
     // Dot row: binary (0/1) — dim when installed
     if(this._setBtnWithDots) this._setBtnWithDots(this.$upgSlow, this.$upgSlow.textContent, tower.hasSlow?1:0, 1, { dim: tower.hasSlow });
     // Rate (0..3)
     const rateLvl = tower.rateLevel || 0;
     const rateCosts = [UPGRADE_COSTS.rateModule, Math.round(UPGRADE_COSTS.rateModule*1.5), Math.round(UPGRADE_COSTS.rateModule*2.0)];
-    if(rateLvl>=3){ this.$upgRate.textContent = 'Upgrade DPS'; this.$upgRate.disabled = true; }
-    else { const cost = rateCosts[rateLvl]; this.$upgRate.textContent = `Upgrade DPS (${cost})`; this.$upgRate.disabled = false; }
+    if(rateLvl>=3){ this.$upgRate.textContent = 'Upgrade Tower Damage'; this.$upgRate.disabled = true; }
+    else {
+      const cost = applyCostMul(rateCosts[rateLvl]);
+      this.$upgRate.textContent = `Upgrade Tower Damage (${cost})`;
+      this.$upgRate.disabled = false;
+    }
     if(this._setBtnWithDots) this._setBtnWithDots(this.$upgRate, this.$upgRate.textContent, rateLvl, 3);
     // Range (0..3)
     const rangeLvl = tower.rangeLevel || 0;
     const rangeCosts = [UPGRADE_COSTS.rangeModule, Math.round(UPGRADE_COSTS.rangeModule*1.5), Math.round(UPGRADE_COSTS.rangeModule*2.0)];
     if(rangeLvl>=3){ this.$upgRange.textContent = 'Upgrade Fire Range'; this.$upgRange.disabled = true; }
-    else { const cost = rangeCosts[rangeLvl]; this.$upgRange.textContent = `Upgrade Fire Range (${cost})`; this.$upgRange.disabled = false; }
+    else {
+      const cost = applyCostMul(rangeCosts[rangeLvl]);
+      this.$upgRange.textContent = `Upgrade Fire Range (${cost})`;
+      this.$upgRange.disabled = false;
+    }
     if(this._setBtnWithDots) this._setBtnWithDots(this.$upgRange, this.$upgRange.textContent, rangeLvl, 3);
     if(tower.hasBurn){ this.$upgBurn.textContent = 'Burn Module'; this.$upgBurn.disabled = true; }
-    else { this.$upgBurn.textContent = `Install Burn Module (${UPGRADE_COSTS.burnModule})`; this.$upgBurn.disabled = false; }
+    else {
+      const cost = applyCostMul(UPGRADE_COSTS.burnModule);
+      this.$upgBurn.textContent = `Install Burn Module (${cost})`;
+      this.$upgBurn.disabled = false;
+    }
     if(this._setBtnWithDots) this._setBtnWithDots(this.$upgBurn, this.$upgBurn.textContent, tower.hasBurn?1:0, 1, { dim: tower.hasBurn });
     // Sell button label
     if(this.$sell){

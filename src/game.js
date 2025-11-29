@@ -1,8 +1,8 @@
-import { CANVAS_W, CANVAS_H, TILE_SIZE, GAME_RULES, COLORS } from './config.js';
+import { CANVAS_W, CANVAS_H, TILE_SIZE, GAME_RULES, COLORS, getHpColor, prewarmHpColors } from './config.js';
 import { now, dist2 } from './utils.js';
 import { Grid } from './grid.js';
 import { Enemy } from './enemy.js';
-import { createTower, PEDESTAL_SPRITE } from './tower.js';
+import { createTower, PEDESTAL_SPRITE, REACTOR_SPRITE } from './tower.js';
 import { buildWave } from './waves.js';
 import { UIManager } from './ui.js';
 import { audio } from './audio.js';
@@ -19,10 +19,12 @@ export class Game {
   constructor(canvas){
     this.canvas = canvas; this.ctx = canvas.getContext('2d');
     this.selectedMap = MAPS[0];
+    this.selectedCharacterKey = 'volt';
     this.grid = new Grid(this.selectedMap);
     this.ui = new UIManager();
     if(this.ui.setPerfectBest) this.ui.setPerfectBest(0);
     this.leaderboardMapKey = this.selectedMap.key;
+    this.leaderboardCache = {};
 
     // State
     this.mode = 'endless'; // endless | assembly
@@ -30,6 +32,11 @@ export class Game {
     this.missionMaxWaves = null;
     this.missionCompleteTimer = 0;
     this.coreReturnTarget = null;
+    // Latest profile snapshot returned from the backend. When logging
+    // in from the pause menu we cache this instead of immediately
+    // resetting the current run, and apply it the next time the player
+    // visits Assembly War.
+    this.pendingUserState = null;
     this.profileMode = null;      // 'load' | 'save' | null
     this.profileOrigin = null;    // 'mainmenu' | 'assembly' | null
     this.missionUnlockLevel = 1;  // highest Assembly mission unlocked (1-6)
@@ -90,8 +97,26 @@ export class Game {
     this._exitConfirmKind = 'exit';
     this.sandboxMode = false;
     this.sandboxConfig = defaultSandboxConfig();
+    // Debug / sprite-tuning mode (drives nano-bot animation helpers)
+    this.debugMode = false;
+    this._debugKeysDown = new Set();
+    // Intro cutscene state (pre-wave path reveal)
+    this.introActive = false;
+    this.introPhase = 0;
+    this.introTimer = 0;
+    this.introPathRevealCount = 0;
+    this.introPathTotal = 0;
+    this.introLines = null;
+    this._introReadyShown = false;
     // Logged-in user (for backend saves)
     this.currentUser = null; // { username }
+
+    // Character-specific runtime state (per run)
+    this._resetCharacterRuntimeState();
+    this.lastPilotLineWave = null;
+    this.lastBossLineWave = null;
+    this.lastReactorHitLineWave = null;
+    this.lastBossLineWave = null;
 
     // Input
     this.mouse = { x:0, y:0, gx:0, gy:0 };
@@ -161,7 +186,19 @@ export class Game {
     this.ui.on('resume', ()=> this.resume());
     this.ui.on('retry', ()=> this.retry());
     this.ui.on('toMenu', ()=> {
-      // Confirm before exiting the current run via Main Menu.
+      // From a live run (playing/paused), confirm before exiting to
+      // main menu; from the game-over screen, jump straight back
+      // without an extra confirmation dialog.
+      if(this.state === 'gameover'){
+        // Ensure any stale exit-confirm overlays are closed.
+        if(this.ui.showExitConfirm) this.ui.showExitConfirm(false);
+        this._exitConfirmCallback = null;
+        this._exitConfirmPrevState = null;
+        this._exitConfirmKind = 'exit';
+        this.toMenu();
+        return;
+      }
+      // Active run: use the standard confirmation flow.
       this.requestExitConfirm('exit', (ok)=>{
         if(ok) this.toMenu();
       });
@@ -169,6 +206,13 @@ export class Game {
     this.ui.on('toMissionSelect', ()=> this.toMissionSelect());
     this.ui.on('selectTowerType', (v)=>{ this.selectedTower = v; });
     this.ui.on('selectMap', (key)=>{ const m = MAPS.find(x=>x.key===key); if(m){ this.selectedMap = m; } });
+    this.ui.on('selectCharacter', (key)=>{
+      if(!key) return;
+      this.selectedCharacterKey = key;
+      if(this.ui.setCharacterPortrait) this.ui.setCharacterPortrait(key);
+      // Update any UI that depends on character (e.g., upgrade cost styling)
+      this._updateCharacterPassivesForWave(this.waveIdx || 0);
+    });
     this.ui.on('toggleFast', ()=> this.toggleFast());
     this.ui.on('closeUpg', ()=> { this.selected = null; this.ui.setUpgradePanel(null, this.credits); });
     this.ui.on('sellTower', ()=> this.openSellConfirm());
@@ -195,6 +239,8 @@ export class Game {
     // Dev mode
     this.devMode = this._readDevModePref();
     this.ui.on('toggleDev', (v)=> this.setDevMode(!!v));
+    // Debug mode (sprite tuning helpers)
+    this.ui.on('toggleDebug', (v)=> this.setDebugMode(!!v));
     // Automatic speed control (auto slow on boss/bonus/difficulty)
     this.autoSpeedControl = this._readAutoSpeedPref();
     this.ui.on('toggleAutoSpeed', (v)=> this.setAutoSpeedControl(!!v));
@@ -267,6 +313,9 @@ export class Game {
     this.missionUnlockLevel = this._readMissionUnlock();
     if(this.ui.setMissionUnlock) this.ui.setMissionUnlock(this.missionUnlockLevel);
 
+    // Initialize character HP portrait to current selection.
+    if(this.ui.setCharacterPortrait) this.ui.setCharacterPortrait(this.selectedCharacterKey || 'volt');
+
     // Unlock audio on first user interaction
     window.addEventListener('pointerdown', ()=> audio.resume(), { once: true });
 
@@ -278,21 +327,312 @@ export class Game {
 
     // Sync dev mode toggle + state with persisted preference
     this.setDevMode(this.devMode);
+    // Sync debug mode toggle with initial state (non-persisted)
+    this.setDebugMode(this.debugMode);
     // Sync automatic speed control toggle with persisted preference
     this.setAutoSpeedControl(this.autoSpeedControl);
 
+    if(typeof this._prewarmMainMenu === 'function'){
+      this._prewarmMainMenu();
+    }
+
     // Keyboard shortcuts
     window.addEventListener('keydown', (e)=>{
+      // Debug sprite-tuning hotkeys (only when Debug Mode is enabled)
+      if(this.debugMode && typeof window !== 'undefined'){
+        const debugKeys = new Set(['Insert','PageUp','Delete','PageDown','Home','End']);
+        const key = e.key;
+        const code = e.code || key;
+        if(debugKeys.has(key)){
+          if(!this._debugKeysDown) this._debugKeysDown = new Set();
+          if(this._debugKeysDown.has(code)){
+            // Ignore repeats while key is held; one step per physical press.
+            e.preventDefault();
+          } else {
+            this._debugKeysDown.add(code);
+            const g = window.NANO_SPRITE_DEBUG || {};
+            const baseStart = 100;
+            const baseSpan = 124 - 100 + 1; // 25 frames
+            let start = Number.isFinite(g.start) ? (g.start|0) : baseStart;
+            let span = Number.isFinite(g.span) ? (g.span|0) : baseSpan;
+            let fpsMul = (typeof g.fpsMul === 'number' && isFinite(g.fpsMul) && g.fpsMul>0) ? g.fpsMul : 1;
+            let handled = false;
+            let speedChanged = false;
+            // Frame window controls
+            if(key === 'Insert'){ start -= 1; handled = true; }
+            else if(key === 'PageUp'){ start += 1; handled = true; }
+            else if(key === 'Delete'){ span -= 1; handled = true; }
+            else if(key === 'PageDown'){ span += 1; handled = true; }
+            // Speed controls (0.5x increments)
+            else if(key === 'Home'){ fpsMul += 0.5; handled = true; speedChanged = true; }
+            else if(key === 'End'){ fpsMul -= 0.5; handled = true; speedChanged = true; }
+
+            if(handled){
+              // Clamp frame window (assume current nano sheet size; kept
+              // local here so we don't depend on enemy.js internals).
+              const frameCount = 125;
+              if(!Number.isFinite(start)) start = baseStart;
+              start = Math.max(0, Math.min(frameCount-1, start));
+              if(!Number.isFinite(span)) span = baseSpan;
+              span = Math.max(1, Math.min(frameCount - start, span));
+              g.start = start;
+              g.span = span;
+              // Clamp speed multiplier
+              if(speedChanged){
+                const MIN_SPEED = 0.5;
+                const MAX_SPEED = 4.0;
+                fpsMul = Math.max(MIN_SPEED, Math.min(MAX_SPEED, fpsMul));
+                this.setDebugAnimSpeed(fpsMul);
+              }
+              if(g.enabled == null) g.enabled = true;
+              window.NANO_SPRITE_DEBUG = g;
+              e.preventDefault();
+            }
+          }
+        }
+      }
       if(this.state==='chamber'){
         if(e.key==='Enter' || e.key==='Escape'){ this.closeChamber(); }
         if(e.key==='r' || e.key==='R'){ this.shopReroll(); this.buildChamberNodes(); }
         return;
       }
       if(e.key === 'p' || e.key === 'P' || e.key === 'Escape'){
-        if(this.state === 'playing') this.pause();
-        else if(this.state === 'paused') this.resume();
+      if(this.state === 'playing') this.pause();
+      else if(this.state === 'paused') this.resume();
       }
     });
+    window.addEventListener('keyup', (e)=>{
+      if(this._debugKeysDown){
+        const code = e.code || e.key;
+        this._debugKeysDown.delete(code);
+      }
+    });
+  }
+
+  _resetCharacterRuntimeState(){
+    // Per-run character-driven multipliers and counters.
+    this.characterDamageMul = {
+      cannon: 1.0,
+      laser: 1.0,
+      splash: 1.0
+    };
+    this.characterFireRateMul = {
+      cannon: 1.0,
+      laser: 1.0,
+      splash: 1.0
+    };
+    this.characterSplashRadiusMul = 1.0;
+    this.characterStatusEffectMul = 1.0; // slow + burn strength
+    this.characterUpgradeCostMul = 1.0;
+    this.characterKillCounters = {
+      cannon: 0
+    };
+  }
+
+  _updateCharacterPassivesForWave(waveNumber){
+    // Recompute all character-derived multipliers from scratch based on
+    // the currently selected character and the given wave number.
+    if(waveNumber == null || !Number.isFinite(waveNumber)){
+      waveNumber = 0;
+    }
+    const steps5 = Math.max(0, Math.floor(waveNumber / 5));
+    this.characterDamageMul = { cannon: 1.0, laser: 1.0, splash: 1.0 };
+    this.characterFireRateMul = { cannon: 1.0, laser: 1.0, splash: 1.0 };
+    this.characterSplashRadiusMul = 1.0;
+    this.characterStatusEffectMul = 1.0;
+    this.characterUpgradeCostMul = 1.0;
+    const key = this.selectedCharacterKey || 'volt';
+    if(key === 'volt'){
+      // Volt — Cannon Specialist
+      // Passive 1: +10% Cannon damage
+      this.characterDamageMul.cannon *= 1.10;
+      // Passive 2: +3% Cannon fire-rate every 5 waves
+      if(steps5 > 0){
+        this.characterFireRateMul.cannon *= (1 + 0.03 * steps5);
+      }
+      // Passive 3 (NanoCredits per Cannon kills) handled in enemy
+      // death logic via characterKillCounters.
+    } else if(key === 'lumen'){
+      // Lumen — Laser Specialist
+      // Passive 1: +10% Laser DPS
+      let laserMul = 1.10;
+      // Passive 2: +3% Laser DPS every 5 waves
+      if(steps5 > 0){
+        laserMul *= (1 + 0.03 * steps5);
+      }
+      this.characterDamageMul.laser *= laserMul;
+      // Passive 3: All tower upgrades cost 20% less
+      this.characterUpgradeCostMul = 0.8;
+    } else if(key === 'torque'){
+      // Torque — Splash Specialist
+      // Passive 1: +10% Splash radius
+      this.characterSplashRadiusMul *= 1.10;
+      // Passive 2: +5% Splash damage every 5 waves
+      if(steps5 > 0){
+        this.characterDamageMul.splash *= (1 + 0.05 * steps5);
+      }
+      // Passive 3: Burn + Slow effects are 20% stronger (global)
+      this.characterStatusEffectMul = 1.20;
+    }
+    // Sync any UI that depends on upgrade cost discount.
+    if(this.ui && typeof this.ui.setUpgradeCostMultiplier === 'function'){
+      this.ui.setUpgradeCostMultiplier(this.characterUpgradeCostMul || 1);
+      // Refresh upgrade panel labels if one is open.
+      if(this.selected && this.ui.setUpgradePanel){
+        this.ui.setUpgradePanel(this.selected, this.credits);
+      }
+    }
+  }
+
+  getTowerDamageMul(kind){
+    if(!kind) return 1;
+    const map = this.characterDamageMul || {};
+    if(kind === 'basic' || kind === 'cannon') return map.cannon || 1;
+    if(kind === 'laser') return map.laser || 1;
+    if(kind === 'splash') return map.splash || 1;
+    return 1;
+  }
+
+  getTowerFireRateMul(kind){
+    if(!kind) return 1;
+    const map = this.characterFireRateMul || {};
+    if(kind === 'basic' || kind === 'cannon') return map.cannon || 1;
+    if(kind === 'laser') return map.laser || 1;
+    if(kind === 'splash') return map.splash || 1;
+    return 1;
+  }
+
+  getSplashRadiusMul(){
+    const base = Math.max(1, buffs.splashRadiusMul || 1);
+    const charMul = this.characterSplashRadiusMul || 1;
+    return base * charMul;
+  }
+
+  getStatusEffectMul(){
+    return this.characterStatusEffectMul || 1;
+  }
+
+  getUpgradeCostMultiplier(){
+    return this.characterUpgradeCostMul || 1;
+  }
+
+  _maybeShowPilotLine(waveNumber, isAssembly){
+    if(!this.ui || !this.ui.showPilotLine) return;
+    if(isAssembly) return; // keep Assembly tone quieter for now
+    const key = this.selectedCharacterKey || 'volt';
+    const LINES = {
+      volt: [
+        'Nanobots inbound. Let’s pick ’em off clean.',
+        'Targets spotted. Time to earn our keep.',
+        'Clean shots, quick work. Let’s move.',
+        'Steady aim. Let’s thin the swarm.'
+      ],
+      lumen: [
+        'Nanobot signatures detected. Optimizing firing paths.',
+        'Calm focus. We’ll cut through them.',
+        'Analyzing density… ready to slice the swarm.',
+        'Let’s stay sharp. Precision wins this fight.'
+      ],
+      torque: [
+        'Big crowd coming. Let’s greet ’em properly.',
+        'Nanobots swarming? Good. Saves me the trouble of aiming.',
+        'Slow and steady won’t cut it today… let’s make some noise.',
+        'Let ’em bunch up. I’ll handle the rest.'
+      ]
+    };
+    const lines = LINES[key] || LINES.volt;
+    if(!lines || !lines.length) return;
+    const isFirst = waveNumber === 1;
+    const minGap = 3;
+    if(!isFirst && this.lastPilotLineWave != null && (waveNumber - this.lastPilotLineWave) < minGap){
+      return;
+    }
+    const chance = isFirst ? 1 : 0.35;
+    if(!isFirst && Math.random() >= chance){
+      return;
+    }
+    const idx = Math.floor(Math.random() * lines.length);
+    const text = lines[idx];
+    this.lastPilotLineWave = waveNumber;
+    this.ui.showPilotLine(text, key);
+  }
+
+  _maybeShowBossKillLine(){
+    if(!this.ui || !this.ui.showPilotLine) return;
+    const key = this.selectedCharacterKey || 'volt';
+    const LINES = {
+      volt: [
+        'Boss down. Next?',
+        'That one wasn’t even worth adjusting my aim.',
+        'Clean shot. Clean win.',
+        'Thought it could tank that? Cute.',
+        'Reloading… out of courtesy, not necessity.'
+      ],
+      lumen: [
+        'Boss neutralized. That was… statistically disappointing.',
+        'Its structural integrity was weaker than expected.',
+        'That was a boss? I’ve seen tougher vending machines.',
+        'Laser paths optimal. Threat nonexistent.',
+        'Precision solves everything.'
+      ],
+      torque: [
+        'Big guy popped nicely.',
+        'Cleanup’s gonna take longer than the fight.',
+        'Heh. Boom therapy.',
+        'Hope that boss liked crowds… ‘cause it just joined one.',
+        'Told ya. Let ’em group up.'
+      ]
+    };
+    const lines = LINES[key] || LINES.volt;
+    if(!lines || !lines.length) return;
+    const waveNumber = (this.waveIdx || 0) + 1;
+    // Only one quip per wave to avoid spam.
+    if(this.lastBossLineWave != null && this.lastBossLineWave === waveNumber){
+      return;
+    }
+    const idx = Math.floor(Math.random() * lines.length);
+    const text = lines[idx];
+    this.lastBossLineWave = waveNumber;
+    this.ui.showPilotLine(text, key);
+  }
+
+  _maybeShowReactorHitLine(waveNumber){
+    if(!this.ui || !this.ui.showPilotLine) return;
+    const key = this.selectedCharacterKey || 'volt';
+    const LINES = {
+      volt: [
+        'Reactor hit! Clean them up!',
+        'They slipped through—tighten your aim!',
+        'Reactor’s taking damage. Not on my watch.',
+        'That’s a bad hit. Shut it down, fast.',
+        'Eyes up! They’re breaking the line!'
+      ],
+      lumen: [
+        'Reactor integrity dropping.',
+        'Critical breach. Adjust defenses.',
+        'Energy spike detected—something got through.',
+        'Reactor touched. That can’t repeat.',
+        'Damage confirmed. Recalculating threat paths.'
+      ],
+      torque: [
+        'Reactor took a smack. Unacceptable.',
+        'Who let that one through? Patch the gap!',
+        'Reactor got dinged—time for crowd control.',
+        'That hurt. Let’s make ’em regret it.',
+        'Reactor’s feeling it. More boom up front.'
+      ]
+    };
+    const lines = LINES[key] || LINES.volt;
+    if(!lines || !lines.length) return;
+    const wave = waveNumber || ((this.waveIdx || 0) + 1);
+    // Only one quip per wave to avoid spam if multiple leaks happen.
+    if(this.lastReactorHitLineWave != null && this.lastReactorHitLineWave === wave){
+      return;
+    }
+    const idx = Math.floor(Math.random() * lines.length);
+    const text = lines[idx];
+    this.lastReactorHitLineWave = wave;
+    this.ui.showPilotLine(text, key);
   }
 
   // Clear all temporary ability unlocks/levels and sync UI (used when returning to main menu).
@@ -331,6 +671,45 @@ export class Game {
   }
 
   startGame(){
+    // Show a mode-specific loading overlay so any one-time hitches
+    // (grid reset, tower/enemy setup, etc.) are hidden behind a small
+    // "Starting ..." screen, similar to the initial boot loader.
+    const hasUI = !!(this.ui && this.ui.showModeLoading && this.ui.hideModeLoading);
+    let t0 = null;
+    const minDuration = 650; // ms
+    if(hasUI){
+      let title = 'Starting...';
+      if(this.mode === 'assembly'){
+        title = 'Starting Assembly War…';
+      } else if(this.sandboxMode){
+        title = 'Starting Sandbox…';
+      } else {
+        title = 'Starting Endless Cycle…';
+      }
+      this.ui.showModeLoading(title, 'Preparing reactor chamber…');
+      t0 = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
+    }
+    const runCore = ()=>{
+      this._startGameCore();
+      if(hasUI){
+        const now = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
+        const elapsed = t0 != null ? (now - t0) : 0;
+        const remaining = Math.max(0, minDuration - elapsed);
+        if(remaining > 0){
+          setTimeout(()=> this.ui.hideModeLoading(), remaining);
+        } else {
+          this.ui.hideModeLoading();
+        }
+      }
+    };
+    if(typeof window !== 'undefined' && typeof window.requestAnimationFrame === 'function'){
+      window.requestAnimationFrame(()=> runCore());
+    } else {
+      setTimeout(runCore, 0);
+    }
+  }
+
+  _startGameCore(){
     // Ensure any lingering loops are silenced before start
     this.stopAllAudio();
     // Endless Cycle should always start from a fresh
@@ -338,9 +717,12 @@ export class Game {
     if(this.mode === 'endless'){
       this.resetAbilityUnlocks();
     }
+    // Fresh character passives for this run (wave 0 baseline).
+    this._resetCharacterRuntimeState();
+    this._updateCharacterPassivesForWave(0);
+
     this.reset();
     audio.resume();
-    this.state = 'playing';
     this.applyScaleMode('game');
     if(this.ui.setSandboxSettingsVisible) this.ui.setSandboxSettingsVisible(this.sandboxMode);
     // Ensure no menu overlay blur/pointer lock persists into gameplay
@@ -360,10 +742,11 @@ export class Game {
     if(this.ui.$root) this.ui.$root.classList.remove('modal-overlay');
     this.ui.showPause(false);
     this.ui.showGameOver(false);
-    this.ui.setStartEnabled(true);
     this.ui.setPauseLabel('Pause');
     this.ui.setUpgradePanel(null, this.credits);
     if(this.updateAbilityUI) this.updateAbilityUI();
+    // Begin intro cutscene before gameplay starts.
+    this.startIntroCutscene();
   }
 
   reset(){
@@ -399,6 +782,12 @@ export class Game {
     this.bombBursts = [];
     this.chrono = { timer: 0, active: false, timeLeft: 0 };
     buffs.chronoActive = false;
+    // Reset character runtime state but keep the selected hero.
+    this._resetCharacterRuntimeState();
+    this._updateCharacterPassivesForWave(0);
+    this.lastPilotLineWave = null;
+    this.lastBossLineWave = null;
+    this.lastReactorHitLineWave = null;
     // Reset abilities runtime state (unlocks persist only if re-unlocked during the run)
     this.placingBomb = false;
     this.abilities.bomb.cd = 0;
@@ -439,6 +828,156 @@ export class Game {
       const vy = (-10 + Math.random()*20) * 0.2;
       this.ambient.push({ x,y, vx,vy, r:s, a: 0.35 + Math.random()*0.45, phase: Math.random()*Math.PI*2, hue:hueShift });
     }
+  }
+
+  // --- Intro cutscene (pre-run reactor alert + path reveal) -------------
+  startIntroCutscene(){
+    this.introActive = true;
+    this.introPhase = 0;
+    this.introTimer = 0;
+    this.introPathRevealCount = 0;
+    this._introReadyShown = false;
+    // Build a simple reveal list of path cells in traversal order.
+    const cells = [];
+    if(this.grid && Array.isArray(this.grid.pathsCells) && this.grid.pathsCells.length){
+      for(const p of this.grid.pathsCells){
+        if(!Array.isArray(p)) continue;
+        for(const cell of p){ cells.push(cell); }
+      }
+    } else if(this.grid && Array.isArray(this.grid.pathCells)){
+      for(const cell of this.grid.pathCells){ cells.push(cell); }
+    }
+    this.introPathTotal = cells.length;
+    this.introLines = this._getIntroLines();
+    this.state = 'intro';
+    // Disable wave start controls during the intro.
+    if(this.ui.setStartEnabled) this.ui.setStartEnabled(false);
+    if(this.ui.setWaveStatus) this.ui.setWaveStatus(false);
+    if(this.ui.setWaveProgress) this.ui.setWaveProgress(0);
+    if(this.ui.setWaveRemaining) this.ui.setWaveRemaining(0, 0);
+    // Hide the combat stats card during the cinematic so it does not overlap.
+    if(typeof document !== 'undefined'){
+      const cs = document.getElementById('combat-stats');
+      if(cs) cs.style.display = 'none';
+    }
+  }
+
+  _getIntroLines(){
+    const key = this.selectedCharacterKey || 'volt';
+    const TABLE = {
+      volt: {
+        alert: [
+          'Reactor grid is cold… but sensors are screaming. Swarm inbound.',
+          'Quiet board, hot radar. We’ve got nanobots spinning up.',
+          'Empty lanes won’t stay empty. Contacts forming on the perimeter.'
+        ],
+        ready: [
+          'Alright, let’s lock this corridor down.',
+          'Got the lanes. Let’s keep the core clean.',
+          'Line ’em up. We’ll drop every last one.'
+        ]
+      },
+      lumen: {
+        alert: [
+          'Background static just spiked. Enemy signatures compiling near the grid.',
+          'Chamber’s quiet, but telemetry says otherwise. Nanite wave forming.',
+          'No paths yet… but their approach vectors are crystallizing.'
+        ],
+        ready: [
+          'I’ve got the angles. Let’s cut them apart.',
+          'Target paths resolved. Time to light the board.',
+          'Tracing optimal firing lanes. Let’s make this clean.'
+        ]
+      },
+      torque: {
+        alert: [
+          'Empty floor, twitchy alarms. Feels like a storm before the swarm.',
+          'Reactor’s calm, but the siren’s not lying. We’re about to get crowded.',
+          'No tracks yet… give ’em ten seconds and they’ll be pouring in.'
+        ],
+        ready: [
+          'Good. More room for explosions. Let’s greet ’em.',
+          'Alright, let’s turn this quiet hallway into a kill zone.',
+          'Paths or no paths, I’m ready to make a mess.'
+        ]
+      }
+    };
+    const pack = TABLE[key] || TABLE.volt;
+    const pick = (arr)=> arr && arr.length ? arr[Math.floor(Math.random()*arr.length)] : '';
+    return {
+      alert: pick(pack.alert),
+      ready: pick(pack.ready)
+    };
+  }
+
+  updateIntro(dt){
+    if(!this.introActive) return;
+    // Keep background animation time advancing during the intro.
+    this.time += dt;
+    this.introTimer += dt;
+    const key = this.selectedCharacterKey || 'volt';
+    const EMPTY_TIME = 2.0;
+    const ALERT_TIME = 1.5;
+    const PATH_INTERVAL = 0.055;
+
+    if(this.introPhase === 0){
+      if(this.introTimer >= EMPTY_TIME){
+        this.introPhase = 1;
+        this.introTimer = 0;
+        try{
+          if(audio.bossIntro) audio.bossIntro();
+        }catch(e){}
+        if(this.ui.showPilotLine && this.introLines && this.introLines.alert){
+          this.ui.showPilotLine(this.introLines.alert, key);
+        }
+      }
+    } else if(this.introPhase === 1){
+      if(this.introTimer >= ALERT_TIME){
+        this.introPhase = 2;
+        this.introTimer = 0;
+        this.introPathRevealCount = 0;
+        this.addShake(8);
+      }
+    } else if(this.introPhase === 2){
+      if(this.introPathTotal <= 0){
+        this.introPhase = 3;
+        this.introTimer = 0;
+      } else {
+        const target = Math.min(this.introPathTotal, Math.floor(this.introTimer / PATH_INTERVAL));
+        if(target > this.introPathRevealCount){
+          this.introPathRevealCount = target;
+        }
+        if(this.introPathRevealCount >= this.introPathTotal){
+          this.introPhase = 3;
+          this.introTimer = 0;
+          this.addShake(6);
+        }
+      }
+    } else if(this.introPhase === 3){
+      if(!this._introReadyShown && this.ui.showPilotLine && this.introLines && this.introLines.ready){
+        this.ui.showPilotLine(this.introLines.ready, key);
+        this._introReadyShown = true;
+      }
+      if(this.introTimer >= 0.6){
+        this.finishIntroCutscene();
+      }
+    }
+  }
+
+  finishIntroCutscene(){
+    this.introActive = false;
+    this.introPhase = 0;
+    this.introTimer = 0;
+    this.introPathRevealCount = 0;
+    this.introPathTotal = 0;
+    this._introReadyShown = false;
+    this.state = 'playing';
+    // Restore combat stats visibility now that gameplay is live.
+    if(typeof document !== 'undefined'){
+      const cs = document.getElementById('combat-stats');
+      if(cs) cs.style.display = '';
+    }
+    if(this.ui.setStartEnabled) this.ui.setStartEnabled(true);
   }
 
   pause(){
@@ -648,9 +1187,28 @@ export class Game {
       const res = await apiLoginUser(username, password);
       this.currentUser = { username: res.username || username };
       this.ui.setSignedInUser?.(this.currentUser.username);
-      // Start from a clean Assembly profile, then apply saved state
-      this.resetAssemblyProfile();
-      this.applyUserState(res.state);
+      // Remember latest profile state from the backend.
+      this.pendingUserState = res.state || null;
+      // If we logged in from the main menu / Assembly, immediately
+      // reset into Assembly mode and apply the saved profile. If the
+      // login originated from the in‑run pause menu, avoid resetting
+      // the current Endless Cycle run; the profile will be applied the
+      // next time the player opens Assembly War.
+      const origin = this.profileOrigin || 'mainmenu';
+      if(origin !== 'pause'){
+        this.resetAssemblyProfile();
+        this.applyUserState(this.pendingUserState);
+        this.pendingUserState = null;
+      } else {
+        // For pause‑menu logins, at least sync global mission unlock
+        // so Assembly shows correct availability when opened later.
+        const st = this.pendingUserState || {};
+        if(typeof st.missionUnlockLevel === 'number'){
+          this.missionUnlockLevel = Math.max(1, Math.min(6, st.missionUnlockLevel|0));
+          if(this.ui.setMissionUnlock) this.ui.setMissionUnlock(this.missionUnlockLevel);
+          this._writeMissionUnlock(this.missionUnlockLevel);
+        }
+      }
       if(this.ui.setLoginStatus){
         const msg = res.created ? 'User created and loaded.' : 'Login successful.';
         this.ui.setLoginStatus(msg, true);
@@ -689,8 +1247,20 @@ export class Game {
       const res = await apiCreateUser(username, password);
       this.currentUser = { username: res.username || username };
       this.ui.setSignedInUser?.(this.currentUser.username);
-      this.resetAssemblyProfile();
-      this.applyUserState(res.state);
+      this.pendingUserState = res.state || null;
+      const origin = this.profileOrigin || 'mainmenu';
+      if(origin !== 'pause'){
+        this.resetAssemblyProfile();
+        this.applyUserState(this.pendingUserState);
+        this.pendingUserState = null;
+      } else {
+        const st = this.pendingUserState || {};
+        if(typeof st.missionUnlockLevel === 'number'){
+          this.missionUnlockLevel = Math.max(1, Math.min(6, st.missionUnlockLevel|0));
+          if(this.ui.setMissionUnlock) this.ui.setMissionUnlock(this.missionUnlockLevel);
+          this._writeMissionUnlock(this.missionUnlockLevel);
+        }
+      }
       if(this.ui.setCreateStatus) this.ui.setCreateStatus('User created and loaded.', true);
       if(this.ui.showCreateMenu) this.ui.showCreateMenu(false);
       if(this.ui.showLoadMenu) this.ui.showLoadMenu(false);
@@ -740,25 +1310,76 @@ export class Game {
     this.profileMode = null;
   }
 
+  async _prewarmMainMenu(){
+    try{
+      // Touch HP gradient and related composite ops once up front so
+      // any one‑time JIT/renderer work happens before gameplay.
+      prewarmHpColors();
+      if(typeof document !== 'undefined'){
+        try{
+          const cvs = document.createElement('canvas');
+          cvs.width = 32; cvs.height = 32;
+          const ctx = cvs.getContext('2d');
+          if(ctx){
+            ctx.fillStyle = '#ffffff';
+            ctx.fillRect(0, 0, cvs.width, cvs.height);
+            ctx.globalCompositeOperation = 'color';
+            ctx.fillStyle = getHpColor(0.5);
+            ctx.beginPath();
+            ctx.arc(16, 16, 10, 0, Math.PI*2);
+            ctx.fill();
+            ctx.globalCompositeOperation = 'source-over';
+          }
+        }catch(e){}
+      }
+
+      const key = this.leaderboardMapKey || this.selectedMap?.key || (MAPS[0]?.key);
+      if(!key) return;
+      await this.refreshLeaderboard(key);
+    }catch(e){
+    }
+  }
+
   async refreshLeaderboard(mapKey){
     const key = mapKey || this.leaderboardMapKey || this.selectedMap?.key || (MAPS[0]?.key);
     this.leaderboardMapKey = key;
     if(this.ui.setLeaderboardMap) this.ui.setLeaderboardMap(key, true);
     if(this.ui.setLeaderboardStatus) this.ui.setLeaderboardStatus('Loading...', true);
+    if(this.ui.setLeaderboardLoading) this.ui.setLeaderboardLoading(true);
+    // Use cached leaderboard data when available to avoid repeated
+    // network requests and reduce perceived loading time.
+    const cached = this.leaderboardCache && this.leaderboardCache[key];
+    const nowMs = Date.now();
+    if(cached && Array.isArray(cached.entries) && (nowMs - cached.time) < 60000){
+      if(this.ui.setLeaderboard) this.ui.setLeaderboard(cached.entries);
+      if(this.ui.setLeaderboardStatus){
+        const has = cached.entries && cached.entries.length;
+        this.ui.setLeaderboardStatus(has ? '' : 'No entries yet.', true);
+      }
+      if(this.ui.setLeaderboardLoading) this.ui.setLeaderboardLoading(false);
+      return;
+    }
     try{
       const res = await apiFetchLeaderboard(key);
-      if(this.ui.setLeaderboard) this.ui.setLeaderboard(res.entries || []);
+      const entries = res.entries || [];
+      if(this.ui.setLeaderboard) this.ui.setLeaderboard(entries);
+      if(this.leaderboardCache){
+        this.leaderboardCache[key] = { entries, time: nowMs };
+      }
       if(this.ui.setLeaderboardStatus){
-        const has = res.entries && res.entries.length;
+        const has = entries && entries.length;
         this.ui.setLeaderboardStatus(has ? '' : 'No entries yet.', true);
       }
     }catch(err){
       if(this.ui.setLeaderboardStatus) this.ui.setLeaderboardStatus(err.message || 'Failed to load leaderboard', false);
+    }finally{
+      if(this.ui.setLeaderboardLoading) this.ui.setLeaderboardLoading(false);
     }
   }
   openLeaderboard(){
     this.leaderboardOrigin = 'mainmenu';
     if(this.ui.showMainMenu) this.ui.showMainMenu(false);
+    if(this.ui.setLeaderboardLoading) this.ui.setLeaderboardLoading(true);
     if(this.ui.showLeaderboard) this.ui.showLeaderboard(true);
     // Default leaderboard map follows current selected map
     const mapKey = this.selectedMap?.key || this.leaderboardMapKey || (MAPS[0]?.key);
@@ -986,19 +1607,30 @@ export class Game {
       // Freeze gameplay but keep the board rendered underneath the modal.
       this.state = 'exitConfirm';
     }
+    // When opening the exit-confirm dialog from a paused state, hide
+    // the pause overlay so we don't stack two panels on screen.
+    if(this._exitConfirmPrevState === 'paused' && this.ui.showPause){
+      this.ui.showPause(false);
+    }
     if(this.ui.showExitConfirm) this.ui.showExitConfirm(true, this._exitConfirmKind);
   }
   _handleExitConfirm(ok){
     if(this.ui.showExitConfirm) this.ui.showExitConfirm(false);
     // Restore previous state if we temporarily switched into confirm mode.
-    if(this._exitConfirmPrevState){
-      this.state = this._exitConfirmPrevState;
+    const prev = this._exitConfirmPrevState;
+    if(prev){
+      this.state = prev;
     }
     const cb = this._exitConfirmCallback;
     this._exitConfirmPrevState = null;
     this._exitConfirmCallback = null;
     this._exitConfirmKind = 'exit';
     if(typeof cb === 'function') cb(!!ok);
+    // If the user cancelled from a pause-originated confirm, return to
+    // the pause overlay; otherwise, leave visibility to the callback.
+    if(!ok && prev === 'paused' && this.ui.showPause){
+      this.ui.showPause(true);
+    }
   }
 
   // --- Main menu handlers ---
@@ -1021,7 +1653,14 @@ export class Game {
     this.state = 'menu';
   }
   handleMainAssembly(){
-    // From fullscreen main menu straight into Assembly mission select
+    // From fullscreen main menu straight into Assembly mission select.
+    // If we have a pending profile from a pause‑menu login, apply it
+    // now so mission unlocks and meta‑progress are reflected here.
+    if(this.pendingUserState){
+      this.resetAssemblyProfile();
+      this.applyUserState(this.pendingUserState);
+      this.pendingUserState = null;
+    }
     if(this.ui.showMainMenu) this.ui.showMainMenu(false);
     if(this.ui.showLoadMenu) this.ui.showLoadMenu(false);
     if(this.ui.showAssembly) this.ui.showAssembly(true);
@@ -1230,10 +1869,10 @@ export class Game {
     // Assembly pathway, but each has its own intro banner.
     if(id === 1) this.showBanner('System Boot', 'Mission 1', null);
     else if(id === 2) this.showBanner('Subroutine Siege', 'Mission 2', null);
-    else if(id === 3) this.showBanner('Corruption Bloom', 'Mission 3', 'danger');
+    else if(id === 3) this.showBanner('Corruption Bloom', 'Mission 3', 'boss');
     else if(id === 4) this.showBanner('Dual Core Defense', 'Mission 4', null);
-    else if(id === 5) this.showBanner('Overmind Ascendant', 'Mission 5', 'danger');
-    else if(id === 6) this.showBanner('Cascade Protocol', 'Final Mission', 'danger');
+    else if(id === 5) this.showBanner('Overmind Ascendant', 'Mission 5', 'boss');
+    else if(id === 6) this.showBanner('Cascade Protocol', 'Final Mission', 'boss');
     this.startGame();
   }
 
@@ -1250,6 +1889,10 @@ export class Game {
         return;
       }
     }
+    // Character dialogue: first wave always, later waves random with spacing.
+    this._maybeShowPilotLine(waveNumber, isAssembly);
+    // Update character passives for this wave (scaling passives).
+    this._updateCharacterPassivesForWave(waveNumber);
     // Use a separate builder for Assembly War so its pacing can diverge
     // from Endless Cycle.
     let wave = isAssembly
@@ -1296,7 +1939,8 @@ export class Game {
     this.waveLostHP = false;
     this.livesAtWaveStart = this.lives;
     if(this.bonusActive){
-      this.showBanner('BONUS WAVE');
+      // Bonus waves: treat as blue "bonus" notifications.
+      this.showBanner('BONUS WAVE', null, 'bonus');
       if(this.autoSpeedControl){
         this.speedFactor = 1;
         this.ui.setFastLabel(this.speedFactor);
@@ -1304,7 +1948,7 @@ export class Game {
     }
     // Boss wave banner
     if(upcomingWaveNumber % 10 === 0){
-      this.showBanner('BOSS INCOMING', 'Brace for impact', 'danger');
+      this.showBanner('BOSS INCOMING', 'Brace for impact', 'boss');
       if(audio.bossIntro) audio.bossIntro();
       if(this.autoSpeedControl){
         this.speedFactor = 1;
@@ -1540,7 +2184,7 @@ export class Game {
       this.spawner.spawned = (this.spawner.spawned||0) + 1;
       if(def.variant && /^boss/.test(def.variant)){
         // Boss has arrived — punctuate with banner/SFX
-        this.showBanner('BOSS ARRIVED', null, 'danger');
+        this.showBanner('BOSS ARRIVED', null, 'boss');
         if(audio.bossSpawn) audio.bossSpawn();
         this.spawner.hadBoss = true;
       }
@@ -1556,6 +2200,18 @@ export class Game {
       this.ui.setStartEnabled(true);
       this.ui.setWaveStatus(false);
       if(this.ui.setWaveProgress) this.ui.setWaveProgress(0);
+      const completedWave = this.waveIdx; // 1-based count of waves cleared
+      // Stable tower credits: fixed income per completed wave so the
+      // economy no longer depends on last-hit randomness.
+      const waveBase = (GAME_RULES.waveCreditBase != null) ? GAME_RULES.waveCreditBase : 12;
+      const waveStep = (GAME_RULES.waveCreditStep != null) ? GAME_RULES.waveCreditStep : 2;
+      const waveReward = Math.max(0, Math.round(waveBase + completedWave * waveStep));
+      if(waveReward > 0){
+        this.credits += waveReward;
+        this.ui.setCredits(this.credits);
+        // General wave rewards: keep neutral styling (black/standard).
+        this.showBanner('WAVE REWARD', `+${waveReward}⚛`, null);
+      }
       // If this was a bonus wave, only award if no HP was lost
       if(this.bonusActive){
         if(!this.waveLostHP){
@@ -1563,26 +2219,36 @@ export class Game {
           const payout = Math.min(Math.round(this.bonusPayout), cap);
           this.credits += payout;
           this.ui.setCredits(this.credits);
-          this.showBanner('BONUS REWARD', `+${payout}⚛`);
+          // Bonus payout: blue bonus styling.
+          this.showBanner('BONUS REWARD', `+${payout}⚛`, 'bonus');
         }
         // Scale next bonus payout regardless of success, and clamp to max
         const cap = GAME_RULES.bonusMaxPayout ?? Infinity;
         this.bonusPayout = Math.min(Math.round(this.bonusPayout * GAME_RULES.bonusScale), cap);
         this.bonusActive = false;
       }
-      // Award Data Fragments after each wave (plus bonuses for perfect defense/boss waves)
-      // Data Fragments: progressive falloff so late waves don't flood the economy
-      const baseFragments = 6 + Math.round(this.waveIdx * 1.2);
-      const extraWaves = Math.max(0, this.waveIdx - 10);
-      const falloff = Math.max(0.35, 1 - extraWaves * 0.02); // gently decays to a 35% floor
-      const scaledBase = Math.round(baseFragments * falloff);
-      let fragmentBonus = this.waveLostHP ? 0 : 4;
-      if(this.spawner.hadBoss) fragmentBonus += 10;
-      const totalFragments = Math.max(4, scaledBase + fragmentBonus);
-      this.addFragments(totalFragments, { banner: true, reason: 'Data Cache' });
-      if(!this.waveLostHP && fragmentBonus>0){
-        this.showBanner('PERFECT DEFENSE', `+${fragmentBonus}⟐ bonus`, null);
+      // Data Fragments are now awarded in controlled
+      // chunks on checkpoint waves rather than constant trickles:
+      //  - Wave 3 → +1 chip
+      //  - Wave 6 → +1 chip
+      //  - Wave 9 → +2 chips
+      //  - Wave 12 → +2 chips
+      //  - Every 3rd wave after 12 → +2 chips
+      let chipReward = 0;
+      if(completedWave % 3 === 0){
+        if(completedWave === 3 || completedWave === 6) chipReward += 1;
+        else if(completedWave === 9 || completedWave === 12) chipReward += 2;
+        else if(completedWave > 12) chipReward += 2;
       }
+      // Perks that boost tech income now apply as a flat bonus on top
+      // of the checkpoint reward instead of random kill drops.
+      if(buffs.fragmentEliteBonus){
+        chipReward += Math.max(0, Math.round(buffs.fragmentEliteBonus));
+      }
+      if(chipReward > 0){
+        this.addFragments(chipReward, { banner: true, reason: 'Data Fragments' });
+      }
+      // Perfect combo now tracks true no‑leak waves.
       if(this.waveLostHP){
         this.perfectCombo = 0;
       } else {
@@ -1593,8 +2259,18 @@ export class Game {
         }
       }
       if(this.ui.setPerfectCombo) this.ui.setPerfectCombo(this.perfectCombo);
-      if(this.spawner.hadBoss){
-        // Flag retained for teleport + shop logic; shards come from the boss kill event.
+    if(this.spawner.hadBoss){
+      // Major boss waves grant rare Ultimate Cores. One core is
+      // guaranteed; a clean, no‑leak kill grants a bonus core.
+        const baseCores = 1;
+        const noLeaks = !this.waveLostHP && (this.lives === this.livesAtWaveStart);
+        const bonusCores = noLeaks ? 1 : 0;
+        const totalCores = baseCores + bonusCores;
+        this.addCoreShards(totalCores, {
+          banner: true,
+          reason: noLeaks ? 'Flawless Boss Kill' : 'Boss Core Recovered',
+          color: 'boss'
+        });
       }
       // After boss waves: teleport to chamber shop for Endless mode only.
       // Assembly War missions no longer auto-travel to the core.
@@ -1618,8 +2294,8 @@ export class Game {
           }
           const mission = getMissionById(this.missionId);
           const label = mission ? mission.name : `Mission ${this.missionId}`;
-          this.showBanner('MISSION COMPLETE', label, null);
-          const missionShard = 3 + Math.floor((this.missionId||1)/2);
+      this.showBanner('MISSION COMPLETE', label, null);
+      const missionShard = 3 + Math.floor((this.missionId||1)/2);
           this.addCoreShards(missionShard, { banner: true, reason: 'Mission Reward' });
           this.bestWave = Math.max(this.bestWave, max);
           this.recordLeaderboardEntry(this.bestWave);
@@ -1679,6 +2355,7 @@ export class Game {
       const doTick = z.dps > 0 && z._tickAcc >= interval;
       if(doTick) z._tickAcc -= interval;
       const r2 = z.r * z.r;
+      const statusMul = this.getStatusEffectMul ? this.getStatusEffectMul() : 1;
       for(const e of this.enemies){
         if(!e.alive) continue;
         // Flying drones are immune to ground splash puddles (bubble zones),
@@ -1686,10 +2363,10 @@ export class Game {
         if(e.isFlying && z.kind === 'bubble') continue;
         if(dist2(e.x, e.y, z.x, z.y) <= r2){
           if(z.slow > 0){
-            e.applySlow(z.slow, 0.5);
+            e.applySlow(z.slow * statusMul, 0.5);
           }
           if(z.burnDps > 0){
-            e.applyBurn(z.burnDps, 0.6);
+            e.applyBurn(z.burnDps * statusMul, 0.6);
           }
           if(doTick && z.dps > 0){
             let dmg = z.dps * interval;
@@ -1703,10 +2380,13 @@ export class Game {
             // Direct hit: if the puddle is spawning exactly under this enemy, treat this tick as a larger impact.
             const directR2 = (z.r * 0.45) * (z.r * 0.45);
             const isDirect = dist2(e.x, e.y, z.x, z.y) <= directR2;
+            const meta = { color: z.color || COLORS.accent2 };
+            if(z.kind === 'bubble') meta.towerKind = 'splash';
             if(isDirect && z.justSpawned){
-              e.damage(dmg, 'bullet', { color: z.color || COLORS.accent2 });
+              e.damage(dmg, 'bullet', meta);
             } else {
-              e.damage(dmg, 'bullet', { small:true, color: z.color || COLORS.accent2 });
+              meta.small = true;
+              e.damage(dmg, 'bullet', meta);
             }
           }
         }
@@ -1731,7 +2411,8 @@ export class Game {
         buffs.chronoActive = true;
         this.chrono.timeLeft = buffs.chronoDuration;
         this.chrono.timer = buffs.chronoInterval;
-        this.showBanner('CHRONO OVERCLOCK', '+40% FIRERATE / +20% RANGE', null);
+        // Chrono overclock is a temporary buff → treat as bonus.
+        this.showBanner('CHRONO OVERCLOCK', '+40% FIRERATE / +20% RANGE', 'bonus');
       }
     }
   }
@@ -1739,7 +2420,8 @@ export class Game {
     if(buffs.singularityEvery && buffs.singularitySlow && buffs.singularityDuration){
       this.singularityCounter = (this.singularityCounter || 0) + 1;
       if(this.singularityCounter % buffs.singularityEvery === 0){
-        const radius = Math.max(r || 0, 90) * Math.max(1, buffs.splashRadiusMul||1);
+        const radiusMul = this.getSplashRadiusMul ? this.getSplashRadiusMul() : Math.max(1, buffs.splashRadiusMul||1);
+        const radius = Math.max(r || 0, 90) * radiusMul;
         const slow = buffs.singularitySlow;
         const dur = buffs.singularityDuration;
         for(const e of this.enemies){
@@ -1812,6 +2494,7 @@ export class Game {
     this.last = t;
 
     if(this.state==='playing') this.update(dt);
+    else if(this.state==='intro') this.updateIntro(dt);
     else if(this.state==='teleport' && this.updateTeleport) this.updateTeleport(dt);
     else if(this.state==='chamber' && this.updateChamber) this.updateChamber(dt);
     this.render();
@@ -1827,9 +2510,9 @@ export class Game {
 
   addFragments(amount, opts={}){
     const base = Math.max(0, Math.round(amount));
-    const scale = (GAME_RULES.fragmentGainScale != null) ? GAME_RULES.fragmentGainScale : 0.35;
     const fragMul = (this.sandboxMode && this.sandboxConfig) ? (this.sandboxConfig.fragmentMul ?? 1) : 1;
-    const gain = Math.max(0, Math.round(base * scale * fragMul));
+    const globalScale = (GAME_RULES.fragmentGainScale != null) ? GAME_RULES.fragmentGainScale : 1;
+    const gain = Math.max(0, Math.round(base * globalScale * fragMul));
     if(!gain) return;
     this.fragments = Math.max(0, this.fragments + gain);
     if(this.ui.setFragments) this.ui.setFragments(this.fragments);
@@ -1838,7 +2521,8 @@ export class Game {
     }
     if(opts.banner){
       const label = opts.reason || 'Data Cache';
-      this.showBanner(label.toUpperCase(), `+${gain}⟐`, null);
+      // Treat fragment pickups as blue bonus notifications.
+      this.showBanner(label.toUpperCase(), `+${gain}⟐`, 'bonus');
     }
   }
 
@@ -1851,8 +2535,11 @@ export class Game {
       this.addFloater(opts.x, opts.y, `+${gain}✦`, '#ffd47c');
     }
     if(opts.banner){
-      const label = opts.reason || 'Core Shard Recovered';
-      this.showBanner(label.toUpperCase(), `+${gain}✦`, 'accent');
+      const label = opts.reason || 'Core Recovered';
+      // Meta cores act like big bonuses unless explicitly tagged
+      // (e.g., boss rewards pass color:'boss').
+      const color = opts.color || 'bonus';
+      this.showBanner(label.toUpperCase(), `+${gain}✦`, color);
     }
   }
 
@@ -2118,10 +2805,13 @@ export class Game {
   }
   updateCombatStats(){
     if(!this.ui || !this.ui.setCombatStats) return;
-    const crit = Math.max(0, Math.min(1, (buffs.targetPainterChance || 0)));
-    const critDmg = Math.max(0, (buffs.targetPainterBonus || 0));
-    const slowBonus = Math.max(0, (buffs.slowPotencyMul || 1) - 1);
-    const burnBonus = Math.max(0, (buffs.burnDpsMul || 1) - 1);
+    const baseCrit = 0.05;  // +5% base crit chance
+    const baseCritDmg = 0.03; // +3% base crit damage
+    const crit = Math.max(0, Math.min(1, baseCrit + (buffs.targetPainterChance || 0)));
+    const critDmg = Math.max(0, baseCritDmg + (buffs.targetPainterBonus || 0));
+    const statusMul = this.getStatusEffectMul ? this.getStatusEffectMul() : 1;
+    const slowBonus = Math.max(0, (buffs.slowPotencyMul || 1) * statusMul - 1);
+    const burnBonus = Math.max(0, (buffs.burnDpsMul || 1) * statusMul - 1);
     const dmgMul = (buffs.dmgMul || 1);
     const baseMul = (buffs.baseDamageMul || 1);
     const baseDamage = Math.max(0, baseMul * dmgMul - 1);
@@ -2622,7 +3312,7 @@ export class Game {
     if(currentLvl >= (ULTIMATE_MAX_LEVEL||5)) return;
     const cost = (ultimateCostFor ? ultimateCostFor(a, currentLvl) : (a.cost|0));
     if(!this.isCheatMode() && cost > this.coreShards){
-      this.showBanner('NOT ENOUGH CORE SHARDS', `Need ${cost}✦`, 'danger');
+      this.showBanner('NOT ENOUGH CORES', `Need ${cost}✦`, 'danger');
       return;
     }
     if(!this.isCheatMode()){
@@ -2742,6 +3432,9 @@ export class Game {
           if(!this.isCheatMode() && damage>0){
             this.lives = Math.max(0, this.lives - damage);
             this.ui.setLives(this.lives);
+            // Character quip on the first real reactor hit this wave.
+            const waveNumber = (this.waveIdx || 0) + 1;
+            this._maybeShowReactorHitLine(waveNumber);
           }
           const label = (!this.isCheatMode() && damage>0) ? `-${damage} HP` : 'CORE HIT';
           this.addFloater(base.x, base.y - 12, label, COLORS.danger || '#ff5370');
@@ -2752,6 +3445,8 @@ export class Game {
           this.addShake(amp);
         }
         if(this.isCheatMode() || damage<=0) continue;
+        // Any leak this wave counts as HP loss for performance tracking.
+        this.waveLostHP = true;
         // Reset current perfect combo immediately on damage
         if(this.perfectCombo){
           this.perfectCombo = 0;
@@ -2780,47 +3475,13 @@ export class Game {
     for(const t of this.towers) t.update(dt, this.enemies);
     for(const t of this.towers) t.tryHit(this.enemies);
 
-    // Award kill credits for enemies that died this frame (not by reaching end)
+    // Award on‑death effects for enemies that died this frame (not by reaching end).
+    // Tower credits are now granted via fixed per‑wave income, so kills
+    // no longer directly grant credits.
     for(const e of aliveBefore){
       if(!e.alive && !e.reachedEnd){
-        // Prefer explicit per-enemy reward if provided
-        let reward = typeof e.reward === 'number' && e.reward>0 ? e.reward : (GAME_RULES.baseKillReward ?? GAME_RULES.killReward);
         const variant = e.variant || '';
-        const mt = /^t(\d+)$/.exec(variant);
-        const mb = /^boss(\d+)?$/.exec(variant);
-        const isAltBoss = (variant.startsWith('boss_') && variant !== 'boss_shard');
         const lastHit = e.lastHit || {};
-        if(mt){
-          const tier = parseInt(mt[1],10) || 0;
-          reward = (GAME_RULES.baseKillReward ?? 1) + (GAME_RULES.tierRewardStep ?? 1)*tier;
-        } else if(mb){
-          const idx = parseInt(mb[1]||'0',10) || 0;
-          // Buffed boss payouts and scaling
-          reward = 60 + idx*30;
-        }
-        const scaledReward = Math.round(reward * (buffs.creditMul || 1));
-        const flatGain = buffs.creditFlatPerKill || 0;
-        const totalCredits = Math.max(0, scaledReward + flatGain);
-        this.credits += totalCredits;
-        this.ui.setCredits(this.credits);
-        this.addFloater(e.x, e.y, `+${totalCredits}⚛`);
-        const isElite = mt ? ((parseInt(mt[1],10)||0) >= 3) : false;
-        if(mt && isElite){
-          const tier = parseInt(mt[1], 10) || 0;
-          const fragGain = Math.max(1, tier - 1);
-          this.addFragments(fragGain, { x: e.x, y: e.y - 12 });
-        }
-        const bossTierFromVariant = mb ? (parseInt(mb[1]||'0', 10) || 0) : null;
-        const bossTierValue = (typeof e.bossIndex === 'number') ? e.bossIndex : bossTierFromVariant;
-        if((mb || isAltBoss) && bossTierValue != null){
-          const fragGain = 8 + bossTierValue * 4;
-          this.addFragments(fragGain, { x: e.x, y: e.y - 18 });
-          const shardGain = 1 + Math.floor(bossTierValue / 2);
-          this.addCoreShards(shardGain, { x: e.x, y: e.y - 26, banner: true, reason: 'Core Shard Recovered' });
-        }
-        if(buffs.fragmentEliteBonus && (isElite || mb || isAltBoss)){
-          this.addFragments(buffs.fragmentEliteBonus, { x:e.x, y:e.y - 6 });
-        }
         // Ionic arc on kill
         const arcChance = buffs.ionicChance || 0;
         const arcPct = buffs.ionicDamagePct || 0;
@@ -2856,6 +3517,24 @@ export class Game {
           });
           this.thermalVentingCd = buffs.thermalCooldown || 4;
         }
+        // Character-specific kill triggers (Volt: Cannon kill economy)
+        if(this.selectedCharacterKey === 'volt' && lastHit && lastHit.meta){
+          const kind = lastHit.meta.towerKind || null;
+          if(kind === 'cannon'){
+            const counters = this.characterKillCounters || (this.characterKillCounters = { cannon:0 });
+            counters.cannon = (counters.cannon || 0) + 1;
+            if(counters.cannon % 10 === 0){
+              const bonus = 5;
+              this.credits += bonus;
+              this.ui.setCredits(this.credits);
+              this.addFloater(e.x, e.y - 14, `+${bonus}⚛`, COLORS.accent || '#17e7a4');
+            }
+          }
+        }
+        // Boss kill quips (only when the boss dies, not on leaks).
+        if(e.isBoss){
+          this._maybeShowBossKillLine();
+        }
         this.handleDroneKill();
         // Death particles for visual punch
         this.spawnParticles(e.x, e.y, e.color || COLORS.accent2);
@@ -2867,9 +3546,11 @@ export class Game {
           this.lives = Math.min(GAME_RULES.startingLives, this.lives + heal);
           if(this.lives !== before){
             this.ui.setLives(this.lives);
+            // HP related floaters: green/teal accent
             this.addFloater(e.x, e.y-16, `+${heal} HP`, COLORS.accent || '#17e7a4');
             this.spawnParticles(e.x, e.y, '#9fffe0');
-            this.showBanner('CORE HP RECOVERED', `+${heal} HP from nano-blob`, null);
+            // HP recovery banner: hp-themed styling
+            this.showBanner('CORE HP RECOVERED', `+${heal} HP from nano-blob`, 'hp');
           }
         }
 
@@ -2997,10 +3678,13 @@ export class Game {
   }
 
   applySeparation(){
-    const minSep = 34; // desired minimum pixels between centers
     const alive = this.enemies.filter(e=> e.alive);
-    // Reset speed multipliers; will throttle followers as needed
-    for(const e of alive) e.speedMult = 1;
+    // Initialize/refresh speed multiplier targets; we smooth toward these
+    // so spacing adjustments don't cause jittery movement.
+    for(const e of alive){
+      if(typeof e.speedMult !== 'number') e.speedMult = 1;
+      e._speedMultTarget = 1;
+    }
     // Sort by progress: further along first (higher idx, then closer to next waypoint)
     const distToNext = (e)=>{
       const wps = e.waypoints || this.grid.waypoints;
@@ -3013,22 +3697,56 @@ export class Game {
       const back = alive[i];
       // Allow units to pass through bosses: do not throttle spacing if either is a boss
       if(front.isBoss || back.isBoss) continue;
+      // If units are turning different directions (e.g. one has started
+      // around a corner while the follower is still on the previous
+      // segment), skip separation. This avoids jitter where the back
+      // unit repeatedly throttles as the leader wraps a 90° turn.
+      const fx = front.lastUx ?? 0;
+      const fy = front.lastUy ?? 0;
+      const bx = back.lastUx ?? 0;
+      const by = back.lastUy ?? 0;
+      const dot = fx*bx + fy*by;
+      if(!Number.isFinite(dot) || dot < 0.5) continue; // > ~60° difference → no spacing throttle
       const d = Math.hypot(front.center.x-back.center.x, front.center.y-back.center.y);
+      const baseSep = 34; // legacy minimum separation in pixels
+      const frontBody = (typeof front.getBodyRadius === 'function') ? front.getBodyRadius() : (front.radius || baseSep*0.5);
+      const backBody = (typeof back.getBodyRadius === 'function') ? back.getBodyRadius() : (back.radius || baseSep*0.5);
+      const minSep = Math.max(baseSep, frontBody + backBody);
       if(d < minSep){
         const ratio = Math.max(0, Math.min(1, d/minSep));
-        // Throttle back enemy proportionally; leave front at current speed
-        back.speedMult = Math.min(back.speedMult, 0.2 + 0.8*ratio);
+        // Throttle back enemy proportionally; leave front at current speed.
+        const targetMul = 0.2 + 0.8*ratio;
+        back._speedMultTarget = Math.min(back._speedMultTarget, targetMul);
       }
+    }
+    // Smoothly blend each enemy's speed multiplier toward its target so
+    // separation doesn't introduce abrupt speed changes that can make
+    // animation and rotation look twitchy when units bunch up.
+    const lerp = (a,b,t)=> a + (b-a)*t;
+    const relax = 0.22;
+    for(const e of alive){
+      const cur = (typeof e.speedMult === 'number') ? e.speedMult : 1;
+      const tgt = (typeof e._speedMultTarget === 'number') ? e._speedMultTarget : 1;
+      e.speedMult = lerp(cur, tgt, relax);
     }
   }
 
   render(){
     const ctx = this.ctx;
+    if(!ctx) return;
     ctx.clearRect(0,0,CANVAS_W,CANVAS_H);
 
     // During teleport phases, draw dedicated transition scene first and skip world
     if(this.state==='teleport' && this.teleport){
       this.drawTeleportScene(ctx);
+      return;
+    }
+
+    if(this.state === 'menu'){
+      ctx.save();
+      ctx.fillStyle = '#000';
+      ctx.fillRect(0,0,CANVAS_W,CANVAS_H);
+      ctx.restore();
       return;
     }
 
@@ -3040,7 +3758,17 @@ export class Game {
       ctx.translate(ox, oy);
     }
 
-    this.grid.draw(ctx, this.time);
+    if(this.state === 'intro' && this.introActive){
+      const pathCount = (this.introPhase >= 2 && this.introPathRevealCount>0) ? this.introPathRevealCount : 0;
+      this.grid.draw(ctx, this.time, {
+        showGrid: false,
+        showPath: pathCount > 0,
+        showRails: false,
+        pathRevealCount: pathCount
+      });
+    } else {
+      this.grid.draw(ctx, this.time);
+    }
 
     // Ground effects (hazards, puddles) sit above the path but below towers/enemies
     if(this.hazardZones && this.hazardZones.length){
@@ -3210,6 +3938,11 @@ export class Game {
     }
     for(const t of this.towers) t.draw(ctx);
     for(const e of this.enemies) e.draw(ctx);
+
+    // Overhead room lighting + floating dust motes so the chamber feels
+    // softly lit from above rather than purely flat.
+    this.drawOverheadLighting(ctx);
+    this.drawAmbient(ctx);
 
     // Bomb placement preview
     if(this.placingBomb && this.abilities?.bomb?.unlocked && this.abilities.bomb.cd<=0){
@@ -3519,16 +4252,47 @@ export class Game {
     ctx.restore();
   }
 
+  // Soft overhead "fluorescent" beams that suggest ceiling lights
+  // shining down into the chamber. We keep this subtle so it adds depth
+  // without washing out other effects.
+  drawOverheadLighting(ctx){
+    const t = this.time || 0;
+    const beams = 4;
+    const spacing = CANVAS_W / (beams + 1);
+    const beamWidth = CANVAS_W * 0.12;
+    ctx.save();
+    for(let i=0;i<beams;i++){
+      const cx = spacing * (i+1);
+      const flicker = 0.55 + 0.25 * Math.sin(t*2.1 + i*1.7);
+      const a0 = 0.08 * flicker;
+      const a1 = 0.06 * flicker;
+      const a2 = 0.0;
+      const grad = ctx.createLinearGradient(cx, 0, cx, CANVAS_H);
+      grad.addColorStop(0.0, `rgba(255,255,255,${a0.toFixed(3)})`);
+      grad.addColorStop(0.25, `rgba(235,242,255,${a1.toFixed(3)})`);
+      grad.addColorStop(0.7, `rgba(200,210,240,${(a1*0.6).toFixed(3)})`);
+      grad.addColorStop(1.0, `rgba(0,0,0,${a2.toFixed(3)})`);
+      ctx.fillStyle = grad;
+      ctx.beginPath();
+      ctx.rect(cx - beamWidth/2, 0, beamWidth, CANVAS_H);
+      ctx.fill();
+    }
+    ctx.restore();
+  }
+
   drawAmbient(ctx){
     if(!this.ambient || !this.ambient.length) return;
     const t = this.time||0;
     for(const m of this.ambient){
-      const pulse = m.a * (0.7 + 0.3*(Math.sin(m.phase) *0.5 + 0.5));
+      const wobble = Math.sin(m.phase + t*0.3);
+      const pulse = m.a * (0.55 + 0.45*((Math.sin(m.phase) *0.5 + 0.5)));
       ctx.save();
-      ctx.globalAlpha = Math.max(0.15, Math.min(0.85, pulse));
-      ctx.shadowColor = 'rgba(0,186,255,0.7)';
-      ctx.shadowBlur = 14 + m.r*4;
-      ctx.fillStyle = 'rgba(255,255,255,0.9)';
+      // Dust flecks drifting through the overhead light beams: very
+      // soft, warm, and semi‑transparent so they feel volumetric.
+      ctx.globalAlpha = Math.max(0.04, Math.min(0.22, pulse));
+      ctx.shadowColor = 'rgba(255,255,255,0.2)';
+      ctx.shadowBlur = 6 + m.r*3;
+      ctx.fillStyle = 'rgba(255,244,230,0.9)';
       ctx.beginPath(); ctx.arc(m.x, m.y, m.r, 0, Math.PI*2); ctx.fill();
       ctx.restore();
     }
@@ -3539,6 +4303,11 @@ export class Game {
     const t = this.time;
     const x = base.x, y = base.y;
     const r = TILE_SIZE*0.35;
+
+    // Current reactor HP ratio/color (shared with HP bar and tower pedestals)
+    const maxLives = this.GAME_MAX_LIVES || (GAME_RULES.startingLives || this.lives || 1);
+    const lifePct = Math.max(0, Math.min(1, this.lives / maxLives));
+    const hpColor = getHpColor(lifePct);
 
     // Outer glow
     ctx.save();
@@ -3587,38 +4356,167 @@ export class Game {
     }
     ctx.restore();
 
-    // Base hex core (wobbles on top of the pedestal)
-    ctx.rotate( (Math.sin(t*0.8)*0.2) );
-    ctx.shadowColor = COLORS.accent2;
-    ctx.shadowBlur = 18;
-    const sides = 6;
-    ctx.fillStyle = '#0b1d28';
-    ctx.strokeStyle = COLORS.accent2;
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    for(let i=0;i<sides;i++){
-      const a = i*(Math.PI*2/sides);
-      const px = Math.cos(a)*r, py = Math.sin(a)*r;
-      if(i===0) ctx.moveTo(px,py); else ctx.lineTo(px,py);
+    // Reactor pedestal rail ring: a red track that hugs the outer edge
+    // of the larger pedestal, mirroring the tower pedestal rings but
+    // scaled up for the reactor. On most maps we leave a single opening
+    // aligned with the incoming path; on the Core Nexus map we leave
+    // four openings (up/down/left/right) so the ring matches the
+    // cross-shaped bridge layout.
+    {
+      const railR = TILE_SIZE * 1.05;
+      ctx.save();
+      ctx.lineCap = 'round';
+      const ringCol = hpColor;
+      ctx.shadowColor = ringCol;
+      ctx.shadowBlur = 8;
+      ctx.strokeStyle = ringCol;
+      ctx.lineWidth = 4;
+      const isNexus = this.selectedMap && this.selectedMap.key === 'nexus';
+      if(isNexus){
+        // Four short rail segments centered on the diagonals so the
+        // ring is open along all four cardinal bridge directions.
+        const centers = [Math.PI/4, 3*Math.PI/4, 5*Math.PI/4, 7*Math.PI/4];
+        const halfSpan = Math.PI/6; // ~60° total per segment
+        for(const ang of centers){
+          const a0 = ang - halfSpan;
+          const a1 = ang + halfSpan;
+          ctx.beginPath();
+          ctx.arc(0, 0, railR, a0, a1);
+          ctx.stroke();
+        }
+        ctx.shadowBlur = 0;
+        ctx.strokeStyle = ringCol;
+        ctx.lineWidth = 2;
+        for(const ang of centers){
+          const a0 = ang - halfSpan;
+          const a1 = ang + halfSpan;
+          ctx.beginPath();
+          ctx.arc(0, 0, railR-1.5, a0, a1);
+          ctx.stroke();
+        }
+      } else {
+        // Single gap aligned with the last approach direction.
+        // Estimate the direction from the core toward the last path tile
+        // (where enemies approach from) so we can cut a gap in the ring
+        // on that side.
+        let gapDir = 0;
+        const W = this.grid && this.grid.waypoints;
+        if(Array.isArray(W) && W.length){
+          if(Array.isArray(W[0])){
+            const path = W[0];
+            if(path.length >= 2){
+              const last = path[path.length-1];
+              const prev = path[path.length-2];
+              gapDir = Math.atan2(prev.y - last.y, prev.x - last.x);
+            }
+          } else if(W.length >= 2){
+            const path = W;
+            const last = path[path.length-1];
+            const prev = path[path.length-2];
+            gapDir = Math.atan2(prev.y - last.y, prev.x - last.x);
+          }
+        }
+        const gapSize = Math.PI / 4; // 45° opening toward the bridge
+        const halfGap = gapSize / 2;
+        const startA = gapDir + halfGap;
+        const endA = gapDir + Math.PI*2 - halfGap;
+        ctx.beginPath();
+        ctx.arc(0, 0, railR, startA, endA);
+        ctx.stroke();
+        ctx.shadowBlur = 0;
+        ctx.strokeStyle = ringCol;
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(0, 0, railR-1.5, startA, endA);
+        ctx.stroke();
+      }
+      ctx.restore();
     }
-    ctx.closePath();
-    ctx.fill();
-    ctx.stroke();
 
-    // Pulsing core (pulse stronger as lives drop)
-    const lifePct = Math.max(0, Math.min(1, this.lives / GAME_RULES.startingLives));
+    // Pulsing core / reactor art (pulse stronger as lives drop). If a
+    // dedicated sprite is available we draw that on top of a subtle
+    // glow; otherwise we fall back to the original vector core.
     const extraPulse = (1 - lifePct) * 3.5; // more amplitude when low lives
-    const coreR = r*0.45 + Math.sin(t*(2.5 + (1-lifePct)*2))* (2 + extraPulse);
-    // color shift toward danger as lives drop
-    const accent = COLORS.accent; const danger = COLORS.danger || '#ff5370';
-    // crude lerp in RGB space
-    function hexToRgb(h){const n=parseInt(h.slice(1),16);return {r:(n>>16)&255,g:(n>>8)&255,b:n&255};}
-    function rgbToHex({r,g,b}){const n=(r<<16)|(g<<8)|b;return '#'+n.toString(16).padStart(6,'0');}
-    function mix(a,b,t){return {r:Math.round(a.r+(b.r-a.r)*t),g:Math.round(a.g+(b.g-a.g)*t),b:Math.round(a.b+(b.b-a.b)*t)};}
-    const clr = rgbToHex(mix(hexToRgb(accent), hexToRgb(danger), 1-lifePct));
-    ctx.fillStyle = clr;
-    ctx.shadowBlur = 22;
-    ctx.beginPath(); ctx.arc(0,0,coreR,0,Math.PI*2); ctx.fill();
+    const corePulse = Math.sin(t*(2.5 + (1-lifePct)*2))* (2 + extraPulse);
+
+    ctx.save();
+    const wobble = Math.sin(t*0.8)*0.2;
+    ctx.rotate(wobble);
+    let drewSprite = false;
+    let coreR = r*0.45 + corePulse;
+    // Offset used to align the HP-colored ring/jewel with the visual
+    // center of the core inside the sprite (which is slightly off the
+    // exact image center). Tuned by eye; adjust if art changes.
+    let coreOffsetX = 0;
+    let coreOffsetY = 0;
+    if(REACTOR_SPRITE && REACTOR_SPRITE.loaded && REACTOR_SPRITE.img){
+      const img = REACTOR_SPRITE.img;
+      const baseSize = Math.max(img.width, img.height) || 1;
+      const coreSize = TILE_SIZE * 1.3 + corePulse; // breathe slightly with HP
+      const scale = coreSize / baseSize;
+      const dw = img.width * scale;
+      const dh = img.height * scale;
+      ctx.shadowColor = COLORS.accent2;
+      ctx.shadowBlur = 24;
+      ctx.drawImage(img, -dw/2, -dh/2, dw, dh);
+      drewSprite = true;
+      coreR = coreSize * 0.32;
+      // The art for the animated core is very slightly offset
+      // inside the sprite. Nudge the HP overlay toward the
+      // visual center so the colored ring/jewel sit directly
+      // over the core.
+      coreOffsetX = -TILE_SIZE * 0.015; // subtle left offset
+      coreOffsetY = -TILE_SIZE * 0.030; // subtle upward offset
+    }
+    if(!drewSprite){
+      ctx.shadowColor = COLORS.accent2;
+      ctx.shadowBlur = 18;
+      const sides = 6;
+      ctx.fillStyle = '#0b1d28';
+      ctx.strokeStyle = COLORS.accent2;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      for(let i=0;i<sides;i++){
+        const a = i*(Math.PI*2/sides);
+        const px = Math.cos(a)*r, py = Math.sin(a)*r;
+        if(i===0) ctx.moveTo(px,py); else ctx.lineTo(px,py);
+      }
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+
+      // Pulsing inner core uses the shared HP color so it always
+      // matches the HP bar and pedestal rings.
+      coreR = r*0.45 + corePulse;
+      ctx.fillStyle = hpColor;
+      ctx.shadowBlur = 22;
+      ctx.beginPath(); ctx.arc(coreOffsetX,coreOffsetY,coreR,0,Math.PI*2); ctx.fill();
+    }
+    // Inner HP ring + jewel overlay so the core itself mirrors the
+    // current HP color, even when using sprite art.
+    const ringOuter = coreR + 7; // slightly thicker inner ring
+    const jewelR = Math.max(4, coreR * 0.51); // ~additional 5% coverage
+    ctx.shadowColor = hpColor;
+    ctx.shadowBlur = 16;
+    ctx.strokeStyle = hpColor;
+    ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.arc(coreOffsetX,coreOffsetY,ringOuter,0,Math.PI*2); ctx.stroke();
+    ctx.shadowBlur = 0;
+    // Jewel glow: keep this as a simple radial gradient overlay so it
+    // stays lightweight. This still tints the central core toward the
+    // current HP color without using an expensive composite operation.
+    const jGrad = ctx.createRadialGradient(
+      coreOffsetX, coreOffsetY, jewelR*0.15,
+      coreOffsetX, coreOffsetY, jewelR
+    );
+    jGrad.addColorStop(0, 'rgba(255,255,255,0.95)');
+    jGrad.addColorStop(0.35, hpColor);
+    jGrad.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.globalAlpha = 0.95;
+    ctx.fillStyle = jGrad;
+    ctx.beginPath(); ctx.arc(coreOffsetX,coreOffsetY,jewelR,0,Math.PI*2); ctx.fill();
+    ctx.globalAlpha = 1;
+    ctx.restore();
 
     // Rotating rings
     ctx.shadowBlur = 10;
@@ -3633,15 +4531,15 @@ export class Game {
       ctx.restore();
     }
 
-    // Lives ring gauge
-    const pct = Math.max(0, Math.min(1, this.lives / GAME_RULES.startingLives));
+    // Lives ring gauge (outer ring) – tint to current HP color as well
+    const pct = Math.max(0, Math.min(1, this.lives / (this.GAME_MAX_LIVES || GAME_RULES.startingLives)));
     ctx.rotate(0);
     ctx.lineWidth = 6;
     // background ring
     ctx.strokeStyle = 'rgba(255,255,255,0.15)';
     ctx.beginPath(); ctx.arc(0,0,r+14,0,Math.PI*2); ctx.stroke();
     // foreground ring
-    ctx.strokeStyle = COLORS.accent;
+    ctx.strokeStyle = hpColor;
     ctx.beginPath(); ctx.arc(0,0,r+14,-Math.PI/2, -Math.PI/2 + pct*2*Math.PI); ctx.stroke();
 
     // Reactor Aegis shield cue
@@ -3897,7 +4795,8 @@ export class Game {
     if(nowTs - this._lastCritBannerTime < 900) return;
     this._lastCritBannerTime = nowTs;
     const val = Math.max(1, Math.round(damage));
-    this.showBanner('CRITICAL HIT', `-${val} HP`, 'accent');
+    // Crit notifications: highlight in gold/yellow.
+    this.showBanner('CRITICAL HIT', `-${val} HP`, 'crit');
   }
 
   // Trigger a brief screen shake
@@ -3912,10 +4811,18 @@ export class Game {
 
   upgradeSelected(type){
     if(!this.selected) return;
+    const costMul = this.getUpgradeCostMultiplier ? this.getUpgradeCostMultiplier() : 1;
+    const applyCostMul = (base)=>{
+      const v = Math.max(0, Number(base)||0);
+      const scaled = Math.round(v * costMul);
+      return scaled > 0 ? scaled : v;
+    };
     if(type==='slow' && !this.selected.hasSlow){
-      if(this.isCheatMode() || this.credits >= UPGRADE_COSTS.slowModule){
-        if(!this.isCheatMode()){ this.credits -= UPGRADE_COSTS.slowModule; }
-        this.selected.installSlow(); this.selected.invested = (this.selected.invested||0) + UPGRADE_COSTS.slowModule; this.ui.setCredits(this.credits);
+      const baseCost = UPGRADE_COSTS.slowModule;
+      const cost = applyCostMul(baseCost);
+      if(this.isCheatMode() || this.credits >= cost){
+        if(!this.isCheatMode()){ this.credits -= cost; }
+        this.selected.installSlow(); this.selected.invested = (this.selected.invested||0) + cost; this.ui.setCredits(this.credits);
         this.ui.setUpgradePanel(this.selected, this.credits);
       } else {
         this.addFloater(this.mouse.x + 14, this.mouse.y - 10, 'Not enough nano credits', COLORS.danger || '#ff5370');
@@ -3925,7 +4832,7 @@ export class Game {
     if(type==='rate' && (this.selected.rateLevel??0) < 3){
       const lvl = this.selected.rateLevel||0;
       const costs = [UPGRADE_COSTS.rateModule, Math.round(UPGRADE_COSTS.rateModule*1.5), Math.round(UPGRADE_COSTS.rateModule*2.0)];
-      const cost = costs[lvl];
+      const cost = applyCostMul(costs[lvl]);
       if(this.isCheatMode() || this.credits >= cost){
         if(!this.isCheatMode()){ this.credits -= cost; }
         this.selected.upgradeRate(); this.selected.invested = (this.selected.invested||0) + cost; this.ui.setCredits(this.credits);
@@ -3938,7 +4845,7 @@ export class Game {
     if(type==='range' && (this.selected.rangeLevel??0) < 3){
       const lvl = this.selected.rangeLevel||0;
       const costs = [UPGRADE_COSTS.rangeModule, Math.round(UPGRADE_COSTS.rangeModule*1.5), Math.round(UPGRADE_COSTS.rangeModule*2.0)];
-      const cost = costs[lvl];
+      const cost = applyCostMul(costs[lvl]);
       if(this.isCheatMode() || this.credits >= cost){
         if(!this.isCheatMode()){ this.credits -= cost; }
         this.selected.upgradeRange(); this.selected.invested = (this.selected.invested||0) + cost; this.ui.setCredits(this.credits);
@@ -3949,9 +4856,11 @@ export class Game {
       }
     }
     if(type==='burn' && !this.selected.hasBurn){
-      if(this.isCheatMode() || this.credits >= UPGRADE_COSTS.burnModule){
-        if(!this.isCheatMode()){ this.credits -= UPGRADE_COSTS.burnModule; }
-        this.selected.installBurn(); this.selected.invested = (this.selected.invested||0) + UPGRADE_COSTS.burnModule; this.ui.setCredits(this.credits);
+      const baseCost = UPGRADE_COSTS.burnModule;
+      const cost = applyCostMul(baseCost);
+      if(this.isCheatMode() || this.credits >= cost){
+        if(!this.isCheatMode()){ this.credits -= cost; }
+        this.selected.installBurn(); this.selected.invested = (this.selected.invested||0) + cost; this.ui.setCredits(this.credits);
         this.ui.setUpgradePanel(this.selected, this.credits);
       } else {
         this.addFloater(this.mouse.x + 14, this.mouse.y - 10, 'Not enough nano credits', COLORS.danger || '#ff5370');
@@ -3989,6 +4898,30 @@ export class Game {
     // Always refresh credits label to reflect ∞ vs numeric appropriately
     if(this.ui.setCredits) this.ui.setCredits(this.credits);
     if(changed) this._writeDevModePref(this.devMode);
+  }
+
+  setDebugMode(v){
+    const next = !!v;
+    this.debugMode = next;
+    if(this.ui.setDebugModeUI) this.ui.setDebugModeUI(this.debugMode);
+    // Expose a lightweight global knob for sprite debug helpers.
+    if(typeof window !== 'undefined'){
+      const g = window.NANO_SPRITE_DEBUG || {};
+      g.enabled = this.debugMode;
+      if(g.fpsMul == null) g.fpsMul = 1;
+      window.NANO_SPRITE_DEBUG = g;
+    }
+  }
+
+  setDebugAnimSpeed(speed){
+    const v = (typeof speed === 'number' && isFinite(speed) && speed>0) ? speed : 1;
+    if(typeof window !== 'undefined'){
+      const g = window.NANO_SPRITE_DEBUG || {};
+      g.fpsMul = v;
+      // Keep enabled flag stable; do not auto-enable.
+      if(g.enabled == null) g.enabled = !!this.debugMode;
+      window.NANO_SPRITE_DEBUG = g;
+    }
   }
 
   setAutoSpeedControl(v){

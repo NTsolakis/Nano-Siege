@@ -173,9 +173,11 @@ export function ultimateCostFor(ability, level=0){
 function clonePerk(p){ return { ...p, kind: p.kind || 'passive' }; }
 
 const TIER_WEIGHTS = [
-  ['common', 0.65],
-  ['rare', 0.3],
-  ['super', 0.05],
+  // Commons dominate the pool (~75%); rares are roughly
+  // one-third as frequent, and supers are very rare.
+  ['common', 0.75],
+  ['rare', 0.25],
+  ['super', 0.03],
 ];
 const tierWeightTotal = TIER_WEIGHTS.reduce((sum, [,w])=> sum + w, 0);
 
@@ -255,11 +257,50 @@ export function rollShopOffers(count=6, shopIndex=0, excludeKeys=[]) {
 // Passive level cap and dynamic pricing
 export const PASSIVE_MAX_LEVEL = 5;
 export function passiveCostFor(perk, level=0, shopIndex=0){
-  const base = perk.baseCost || 0;
-  // Growing cost per shop and per owned level
-  const shopStep = 40;
-  const levelStep = Math.max(30, Math.round(base * 0.5));
-  return base + shopIndex*shopStep + level*levelStep;
+  const rawBase = perk.baseCost || 0;
+  // Free / special perks keep their explicit cost.
+  if(rawBase <= 0) return 0;
+  const tier = perk.tier || 'common';
+  // Target bands by rarity:
+  //  - common:  25–50 fragments
+  //  - rare:    50–100 fragments
+  //  - super:   100–150 fragments
+  let min, max;
+  if(tier === 'rare'){
+    min = 50; max = 100;
+  } else if(tier === 'super'){
+    min = 100; max = 150;
+  } else {
+    min = 25; max = 50;
+  }
+  // Normalise the original base cost into 0–1 so more expensive legacy
+  // perks still tend toward the upper end of the band.
+  const rawMin = 80;
+  const rawSpan = 220; // 80..300 covers current catalog reasonably well
+  const norm = Math.max(0, Math.min(1, (rawBase - rawMin) / rawSpan));
+
+  // Progress factor: as the shop index increases, costs move from the
+  // lower end of their band toward the upper end.
+  const maxShops = 6;
+  const pShop = Math.max(0, Math.min(1, shopIndex / maxShops));
+  // Early shops expose only ~35% of the band above the minimum; later
+  // shops gradually reach the full band.
+  const bandFrac = 0.35 + 0.65 * pShop; // 0.35 at first, 1.0 at maxShops+
+
+  const base = min + (max - min) * norm * bandFrac;
+
+  // Per‑level scaling: higher passive levels cost more but stay within a
+  // reasonable multiplier of the base cost.
+  let levelFactor;
+  if(tier === 'rare'){
+    levelFactor = 0.45;
+  } else if(tier === 'super'){
+    levelFactor = 0.5;
+  } else {
+    levelFactor = 0.4;
+  }
+  const levelMult = 1 + Math.max(0, level) * levelFactor;
+  return Math.round(base * levelMult);
 }
 
 // Apply a perk to the current game and update UI if needed.

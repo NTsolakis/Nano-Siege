@@ -1,10 +1,15 @@
 import { COLORS } from './config.js';
 import { buffs } from './rogue.js';
+import { punchOutSpriteBackground } from './tower.js';
 
 let ENEMY_UID = 1;
 
 // Ensure enemies never fully stall due to stacked slows + separation.
 const MIN_SPEED = 8; // px/s safety floor
+
+// Sprite scaling factors so visual size stays consistent wherever used.
+const NANO_SPRITE_NORMAL_SIZE_MUL = 3.9;
+const NANO_SPRITE_BOSS_SIZE_MUL = 4.8;
 
 // Optional sprite-sheet support for select enemy variants (e.g., nano bot/boss).
 // Drop your sheet into /data and update the config below to match.
@@ -20,6 +25,15 @@ const NANO_SPRITE = {
   frameH: 0,
   tinted: null,      // lazily populated map: color -> tinted sheet canvas
   frameOffsets: null // optional per-frame vertical offsets to stabilize walk
+};
+
+// Optional static sprite art for flying drones. Uses a flat black
+// background in the source PNG which we treat as transparent via
+// punchOutSpriteBackground so the drone can hover over the board
+// without a box.
+export const DRONE_SPRITE = {
+  img: null,
+  loaded: false
 };
 
 function computeNanoFrameOffsets(sheet, cols, rows, frames){
@@ -98,6 +112,31 @@ if(typeof Image !== 'undefined'){
           const data = id.data;
           const frameW = off.width / cols;
           const frameH = off.height / rows;
+          // Sample a few corners to detect a flat background color
+          // (e.g. solid red or grey) and treat anything close to that
+          // as transparent.
+          let bgR = 0, bgG = 0, bgB = 0, bgCount = 0;
+          const sample = (x,y)=>{
+            if(x<0 || y<0 || x>=off.width || y>=off.height) return;
+            const idx = (y*off.width + x)*4;
+            const a = data[idx+3];
+            if(a===0) return;
+            bgR += data[idx];
+            bgG += data[idx+1];
+            bgB += data[idx+2];
+            bgCount++;
+          };
+          sample(0,0);
+          sample(off.width-1,0);
+          sample(0,off.height-1);
+          sample(off.width-1,off.height-1);
+          if(bgCount>0){
+            bgR /= bgCount;
+            bgG /= bgCount;
+            bgB /= bgCount;
+          }
+          const hasBg = bgCount>0;
+          const bgThreshSq = 40*40;
           for(let i=0;i<data.length;i+=4){
             const r = data[i], g = data[i+1], b = data[i+2];
             const idx = (i/4)|0;
@@ -108,10 +147,21 @@ if(typeof Image !== 'undefined'){
             const nearEdge =
               fx < 2 || fx > frameW-3 ||
               fy < 2 || fy > frameH-3;
+            let makeTransparent = false;
+            if(hasBg){
+              const dr = r-bgR, dg = g-bgG, db = b-bgB;
+              const distSq = dr*dr + dg*dg + db*db;
+              if(distSq <= bgThreshSq){
+                makeTransparent = true;
+              }
+            }
             // Pure/near‑pure black, or dark pixels hugging the frame
-            // edges, become fully transparent.
+            // edges, become fully transparent as a fallback.
             if((r < 18 && g < 18 && b < 18) ||
                (nearEdge && r < 32 && g < 32 && b < 32)){
+              makeTransparent = true;
+            }
+            if(makeTransparent){
               data[i+3] = 0;
             }
           }
@@ -126,9 +176,11 @@ if(typeof Image !== 'undefined'){
     NANO_SPRITE.frameW = img.width / cols;
     NANO_SPRITE.frameH = img.height / rows;
     NANO_SPRITE.frameOffsets = computeNanoFrameOffsets(source, cols, rows, NANO_SPRITE.frames||0);
-    // Optionally pre‑warm tinted variants for the most common enemy
-    // colors so the first time each type spawns in a run we avoid a
-    // small hitch from generating its tint on the fly.
+    // Pre‑warm tinted variants for the most common enemy colors so the
+    // first time each type spawns in a run we avoid a hitch from
+    // generating its tint on the fly. This runs synchronously while the
+    // game is still in its loading phase so it does not compete with
+    // early UI interactions (e.g., opening Endless Cycle).
     try{
       const palette = (COLORS && Array.isArray(COLORS.typePalette)) ? COLORS.typePalette.slice() : [];
       const extras = [
@@ -141,24 +193,34 @@ if(typeof Image !== 'undefined'){
         COLORS.boss
       ].filter(Boolean);
       const colors = [...palette, ...extras];
-      let idx = 0;
-      const step = ()=>{
-        if(idx >= colors.length) return;
-        const c = colors[idx++];
+      for(const c of colors){
         if(c) getNanoTintedSheet(c);
-        if(idx < colors.length){
-          if(typeof window !== 'undefined' && typeof window.requestIdleCallback === 'function'){
-            window.requestIdleCallback(step);
-          } else {
-            setTimeout(step, 0);
-          }
-        }
-      };
-      if(colors.length){
-        step();
       }
     }catch(e){}
   };
+}
+
+// Load drone sprite (single frame, no animation).
+if(typeof Image !== 'undefined'){
+  (()=>{
+    try{
+      const img = new Image();
+      img.onload = ()=>{
+        let source = img;
+        try{
+          const processed = punchOutSpriteBackground(img);
+          if(processed) source = processed;
+        }catch(e){}
+        DRONE_SPRITE.img = source;
+        DRONE_SPRITE.loaded = true;
+      };
+      img.onerror = ()=>{
+        DRONE_SPRITE.img = null;
+        DRONE_SPRITE.loaded = false;
+      };
+      img.src = 'data/enemy-drone.png';
+    }catch(e){}
+  })();
 }
 
 function getNanoTintedSheet(color){
@@ -290,6 +352,9 @@ export class Enemy {
     this.angle = Math.random()*Math.PI*2; // for rotating shapes
     this.spinSpeed = (Math.random()<0.5? -1:1) * 0.8; // rad/s (slow, subtle)
     this.phase = Math.random()*Math.PI*2; // wobble phase for blobs
+    // Per-enemy animation phase so sprite-sheet walk cycles don't all
+    // start on the same frame and look synchronized.
+    this.animPhase = Math.random()*10;
     // Smoothed facing angle for sprite-based enemies; follows path direction.
     this.renderAngle = 0;
     this.age = 0;
@@ -325,6 +390,22 @@ export class Enemy {
 
   get x(){ return this.pos.x; }
   get y(){ return this.pos.y; }
+
+  // Approximate radius of this enemy's visible body so spacing/separation
+  // can prevent sprites from overlapping on the path.
+  getBodyRadius(){
+    const base = Math.max(4, this.radius || 0);
+    if(this.spriteKey === 'nanoBot' || this.spriteKey === 'nanoBoss'){
+      const sizeMul = this.isBoss ? NANO_SPRITE_BOSS_SIZE_MUL : NANO_SPRITE_NORMAL_SIZE_MUL;
+      return base * sizeMul * 0.5;
+    }
+    // Drones use a slightly enlarged sprite disc in draw(); treat them
+    // as modestly larger than their logical radius for spacing.
+    if(this.variant === 'drone' && this.isFlying){
+      return base * 1.1;
+    }
+    return base;
+  }
 
   // Predict a point `distAhead` units further along this enemy's path,
   // following bends around corners. Does not mutate actual position.
@@ -602,6 +683,7 @@ export class Enemy {
       // Ground nano‑bots vs. flying drones share HP/status UI but
       // have distinct bodies.
       const useNanoSprite = !!this.spriteKey && NANO_SPRITE.loaded && NANO_SPRITE.img;
+      const useDroneSprite = (this.variant === 'drone') && DRONE_SPRITE.loaded && DRONE_SPRITE.img;
       ctx.save();
       ctx.translate(this.pos.x, this.pos.y);
       if(useNanoSprite){
@@ -616,30 +698,57 @@ export class Enemy {
         const rows = Math.max(1, Math.ceil(frameCount / cols));
         const fw = cfg.frameW || (sheet.width / cols);
         const fh = cfg.frameH || (sheet.height / rows);
-        const t = this.age || 0;
+        const t = (this.age || 0) + (this.animPhase || 0);
         // Speed up the animation for faster-moving enemies so the walk
         // cycle roughly tracks travel speed, but keep a moderate global
         // cadence so the motion doesn't feel too jumpy.
         const base = Math.max(20, this.baseSpeed || 60);
         const speedNow = Math.max(10, this.speed || base);
         const speedFactor = Math.max(0.7, Math.min(2.0, speedNow / base));
-        const walkBoost = 1.8; // 1.5x faster than previous 1.2
-        const fps = (cfg.fps || 14) * speedFactor * walkBoost;
-        // Use only the dedicated walk cycle frames from the sheet
-        // to avoid awkward jumps between non-walk poses.
-        const startFrame = 34;
-        const endFrame = 46;
+        const walkBoost = 2.7; // 1.5x faster than previous 1.8
+        // Optional debug override for sprite animation (frame window / speed).
+        let dbg = null;
+        if(typeof window !== 'undefined' && window.NANO_SPRITE_DEBUG){
+          const g = window.NANO_SPRITE_DEBUG;
+          if(g && g.enabled === true) dbg = g;
+        }
+        // Default walk cycle: frames 100–124 (final row cluster).
+        const baseStart = Math.min(100, Math.max(0, frameCount-1));
+        const baseEnd = Math.min(124, frameCount-1);
+        const baseSpan = Math.max(1, baseEnd - baseStart + 1);
+        let startFrame = baseStart;
+        let span = baseSpan;
+        let extraFpsMul = 1;
+        if(dbg){
+          if(Number.isFinite(dbg.start)){
+            startFrame = Math.max(0, Math.min(frameCount-1, dbg.start|0));
+          }
+          if(Number.isFinite(dbg.span)){
+            span = Math.max(1, Math.min(frameCount - startFrame, dbg.span|0));
+          }
+          if(typeof dbg.fpsMul === 'number' && isFinite(dbg.fpsMul) && dbg.fpsMul>0){
+            extraFpsMul = dbg.fpsMul;
+          }
+          // Keep global debug state clamped so hotkeys never "drift"
+          // far outside the valid frame range and feel stuck.
+          dbg.start = startFrame;
+          dbg.span = span;
+        }
+        const fps = (cfg.fps || 14) * speedFactor * walkBoost * extraFpsMul;
+        const endFrame = Math.min(frameCount-1, startFrame + span - 1);
         const s = Math.max(0, startFrame|0);
-        const e = Math.max(s, Math.min(frameCount-1, endFrame|0));
-        const span = (e - s + 1) || 1;
-        const raw = Math.floor(t * fps) % span;
+        const e = Math.max(s, endFrame|0);
+        const spanFrames = (e - s + 1) || 1;
+        const raw = Math.floor(t * fps) % spanFrames;
         const idx = s + raw;
         const col = idx % cols;
         const row = Math.floor(idx / cols);
         const sx = col * fw;
         const sy = row * fh;
         const baseSize = Math.max(fw, fh) || 1;
-        const sizeMul = this.isBoss ? 4.8 : 3.4;
+        // Slightly larger so ground‑bound nano enemies fill the path
+        // more fully without overlapping neighbouring lanes.
+        const sizeMul = this.isBoss ? NANO_SPRITE_BOSS_SIZE_MUL : NANO_SPRITE_NORMAL_SIZE_MUL;
         const desiredDiameter = this.radius * sizeMul;
         const scale = desiredDiameter / baseSize;
         // Stabilize vertical position so the enemy doesn't appear to
@@ -649,6 +758,17 @@ export class Enemy {
         const offs = NANO_SPRITE.frameOffsets;
         if(offs && offs.length > idx){
           offsetY = (offs[idx] || 0) * scale;
+        }
+        // Cache debug info for on-screen overlay when enabled.
+        if(dbg){
+          this._nanoSpriteDebug = {
+            idx,
+            start: s,
+            span: spanFrames,
+            speed: extraFpsMul
+          };
+        } else if(this._nanoSpriteDebug){
+          this._nanoSpriteDebug = null;
         }
         ctx.save();
         ctx.drawImage(
@@ -660,6 +780,33 @@ export class Enemy {
           fh*scale
         );
         ctx.restore();
+      } else if(useDroneSprite){
+        // Static drone hull using dedicated sprite art. We still tint
+        // glows and hit/stun effects via this.color, but the sprite
+        // itself is a single frame (no walk cycle).
+        const img = DRONE_SPRITE.img;
+        if(img){
+          const baseSize = Math.max(img.width, img.height) || 1;
+          const desiredDiameter = this.radius * 2.1; // tuned so drones sit comfortably on the lane
+          const scale = desiredDiameter / baseSize;
+          const heading = Number.isFinite(this.renderAngle) ? this.renderAngle : 0;
+          ctx.save();
+          // Drone art is authored facing "down" in the PNG. Align that
+          // downward nose with the actual flight direction by rotating
+          // 90° clockwise relative to the path heading.
+          ctx.rotate(heading + Math.PI/2);
+          ctx.shadowColor = this.color || COLORS.drone || COLORS.accent2;
+          ctx.shadowBlur = 18;
+          ctx.globalAlpha = 0.98;
+          ctx.drawImage(
+            img,
+            -img.width*scale/2,
+            -img.height*scale/2,
+            img.width*scale,
+            img.height*scale
+          );
+          ctx.restore();
+        }
       } else {
         ctx.scale(this.facing || 1, 1);
         const R = this.radius;
@@ -774,13 +921,41 @@ export class Enemy {
       }
       ctx.restore();
 
-      // Health bar
-      const w = 24, h = 4;
-      const pct = Math.max(0, this.hp/this.maxHp);
-      ctx.fillStyle = 'rgba(0,0,0,0.5)';
-      ctx.fillRect(this.pos.x - w/2, this.pos.y - this.radius - 10, w, h);
-      ctx.fillStyle = COLORS.accent;
-      ctx.fillRect(this.pos.x - w/2, this.pos.y - this.radius - 10, w*pct, h);
+      // Optional sprite debug overlay (shows current frame/window).
+      if(typeof window !== 'undefined' && window.NANO_SPRITE_DEBUG && this._nanoSpriteDebug){
+        const g = window.NANO_SPRITE_DEBUG;
+        const enabled = !!g.enabled;
+        if(enabled){
+          const info = this._nanoSpriteDebug;
+          const end = info.start + info.span - 1;
+          const speed = info.speed || 1;
+          const speedLabelRaw = speed.toFixed(2).replace(/0+$/,'').replace(/\.$/,'');
+          const label = `f${info.idx} [${info.start}–${end}] S=${speedLabelRaw}x`;
+          ctx.save();
+          ctx.font = 'bold 14px system-ui, sans-serif';
+          ctx.textAlign = 'center';
+          ctx.lineWidth = 3;
+          ctx.strokeStyle = 'rgba(0,0,0,0.8)';
+          ctx.fillStyle = 'rgba(255,255,255,0.9)';
+          const x = this.pos.x;
+          const y = this.pos.y - this.radius*1.5;
+          ctx.strokeText(label, x, y);
+          ctx.fillText(label, x, y);
+          ctx.restore();
+        }
+      }
+
+      // Health bar (hidden while debug sprite mode is active so frames
+      // and overlay text are easier to see against the path).
+      const debugEnabled = (typeof window !== 'undefined' && window.NANO_SPRITE_DEBUG && window.NANO_SPRITE_DEBUG.enabled === true);
+      if(!debugEnabled){
+        const w = 24, h = 4;
+        const pct = Math.max(0, this.hp/this.maxHp);
+        ctx.fillStyle = 'rgba(0,0,0,0.5)';
+        ctx.fillRect(this.pos.x - w/2, this.pos.y - this.radius - 10, w, h);
+        ctx.fillStyle = COLORS.accent;
+        ctx.fillRect(this.pos.x - w/2, this.pos.y - this.radius - 10, w*pct, h);
+      }
     }
 
     // Rolling laser total (while beam is active)
@@ -829,24 +1004,8 @@ export class Enemy {
     }
 
     if(this.alive){
-      // Status rings / aura
       const hasBurn = this.burns.length > 0;
       const hasSlow = this.slows.length > 0;
-      // Status rings remain centered
-      if(hasBurn){
-        ctx.strokeStyle = 'rgba(255,120,0,0.8)';
-        ctx.lineWidth = 2.5;
-        ctx.beginPath();
-        ctx.arc(this.pos.x, this.pos.y, this.radius+10, 0, Math.PI*2);
-        ctx.stroke();
-      }
-      if(hasSlow){
-        ctx.strokeStyle = 'rgba(0,186,255,0.9)';
-        ctx.lineWidth = 3;
-        ctx.beginPath();
-        ctx.arc(this.pos.x, this.pos.y, this.radius+6, 0, Math.PI*2);
-        ctx.stroke();
-      }
       // Slow timer bar below HP bar (shows longest remaining slow)
       if(hasSlow){
         let maxT = 0, maxTtl = 0;
