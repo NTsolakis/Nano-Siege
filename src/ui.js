@@ -756,7 +756,12 @@ export class UIManager{
     }
     // Main menu buttons
     if(this.$btnMainDownload){
-      // Hosted build vs local build: flip label
+      // Hosted build vs local build: flip label and route to the
+      // appropriate download endpoint. When running as a plain
+      // file:// page (unzipped local build), we send players to the
+      // hosted server's nano-siege-local.zip so they can grab a
+      // fresh copy; when running on the hosted server, we point at
+      // the zip relative to the current origin.
       let isLocal = false;
       try{
         if(typeof window !== 'undefined'){
@@ -764,11 +769,17 @@ export class UIManager{
           else if(window.location && window.location.protocol === 'file:') isLocal = true;
         }
       }catch(e){}
+      const hostedUrl = (typeof window !== 'undefined' && window.NANO_DOWNLOAD_URL)
+        ? window.NANO_DOWNLOAD_URL
+        : 'nano-siege-local.zip';
+      const remoteUrl = (typeof window !== 'undefined' && window.NANO_REMOTE_DOWNLOAD_URL)
+        ? window.NANO_REMOTE_DOWNLOAD_URL
+        : hostedUrl;
       this.$btnMainDownload.textContent = isLocal ? 'Check for Updates' : 'Download';
       this.$btnMainDownload.addEventListener('click', ()=>{
         try{
-          const url = (typeof window !== 'undefined' && window.NANO_DOWNLOAD_URL) ? window.NANO_DOWNLOAD_URL : 'nano-siege-local.zip';
-          window.location.href = url;
+          const target = isLocal ? remoteUrl : hostedUrl;
+          window.location.href = target;
         }catch(e){}
       });
     }

@@ -688,6 +688,14 @@
       <span id="signin-username" class="name">Guest</span>
     </div>
 
+    <script>
+      // Hosted build: zip is served alongside the main game.
+      window.NANO_DOWNLOAD_URL = 'nano-siege-local.zip';
+      // Remote download endpoint used by the local (unzipped) build
+      // when the button shows "Check for Updates". Update this to
+      // match your public Nano-Siege URL if it changes.
+      window.NANO_REMOTE_DOWNLOAD_URL = 'https://tower.nicksminecraft.net:3339/nano-siege-local.zip';
+    </script>
     <script type="module" src="src/boot.js"></script>
     <script>
       (() => {

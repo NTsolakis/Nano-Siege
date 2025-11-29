@@ -46,5 +46,9 @@ rsync -av --delete \
   "${PUBLIC_DIR}/"
 
 echo
-echo "Deploy complete."
+echo "Building local zip..."
+ZIP_TARGET="${PUBLIC_DIR%/}/nano-siege-local.zip"
+bash "$(dirname "$0")/build-local-zip.sh" "${ZIP_TARGET}" || echo "Local zip build skipped."
 
+echo
+echo "Deploy complete."
