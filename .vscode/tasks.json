@@ -1,0 +1,27 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Browser: Run local web server",
+      "type": "npm",
+      "script": "dev:web",
+      "group": "none",
+      "problemMatcher": []
+    },
+    {
+      "label": "Desktop: Run Electron app",
+      "type": "npm",
+      "script": "desktop",
+      "group": "none",
+      "problemMatcher": []
+    },
+    {
+      "label": "Deploy: Unraid full",
+      "type": "npm",
+      "script": "deploy:unraid:full",
+      "group": "none",
+      "problemMatcher": []
+    }
+  ]
+}
+
