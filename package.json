@@ -7,6 +7,7 @@
     "start": "node server/server.js",
     "desktop": "ELECTRON_DISABLE_SANDBOX=1 electron .",
     "deploy:unraid": "bash scripts/deploy-unraid.sh",
+    "deploy:unraid:full": "bash scripts/build-and-deploy-unraid.sh",
     "launcher": "electron launcher",
     "launcher:electron": "ELECTRON_DISABLE_SANDBOX=1 electron launcher",
     "launcher:node": "node launcher/index.js",
@@ -54,12 +55,14 @@
       "target": [
         "AppImage"
       ],
-      "category": "Game"
+      "category": "Game",
+      "artifactName": "Nano-Siege.${ext}"
     },
     "win": {
       "target": [
         "portable"
-      ]
+      ],
+      "artifactName": "Nano-Siege.${ext}"
     }
   }
 }
