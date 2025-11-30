@@ -776,7 +776,9 @@ export class UIManager{
         this.$btnMainDownload.textContent = 'Exit';
         this.$btnMainDownload.addEventListener('click', ()=>{
           try{
-            if(typeof window !== 'undefined' && window.close){
+            if(typeof window !== 'undefined' && typeof window.NANO_REQUEST_APP_EXIT === 'function'){
+              window.NANO_REQUEST_APP_EXIT();
+            }else if(typeof window !== 'undefined' && window.close){
               window.close();
             }
           }catch(e){}
@@ -1424,14 +1426,24 @@ export class UIManager{
   showExitConfirm(show, mode='exit'){
     this.show(this.$exitConfirm, show);
     if(!show) return;
-    const kind = mode === 'restart' ? 'restart' : 'exit';
+    const kind = mode === 'restart' ? 'restart' : (mode === 'quit' ? 'quit' : 'exit');
     if(this.$exitTitle){
-      this.$exitTitle.textContent = (kind === 'restart') ? 'Restart Run?' : 'Exit to Main Menu?';
+      if(kind === 'restart'){
+        this.$exitTitle.textContent = 'Restart Run?';
+      }else if(kind === 'quit'){
+        this.$exitTitle.textContent = 'Exit Game?';
+      }else{
+        this.$exitTitle.textContent = 'Exit to Main Menu?';
+      }
     }
     if(this.$exitTag){
-      this.$exitTag.textContent = (kind === 'restart')
-        ? 'Are you sure you want to restart?'
-        : 'Your current run will be lost.';
+      if(kind === 'restart'){
+        this.$exitTag.textContent = 'Are you sure you want to restart?';
+      }else if(kind === 'quit'){
+        this.$exitTag.textContent = 'Are you sure you want to quit Nano‑Siege?';
+      }else{
+        this.$exitTag.textContent = 'Your current run will be lost.';
+      }
     }
     if(this.$exitConfirmBtn){
       this.$exitConfirmBtn.textContent = (kind === 'restart') ? 'Restart' : 'Exit';

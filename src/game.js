@@ -1600,7 +1600,9 @@ export class Game {
       // Already waiting on a previous confirmation.
       return;
     }
-    this._exitConfirmKind = kind === 'restart' ? 'restart' : 'exit';
+    this._exitConfirmKind = (kind === 'restart')
+      ? 'restart'
+      : (kind === 'quit' ? 'quit' : 'exit');
     this._exitConfirmCallback = (typeof cb === 'function') ? cb : null;
     this._exitConfirmPrevState = this.state;
     if(this.state === 'playing' || this.state === 'paused'){

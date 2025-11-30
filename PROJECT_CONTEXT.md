@@ -134,9 +134,51 @@ Current notes:
   2. `git push origin master` from the dev machine.
   3. On Unraid: `cd /mnt/user/www/nano-siege-repo && git pull origin master`.
   4. On Unraid: `./scripts/deploy-unraid.sh` to update backend + public game files.
- - When you say “I want to rebuild” (meaning rebuild the Electron launchers and clean old launcher artifacts), show this exact command:
+ - When you ask “how do I deploy again?”, show this exact checklist:
+   - On dev machine:
+     ```bash
+     npm run build:desktop:release
+     git status
+     git add .
+     git commit -m "Describe the change"
+     git push origin master
+     ```
+   - On Unraid:
+     ```bash
+     cd /mnt/user/www/nano-siege/downloads
+     sha256sum Nano-Siege.exe > Nano-Siege.exe.sha256
+     sha256sum Nano-Siege.AppImage > Nano-Siege.AppImage.sha256
+     
+     cd /mnt/user/www/nano-siege-repo
+     git pull origin master
+     ./scripts/deploy-unraid.sh
+     ```
+ - Desktop release + launcher rebuild flow (current as of SHA-based updater):
+   1. On dev machine, from repo root: `npm run build:desktop:release`  
+      (This cleans `dist/`, builds Linux AppImage + Windows EXE, and builds both Electron launchers.)
+   2. Copy fresh artifacts from `dist/` to Unraid:
+      - Game binaries → `/mnt/user/www/nano-siege/downloads/Nano-Siege.AppImage` and `/mnt/user/www/nano-siege/downloads/Nano-Siege.exe`
+      - Launchers → `/mnt/user/www/nano-siege/downloads/NanoSiegeLauncher-linux.AppImage` and `/mnt/user/www/nano-siege/downloads/NanoSiegeLauncher.exe`
+   3. On Unraid, update hashes so launchers auto‑update:
+      ```bash
+      cd /mnt/user/www/nano-siege/downloads
+      sha256sum Nano-Siege.exe > Nano-Siege.exe.sha256
+      sha256sum Nano-Siege.AppImage > Nano-Siege.AppImage.sha256
+      ```
+   4. Commit and push code changes from dev machine:
+      ```bash
+      git status
+      git add .
+      git commit -m "Describe the change"
+      git push origin master
+      ```
+   5. On Unraid, pull and deploy:
+      ```bash
+      cd /mnt/user/www/nano-siege-repo
+      git pull origin master
+      ./scripts/deploy-unraid.sh
+      ```
+ - On Linux dev machines with SUID sandbox issues, run the launcher AppImage with sandbox disabled:
    ```bash
-   rm -rf dist/NanoSiegeLauncher* dist/linux-unpacked dist/win-unpacked dist/latest-linux.yml dist/builder-debug.yml dist/builder-effective-config.yaml && \
-   npm run build:launcher:electron:linux && \
-   npm run build:launcher:electron:win
+   ELECTRON_DISABLE_SANDBOX=1 ~/Downloads/NanoSiegeLauncher-linux.AppImage
    ```

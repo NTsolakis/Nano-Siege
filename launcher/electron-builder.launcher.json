@@ -10,6 +10,7 @@
   ],
   "asar": true,
   "linux": {
+    "icon": "launcher/icon.png",
     "target": [
       "AppImage"
     ],
@@ -17,10 +18,10 @@
     "artifactName": "NanoSiegeLauncher-linux.${ext}"
   },
   "win": {
+    "icon": "launcher/icon.ico",
     "target": [
       "portable"
     ],
     "artifactName": "NanoSiegeLauncher.${ext}"
   }
 }
-

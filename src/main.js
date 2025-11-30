@@ -77,6 +77,29 @@ canvas.height = CANVAS_H;
 const game = new Game(canvas);
 game.start();
 
+// Expose a tiny helper so the desktop (Electron) build can request a
+// proper "quit game?" confirmation from the main menu before closing
+// the window. Hosted/browser builds simply ignore this.
+try{
+  if(typeof window !== 'undefined'){
+    window.NANO_REQUEST_APP_EXIT = ()=>{
+      if(!game || typeof game.requestExitConfirm !== 'function'){
+        try{
+          if(window.close) window.close();
+        }catch(e){}
+        return;
+      }
+      game.requestExitConfirm('quit', (ok)=>{
+        if(ok){
+          try{
+            if(window.close) window.close();
+          }catch(e){}
+        }
+      });
+    };
+  }
+}catch(e){}
+
 // Browser back handling: keep navigation inside the game.
 if(window.history && window.history.pushState){
   const pushStateSafe = (screen)=>{
