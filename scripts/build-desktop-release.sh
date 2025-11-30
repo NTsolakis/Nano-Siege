@@ -33,6 +33,10 @@ echo "Installing npm dependencies..."
 npm install
 
 echo
+echo "Cleaning dist/ directory (old artifacts)..."
+rm -rf dist/*
+
+echo
 echo "Building Linux AppImage..."
 npm run build:linux
 
@@ -41,11 +45,10 @@ echo "Building Windows portable exe (requires Wine)..."
 npm run build:win
 
 echo
-echo "Building launchers..."
-npm run build:launcher:linux
-npm run build:launcher:win
+echo "Building Electron launchers..."
+npm run build:launcher:electron:linux
+npm run build:launcher:electron:win
 
 echo
 echo "Build complete. Desktop artifacts in dist/:"
 ls -1 dist
-

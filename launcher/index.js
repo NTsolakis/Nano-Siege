@@ -13,6 +13,7 @@ const https = require('https');
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
+const crypto = require('crypto');
 const { spawn, spawnSync } = require('child_process');
 
 const PLATFORM = process.platform === 'win32'
@@ -94,6 +95,31 @@ function fetchJson(url) {
   });
 }
 
+function fetchText(url) {
+  return new Promise((resolve, reject) => {
+    getHttpModule(url)
+      .get(url, (res) => {
+        if (res.statusCode && res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
+          return resolve(fetchText(res.headers.location));
+        }
+        if (res.statusCode !== 200) {
+          return reject(new Error(`HTTP ${res.statusCode} for ${url}`));
+        }
+        const chunks = [];
+        res.on('data', (c) => chunks.push(c));
+        res.on('end', () => {
+          try {
+            const buf = Buffer.concat(chunks);
+            resolve(buf.toString('utf8'));
+          } catch (e) {
+            reject(e);
+          }
+        });
+      })
+      .on('error', reject);
+  });
+}
+
 function readState() {
   try {
     const raw = fs.readFileSync(stateFile, 'utf8');
@@ -106,6 +132,80 @@ function readState() {
 function writeState(obj) {
   fs.mkdirSync(baseDir, { recursive: true });
   fs.writeFileSync(stateFile, JSON.stringify(obj, null, 2), 'utf8');
+}
+
+function computeMetaUrl(info) {
+  if (!info || !info.url) return null;
+  if (info.metaUrl) return info.metaUrl;
+  try {
+    return info.url + '.meta.json';
+  } catch (e) {
+    return null;
+  }
+}
+
+function computeHashUrl(info) {
+  if (!info || !info.url) return null;
+  if (info.hashUrl) return info.hashUrl;
+  try {
+    return info.url + '.sha256';
+  } catch (e) {
+    return null;
+  }
+}
+
+function parseSha256(text) {
+  if (!text) return null;
+  const firstLine = String(text).trim().split('\n')[0].trim();
+  if (!firstLine) return null;
+  const firstToken = firstLine.split(/\s+/)[0];
+  if (!firstToken) return null;
+  const hex = firstToken.trim();
+  if (!/^[a-fA-F0-9]{32,64}$/.test(hex)) return null;
+  return hex.toLowerCase();
+}
+
+async function fetchRemoteSha(info) {
+  const hashUrl = computeHashUrl(info);
+  if (!hashUrl) return null;
+  try {
+    const txt = await fetchText(hashUrl);
+    const sha = parseSha256(txt);
+    if (!sha) {
+      throw new Error('No SHA256 found in hash file');
+    }
+    return { hashUrl, sha256: sha };
+  } catch (e) {
+    console.error('Launcher hash fetch failed from', hashUrl, e);
+    return null;
+  }
+}
+
+function computeRemoteToken(info, meta, hashInfo) {
+  if (hashInfo && hashInfo.sha256) {
+    return String(hashInfo.sha256).toLowerCase();
+  }
+  if (meta) {
+    if (meta.buildId) return String(meta.buildId);
+    if (meta.build) return String(meta.build);
+    if (meta.version) return String(meta.version);
+    if (meta.etag) return String(meta.etag);
+  }
+  if (info) {
+    if (info.buildId) return String(info.buildId);
+    if (info.version) return String(info.version);
+    if (info.url) return String(info.url);
+  }
+  return null;
+}
+
+function computeDisplayVersion(info, meta, hashInfo) {
+  if (meta && meta.display) return String(meta.display);
+  if (hashInfo && hashInfo.sha256) {
+    return String(hashInfo.sha256).slice(0, 8);
+  }
+  const token = computeRemoteToken(info, meta, hashInfo);
+  return token || '';
 }
 
 function downloadFile(url, dest) {
@@ -140,10 +240,29 @@ function downloadFile(url, dest) {
   });
 }
 
-function versionChanged(current, next) {
+function versionChanged(current, info, meta, hashInfo) {
+  const token = computeRemoteToken(info, meta, hashInfo);
+  if (!token) return true;
   if (!current) return true;
-  if (!current.version) return true;
-  return String(current.version) !== String(next.version);
+  const curToken = current.sha256 || current.buildToken || current.version || current.urlToken;
+  if (!curToken) return true;
+  return String(curToken) !== String(token);
+}
+
+function computeFileSha256(filePath) {
+  return new Promise((resolve, reject) => {
+    const hash = crypto.createHash('sha256');
+    const stream = fs.createReadStream(filePath);
+    stream.on('error', (err) => reject(err));
+    stream.on('data', (chunk) => hash.update(chunk));
+    stream.on('end', () => {
+      try {
+        resolve(hash.digest('hex'));
+      } catch (e) {
+        reject(e);
+      }
+    });
+  });
 }
 
 function prompt(message) {
@@ -397,43 +516,86 @@ async function main() {
 
   const manifest = await fetchJson(MANIFEST_URL);
   const info = manifest && manifest[PLATFORM];
-  if (!info || !info.url || !info.version) {
-    throw new Error(`Manifest missing entry for platform "${PLATFORM}"`);
+  if (!info || !info.url) {
+    throw new Error(`Manifest missing entry for platform "${PLATFORM}" (url required)`);
+  }
+
+  let meta = null;
+  const metaUrl = computeMetaUrl(info);
+  if (metaUrl) {
+    try {
+      meta = await fetchJson(metaUrl);
+    } catch (e) {
+      console.error('Launcher metadata fetch failed from', metaUrl, e);
+    }
   }
 
   const current = readState();
-  const needsUpgrade = versionChanged(current, info);
+  const hashInfo = await fetchRemoteSha(info);
+
+  // Backfill SHA256 for old installs so they participate in hash-based updates.
+  if (current && current.binaryPath && fs.existsSync(current.binaryPath) && !current.sha256) {
+    try {
+      const sha = await computeFileSha256(current.binaryPath);
+      if (sha) {
+        current.sha256 = sha.toLowerCase();
+        writeState(current);
+      }
+    } catch (e) {
+      console.error('Failed to compute local SHA256 for existing install:', e);
+    }
+  }
+
+  const needsUpgrade = versionChanged(current, info, meta, hashInfo);
   const keepPath = current && current.binaryPath && fs.existsSync(current.binaryPath);
 
   let binaryPath = current && current.binaryPath;
+  const displayVersion = computeDisplayVersion(info, meta, hashInfo);
+  const versionLabel = displayVersion ? ` ${displayVersion}` : '';
 
   if (needsUpgrade || !keepPath) {
-    console.log(`Updating to version ${info.version}...`);
+    console.log(`Updating Nano‑Siege to${versionLabel || ' latest build'}...`);
     setUiState({
       phase: 'downloading',
-      statusText: `Downloading Nano‑Siege ${info.version}…`,
-      version: info.version
+      statusText: `Downloading Nano‑Siege${versionLabel}…`,
+      version: displayVersion || null
     });
     fs.mkdirSync(binDir, { recursive: true });
-    const filename = path.basename(new URL(info.url).pathname || `nano-siege-${info.version}`);
+    const filename = path.basename(new URL(info.url).pathname || 'nano-siege-latest');
     binaryPath = path.join(binDir, filename);
     await downloadFile(info.url, binaryPath);
     if (PLATFORM === 'linux') {
       try { fs.chmodSync(binaryPath, 0o755); } catch (e) {}
     }
-    writeState({ platform: PLATFORM, version: info.version, binaryPath });
+    const buildToken = computeRemoteToken(info, meta, hashInfo);
+    let sha256 = hashInfo && hashInfo.sha256;
+    if (!sha256) {
+      try {
+        sha256 = await computeFileSha256(binaryPath);
+      } catch (e) {
+        console.error('Failed to compute SHA256 for downloaded binary:', e);
+      }
+    }
+    writeState({
+      platform: PLATFORM,
+      buildToken,
+      sha256: sha256 ? String(sha256).toLowerCase() : null,
+      binaryPath,
+      metaUrl,
+      hashUrl: hashInfo && hashInfo.hashUrl
+    });
     console.log('Update complete.');
     setUiState({
       phase: 'finalizing',
       statusText: 'Finishing install…',
-      version: info.version
+      version: displayVersion || null
     });
   } else {
-    console.log(`Already up to date (version ${current.version}).`);
+    console.log(`Already up to date (build token ${current.buildToken || current.version || 'unknown'}).`);
     setUiState({
       phase: 'ready',
-      statusText: `Up to date — Nano‑Siege ${info.version} is installed.`,
-      version: info.version,
+      statusText: `Up to date — Nano‑Siege${versionLabel} is installed.`,
+      version: displayVersion || null,
       canPlay: true
     });
   }
@@ -442,8 +604,8 @@ async function main() {
   if (needsUpgrade || !keepPath) {
     setUiState({
       phase: 'ready',
-      statusText: `Ready — Nano‑Siege ${info.version} installed. Click Play to start.`,
-      version: info.version,
+      statusText: `Ready — Nano‑Siege${versionLabel} installed. Click Play to start.`,
+      version: displayVersion || null,
       canPlay: true
     });
   }

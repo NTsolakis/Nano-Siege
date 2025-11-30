@@ -8,6 +8,8 @@
     "desktop": "electron .",
     "deploy:unraid": "bash scripts/deploy-unraid.sh",
     "launcher": "electron launcher",
+    "launcher:electron": "ELECTRON_DISABLE_SANDBOX=1 electron launcher",
+    "launcher:node": "node launcher/index.js",
     "build:launcher:electron:linux": "electron-builder --config launcher/electron-builder.launcher.json --linux AppImage",
     "build:launcher:electron:win": "electron-builder --config launcher/electron-builder.launcher.json --win portable",
     "build:launcher:linux": "pkg launcher/index.js --targets node18-linux-x64 --output dist/NanoSiegeLauncher-linux",
@@ -21,7 +23,10 @@
     "bcryptjs": "^2.4.3",
     "cookie-parser": "^1.4.6",
     "express": "^4.19.0",
-    "jsonwebtoken": "^9.0.2"
+    "jsonwebtoken": "^9.0.2",
+    "launcher": "^0.0.1",
+    "npm": "^11.6.4",
+    "run": "^1.5.0"
   },
   "devDependencies": {
     "electron": "^30.0.0",
