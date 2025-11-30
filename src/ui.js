@@ -766,9 +766,23 @@ export class UIManager{
       try{
         if(typeof window !== 'undefined'){
           const flavor = window.NANO_BUILD_FLAVOR;
-          if(flavor === 'desktop') isDesktop = true;
-          else if(flavor === 'local') isLocal = true;
-          else if(window.location && window.location.protocol === 'file:') isLocal = true;
+          if(flavor === 'desktop'){
+            isDesktop = true;
+          }else if(flavor === 'local'){
+            isLocal = true;
+          }else{
+            let ua = '';
+            try{
+              ua = (window.navigator && window.navigator.userAgent) || '';
+            }catch(e){}
+            if(/electron/i.test(ua)){
+              // Electron desktop build (AppImage / EXE)
+              isDesktop = true;
+            }else if(window.location && window.location.protocol === 'file:'){
+              // Plain local HTML (zip extract / file://)
+              isLocal = true;
+            }
+          }
         }
       }catch(e){}
 
