@@ -53,6 +53,7 @@
     const os = require('os');
     const crypto = require('crypto');
     const { shell } = require('electron');
+    const { spawn } = require('child_process');
 
     const PLATFORM = process.platform === 'win32'
       ? 'windows'
@@ -298,13 +299,23 @@
     async function launchGame(binaryPath){
       if(!binaryPath) return;
       try{
+        if(PLATFORM === 'linux'){
+          const child = spawn(binaryPath, ['--no-sandbox'], {
+            detached: true,
+            stdio: 'ignore'
+          });
+          try{ child.unref(); }catch(e){}
+          // Close the launcher immediately after handing off to the game.
+          window.close();
+          return;
+        }
+        // Windows: let the OS handle the .exe via the shell.
         const err = await shell.openPath(binaryPath);
         if (err) {
           console.error('Failed to launch game via shell.openPath:', err, 'path:', binaryPath);
           setStatus('Failed to launch game — see console for details.', '', true);
           return;
         }
-        // Close the launcher once the OS has accepted the launch request.
         window.close();
       }catch(e){
         console.error('Error launching game:', e, 'path:', binaryPath);
