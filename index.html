@@ -298,6 +298,20 @@
           </div>
         </section>
 
+        <!-- Desktop-only exit choice overlay (pause menu "Exit" button).
+             Shown only in the Windows/Linux app build via JavaScript. -->
+        <section id="app-exit-overlay" class="overlay">
+          <div class="panel small">
+            <h3>Exit</h3>
+            <p class="tag">Where do you want to exit?</p>
+            <div class="actions">
+              <button id="btn-app-exit-cancel">Cancel</button>
+              <button id="btn-app-exit-menu">Exit to Main Menu</button>
+              <button id="btn-app-exit-desktop">Exit to Desktop</button>
+            </div>
+          </div>
+        </section>
+
         <section id="gameover-overlay" class="overlay">
           <div class="panel">
             <h2>Reactor Breached</h2>
@@ -571,35 +585,56 @@
         <div class="panel mainmenu-panel">
           <h2>Settings</h2>
           <p class="tag">Adjust global options before entering the Reactor Chamber.</p>
-          <div class="vol-ctl" style="margin-top:10px; display:flex; align-items:center; gap:8px; justify-content:center">
-            <label for="vol-slider-main">Volume <span id="vol-label-main">70%</span></label>
-            <input type="range" id="vol-slider-main" min="0" max="100" step="1" value="70" />
+
+          <!-- Primary settings (always visible on hosted build, top-level on desktop) -->
+          <div id="mainsettings-primary">
+            <div class="vol-ctl" style="margin-top:10px; display:flex; align-items:center; gap:8px; justify-content:center">
+              <label for="vol-slider-main">Volume <span id="vol-label-main">70%</span></label>
+              <input type="range" id="vol-slider-main" min="0" max="100" step="1" value="70" />
+            </div>
+            <div class="dev-toggle" style="margin-top:14px">
+              <span class="dev-label">Automatic Speed Control</span>
+              <label class="switch">
+                <input type="checkbox" id="autospeed-toggle-main" checked />
+                <span class="slider"></span>
+              </label>
+              <span class="dev-hint">Auto slow on bonus & boss waves</span>
+            </div>
+            <!-- Desktop-only quick actions: wired in JS; hidden on hosted build -->
+            <div class="actions" id="mainsettings-desktop-actions" style="margin-top:14px; display:none">
+              <button id="btn-main-fullscreen">Fullscreen</button>
+              <button id="btn-main-devsettings">Developer Settings</button>
+            </div>
           </div>
-          <div class="dev-toggle" style="margin-top:14px">
-            <span class="dev-label">Automatic Speed Control</span>
-            <label class="switch">
-              <input type="checkbox" id="autospeed-toggle-main" checked />
-              <span class="slider"></span>
-            </label>
-            <span class="dev-hint">Auto slow on bonus & boss waves</span>
+
+          <!-- Developer / advanced settings panel.
+               On hosted builds this is shown inline under the primary settings;
+               on desktop builds it is shown as a separate sub-screen. -->
+          <div id="main-devsettings-panel" style="margin-top:16px">
+            <h3 style="font-size:16px; margin:0 0 6px 0">Developer Settings</h3>
+            <p class="tag" style="margin-bottom:10px">Advanced options for testing and balancing.</p>
+            <div class="dev-toggle" style="margin-top:0">
+              <span class="dev-label">Developer Mode</span>
+              <label class="switch">
+                <input type="checkbox" id="dev-toggle-main" />
+                <span class="slider"></span>
+              </label>
+              <span class="dev-hint">∞ money, rerolls, HP</span>
+            </div>
+            <div class="dev-toggle" style="margin-top:8px">
+              <span class="dev-label">Debug Mode</span>
+              <label class="switch">
+                <input type="checkbox" id="debug-toggle-main" />
+                <span class="slider"></span>
+              </label>
+              <span class="dev-hint">Tune nano‑bot sprite frames</span>
+            </div>
+            <div class="actions" style="margin-top:10px; display:none" id="main-devsettings-actions">
+              <button id="btn-main-devsettings-close">Back</button>
+            </div>
           </div>
-          <div class="dev-toggle" style="margin-top:8px">
-            <span class="dev-label">Developer Mode</span>
-            <label class="switch">
-              <input type="checkbox" id="dev-toggle-main" />
-              <span class="slider"></span>
-            </label>
-            <span class="dev-hint">∞ money, rerolls, HP</span>
-          </div>
-          <div class="dev-toggle" style="margin-top:8px">
-            <span class="dev-label">Debug Mode</span>
-            <label class="switch">
-              <input type="checkbox" id="debug-toggle-main" />
-              <span class="slider"></span>
-            </label>
-            <span class="dev-hint">Tune nano‑bot sprite frames</span>
-          </div>
-          <div class="actions" style="margin-top:18px">
+
+          <div class="actions" style="margin-top:18px" id="mainsettings-back-row">
             <button id="btn-main-settings-back">Back</button>
           </div>
         </div>

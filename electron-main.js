@@ -1,4 +1,4 @@
-const { app, BrowserWindow, shell } = require('electron');
+const { app, BrowserWindow, shell, ipcMain } = require('electron');
 const path = require('path');
 
 // On some Linux setups (including many desktop distros without a
@@ -47,6 +47,19 @@ app.whenReady().then(() => {
       createWindow();
     }
   });
+});
+
+ipcMain.on('nano-quit', () => {
+  try {
+    app.quit();
+  } catch (e) {
+    // Fallback: try closing all windows if quit fails.
+    try {
+      BrowserWindow.getAllWindows().forEach((w) => {
+        try { w.close(); } catch (_) {}
+      });
+    } catch (_) {}
+  }
 });
 
 app.on('window-all-closed', () => {

@@ -5,7 +5,7 @@
   "main": "electron-main.js",
   "scripts": {
     "start": "node server/server.js",
-    "desktop": "electron .",
+    "desktop": "ELECTRON_DISABLE_SANDBOX=1 electron .",
     "deploy:unraid": "bash scripts/deploy-unraid.sh",
     "launcher": "electron launcher",
     "launcher:electron": "ELECTRON_DISABLE_SANDBOX=1 electron launcher",

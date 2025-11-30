@@ -276,6 +276,19 @@ export class Game {
     this.ui.on('leaderboardSelectMap', (key)=>{ if(key){ this.leaderboardMapKey = key; this.refreshLeaderboard(key); } });
     this.ui.on('exitConfirm', ()=> this._handleExitConfirm(true));
     this.ui.on('exitCancel', ()=> this._handleExitConfirm(false));
+    this.ui.on('exitToMenuImmediate', ()=> {
+      if(this.ui.showPause) this.ui.showPause(false);
+      this.toMenu();
+    });
+    this.ui.on('exitToDesktop', ()=> {
+      try{
+        if(typeof window !== 'undefined' && window.NANO_DESKTOP && typeof window.NANO_DESKTOP.quit === 'function'){
+          window.NANO_DESKTOP.quit();
+        }else if(typeof window !== 'undefined' && window.close){
+          window.close();
+        }
+      }catch(e){}
+    });
     this.ui.on('restart', ()=> {
       this.requestExitConfirm('restart', (ok)=>{
         if(ok) this.retry();
@@ -1626,12 +1639,18 @@ export class Game {
     const cb = this._exitConfirmCallback;
     this._exitConfirmPrevState = null;
     this._exitConfirmCallback = null;
+    const kind = this._exitConfirmKind;
     this._exitConfirmKind = 'exit';
     if(typeof cb === 'function') cb(!!ok);
     // If the user cancelled from a pause-originated confirm, return to
-    // the pause overlay; otherwise, leave visibility to the callback.
-    if(!ok && prev === 'paused' && this.ui.showPause){
-      this.ui.showPause(true);
+    // the pause overlay; if they cancelled from the main menu "quit"
+    // confirmation, restore the main menu.
+    if(!ok){
+      if(prev === 'paused' && this.ui.showPause){
+        this.ui.showPause(true);
+      }else if(prev === 'menu' && kind === 'quit' && this.ui.showMainMenu){
+        this.ui.showMainMenu(true);
+      }
     }
   }
 

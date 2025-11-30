@@ -2,9 +2,45 @@ import { GAME_RULES, COLORS, UPGRADE_COSTS, getHpColor, TOWER_TYPES } from './co
 import { MAPS, drawMapPreview } from './maps.js';
 import { punchOutSpriteBackground } from './tower.js';
 
+function detectRuntimeFlavor(){
+  let isDesktop = false;
+  let isLocal = false;
+  try{
+    if(typeof window !== 'undefined'){
+      // Primary: bridge injected by Electron preload.
+      if(window.NANO_DESKTOP && window.NANO_DESKTOP.flavor === 'desktop'){
+        isDesktop = true;
+      }
+      const flavor = window.NANO_BUILD_FLAVOR;
+      if(!isDesktop){
+        if(flavor === 'desktop'){
+          isDesktop = true;
+        }else if(flavor === 'local'){
+          isLocal = true;
+        }
+      }
+      if(!isDesktop && !isLocal){
+        let ua = '';
+        try{
+          ua = (window.navigator && window.navigator.userAgent) || '';
+        }catch(e){}
+        if(/electron/i.test(ua)){
+          isDesktop = true;
+        }else if(window.location && window.location.protocol === 'file:'){
+          isLocal = true;
+        }
+      }
+    }
+  }catch(e){}
+  return { isDesktop, isLocal };
+}
+
 export class UIManager{
   constructor(){
-    this.listeners = { startWave: [], startGame: [], pause: [], resume: [], retry: [], restart: [], sandboxStart: [], sandboxReset: [], sandboxOpen: [], toMenu: [], toMissionSelect: [], selectTowerType: [], upgradeSlow: [], upgradeRate: [], upgradeRange: [], upgradeBurn: [], sellTower: [], sellConfirm: [], sellCancel: [], selectMap: [], toggleFast: [], closeUpg: [], toggleVolume: [], setVolume: [], shopBuy: [], shopReroll: [], shopContinue: [], shopBuyAbility: [], useBomb: [], useOverclock: [], useCryo: [], toggleDev: [], toggleDebug: [], toggleAutoSpeed: [], exitConfirm: [], exitCancel: [], openShop: [], closeShop: [], devUnlockUlts: [], devUpgradeMax: [], mainNew: [], mainLoad: [], mainAssembly: [], loadSlot: [], openAssembly: [], closeAssembly: [], startMission: [], assemblySave: [], assemblyLoad: [], openAssemblyCore: [], menuBack: [], mainSettings: [], mainSettingsBack: [], loadBack: [], loginUser: [], openCreateUser: [], closeCreateUser: [], createUser: [], openLeaderboard: [], closeLeaderboard: [], leaderboardSignIn: [], logout: [], removePassive: [], leaderboardSelectMap: [], pauseLoginOpen: [], mainDownload: [] };
+    this.listeners = { startWave: [], startGame: [], pause: [], resume: [], retry: [], restart: [], sandboxStart: [], sandboxReset: [], sandboxOpen: [], toMenu: [], toMissionSelect: [], selectTowerType: [], upgradeSlow: [], upgradeRate: [], upgradeRange: [], upgradeBurn: [], sellTower: [], sellConfirm: [], sellCancel: [], selectMap: [], toggleFast: [], closeUpg: [], toggleVolume: [], setVolume: [], shopBuy: [], shopReroll: [], shopContinue: [], shopBuyAbility: [], useBomb: [], useOverclock: [], useCryo: [], toggleDev: [], toggleDebug: [], toggleAutoSpeed: [], exitConfirm: [], exitCancel: [], exitToMenuImmediate: [], exitToDesktop: [], openShop: [], closeShop: [], devUnlockUlts: [], devUpgradeMax: [], mainNew: [], mainLoad: [], mainAssembly: [], loadSlot: [], openAssembly: [], closeAssembly: [], startMission: [], assemblySave: [], assemblyLoad: [], openAssemblyCore: [], menuBack: [], mainSettings: [], mainSettingsBack: [], loadBack: [], loginUser: [], openCreateUser: [], closeCreateUser: [], createUser: [], openLeaderboard: [], closeLeaderboard: [], leaderboardSignIn: [], logout: [], removePassive: [], leaderboardSelectMap: [], pauseLoginOpen: [], mainDownload: [] };
+    const flavor = detectRuntimeFlavor();
+    this.isDesktopRuntime = !!flavor.isDesktop;
+    this.isLocalRuntime = !!flavor.isLocal;
     this.$root = document.getElementById('app');
     this.$wave = document.getElementById('stat-wave');
     this.$credits = document.getElementById('stat-credits');
@@ -97,6 +133,11 @@ export class UIManager{
     this.$leaderboardWarning = document.getElementById('leaderboard-warning');
     this.$leaderboardDevWarning = document.getElementById('leaderboard-dev-warning');
     this.$leaderboardLoading = document.getElementById('leaderboard-loading');
+    // Desktop-only exit overlay (pause → Exit)
+    this.$appExitOverlay = document.getElementById('app-exit-overlay');
+    this.$btnAppExitCancel = document.getElementById('btn-app-exit-cancel');
+    this.$btnAppExitMenu = document.getElementById('btn-app-exit-menu');
+    this.$btnAppExitDesktop = document.getElementById('btn-app-exit-desktop');
     // Mode loading overlay (for Endless / Sandbox / Assembly transitions)
     this.$modeLoading = document.getElementById('mode-loading-overlay');
     this.$modeLoadingTitle = document.getElementById('mode-loading-title');
@@ -128,6 +169,15 @@ export class UIManager{
     this.$btnMainAssembly = document.getElementById('btn-main-assembly');
     this.$btnMainSandbox = document.getElementById('btn-main-sandbox');
     this.$btnMainSettings = document.getElementById('btn-main-settings');
+    // Main settings controls
+    this.$mainSettingsPrimary = document.getElementById('mainsettings-primary');
+    this.$mainSettingsDesktopActions = document.getElementById('mainsettings-desktop-actions');
+    this.$btnMainFullscreen = document.getElementById('btn-main-fullscreen');
+    this.$btnMainDevSettings = document.getElementById('btn-main-devsettings');
+    this.$mainDevSettingsPanel = document.getElementById('main-devsettings-panel');
+    this.$mainDevSettingsActions = document.getElementById('main-devsettings-actions');
+    this.$btnMainDevSettingsClose = document.getElementById('btn-main-devsettings-close');
+    this.$mainSettingsBackRow = document.getElementById('mainsettings-back-row');
     this.$btnLoadBack = document.getElementById('btn-load-back');
     this.$loadSlots = [];
     // Assembly War UI
@@ -716,7 +766,7 @@ export class UIManager{
     if(this.$abilOverclock){ this.$abilOverclock.disabled = true; this.$abilOverclock.classList.add('locked'); this.$abilOverclock.textContent = 'Overclock (Locked)'; }
     if(this.$abilCryo){ this.$abilCryo.disabled = true; this.$abilCryo.classList.add('locked'); this.$abilCryo.textContent = 'Cryo (Locked)'; }
 
-    this.listeners = { startWave: [], startGame: [], pause: [], resume: [], retry: [], restart: [], sandboxStart: [], sandboxReset: [], toMenu: [], toMissionSelect: [], selectTowerType: [], upgradeSlow: [], upgradeRate: [], upgradeRange: [], upgradeBurn: [], sellTower: [], sellConfirm: [], sellCancel: [], selectMap: [], toggleFast: [], closeUpg: [], toggleVolume: [], setVolume: [], shopBuy: [], shopReroll: [], shopContinue: [], shopBuyAbility: [], useBomb: [], useOverclock: [], useCryo: [], toggleDev: [], toggleDebug: [], toggleAutoSpeed: [], exitConfirm: [], exitCancel: [], openShop: [], closeShop: [], devUnlockUlts: [], devUpgradeMax: [], mainNew: [], mainLoad: [], mainAssembly: [], loadSlot: [], openAssembly: [], closeAssembly: [], startMission: [], assemblySave: [], assemblyLoad: [], openAssemblyCore: [], menuBack: [], mainSettings: [], mainSettingsBack: [], loadBack: [], loginUser: [], openCreateUser: [], closeCreateUser: [], createUser: [], openLeaderboard: [], closeLeaderboard: [], leaderboardSignIn: [], logout: [], removePassive: [], leaderboardSelectMap: [], pauseLoginOpen: [], mainDownload: [] };
+    this.listeners = { startWave: [], startGame: [], pause: [], resume: [], retry: [], restart: [], sandboxStart: [], sandboxReset: [], toMenu: [], toMissionSelect: [], selectTowerType: [], upgradeSlow: [], upgradeRate: [], upgradeRange: [], upgradeBurn: [], sellTower: [], sellConfirm: [], sellCancel: [], selectMap: [], toggleFast: [], closeUpg: [], toggleVolume: [], setVolume: [], shopBuy: [], shopReroll: [], shopContinue: [], shopBuyAbility: [], useBomb: [], useOverclock: [], useCryo: [], toggleDev: [], toggleDebug: [], toggleAutoSpeed: [], exitConfirm: [], exitCancel: [], exitToMenuImmediate: [], exitToDesktop: [], openShop: [], closeShop: [], devUnlockUlts: [], devUpgradeMax: [], mainNew: [], mainLoad: [], mainAssembly: [], loadSlot: [], openAssembly: [], closeAssembly: [], startMission: [], assemblySave: [], assemblyLoad: [], openAssemblyCore: [], menuBack: [], mainSettings: [], mainSettingsBack: [], loadBack: [], loginUser: [], openCreateUser: [], closeCreateUser: [], createUser: [], openLeaderboard: [], closeLeaderboard: [], leaderboardSignIn: [], logout: [], removePassive: [], leaderboardSelectMap: [], pauseLoginOpen: [], mainDownload: [] };
     // Track dev mode state for UI behavior (e.g., enabling shop buttons and credit label)
     this.devMode = false;
     this.setFragments(0);
@@ -761,8 +811,8 @@ export class UIManager{
       // - Local file:// copy: "Check for Updates" (points at public launcher)
       // - Desktop (Electron) build: repurpose as an Exit button so
       //   players rely on the launcher for updates.
-      let isLocal = false;
       let isDesktop = false;
+      let isLocal = false;
       try{
         if(typeof window !== 'undefined'){
           const flavor = window.NANO_BUILD_FLAVOR;
@@ -776,7 +826,7 @@ export class UIManager{
               ua = (window.navigator && window.navigator.userAgent) || '';
             }catch(e){}
             if(/electron/i.test(ua)){
-              // Electron desktop build (AppImage / EXE)
+              // Electron desktop build (AppImage / EXE / dev electron .)
               isDesktop = true;
             }else if(window.location && window.location.protocol === 'file:'){
               // Plain local HTML (zip extract / file://)
@@ -790,10 +840,12 @@ export class UIManager{
         this.$btnMainDownload.textContent = 'Exit';
         this.$btnMainDownload.addEventListener('click', ()=>{
           try{
-            if(typeof window !== 'undefined' && typeof window.NANO_REQUEST_APP_EXIT === 'function'){
-              window.NANO_REQUEST_APP_EXIT();
-            }else if(typeof window !== 'undefined' && window.close){
-              window.close();
+            if(typeof window !== 'undefined'){
+              if(window.NANO_DESKTOP && typeof window.NANO_DESKTOP.quit === 'function'){
+                window.NANO_DESKTOP.quit();
+              }else if(window.close){
+                window.close();
+              }
             }
           }catch(e){}
         });
@@ -883,6 +935,16 @@ export class UIManager{
       this.$pauseMission.addEventListener('click', ()=> this.emit('toMissionSelect'));
     }
     if(this.$fast){ this.$fast.addEventListener('click', ()=> this.emit('toggleFast')); }
+    if(this.$pauseMenu){
+      if(this.isDesktopRuntime && this.$appExitOverlay){
+        this.$pauseMenu.textContent = 'Exit';
+        this.$pauseMenu.addEventListener('click', ()=>{
+          this.$appExitOverlay.classList.add('visible');
+        });
+      }else{
+        this.$pauseMenu.addEventListener('click', ()=> this.emit('toMenu'));
+      }
+    }
     if(this.$btnPauseLogin){
       this.$btnPauseLogin.addEventListener('click', ()=>{
         if(this.showPauseLogin) this.showPauseLogin(true);
@@ -911,7 +973,6 @@ export class UIManager{
     }
     if(this.$menuStart){ this.$menuStart.addEventListener('click', ()=> this.emit('startGame')); }
     if(this.$resume){ this.$resume.addEventListener('click', ()=> this.emit('resume')); }
-    if(this.$pauseMenu){ this.$pauseMenu.addEventListener('click', ()=> this.emit('toMenu')); }
     if(this.$pauseRestart){ this.$pauseRestart.addEventListener('click', ()=> this.emit('restart')); }
     if(this.$btnSettings){ this.$btnSettings.addEventListener('click', ()=> this.showSettings(true)); }
     if(this.$btnSettingsBack){ this.$btnSettingsBack.addEventListener('click', ()=> this.showSettings(false)); }
@@ -1026,6 +1087,7 @@ export class UIManager{
       });
     }
     if(this.$devOpenShop){ this.$devOpenShop.addEventListener('click', ()=> this.emit('openShop')); }
+
     // Dev toggles (main settings only)
     this.$devToggleMain = document.getElementById('dev-toggle-main');
     const onDevChange = (src)=>{
@@ -1043,6 +1105,71 @@ export class UIManager{
     };
     if(this.$debugToggleMain){ this.$debugToggleMain.addEventListener('change', ()=> onDebugChange(this.$debugToggleMain)); }
 
+    // Desktop-only main settings controls (fullscreen + dev settings sub-screen)
+    const isDesktopRuntime = this.isDesktopRuntime;
+    if(this.$mainSettingsDesktopActions){
+      this.$mainSettingsDesktopActions.style.display = isDesktopRuntime ? 'flex' : 'none';
+    }
+    if(this.$mainDevSettingsPanel && this.$mainDevSettingsActions){
+      // Hosted build: show dev panel inline, hide its inner back button.
+      // Desktop build: keep dev panel hidden until "Developer Settings"
+      // is pressed, and show its own back button when visible.
+      if(isDesktopRuntime){
+        this.$mainDevSettingsPanel.style.display = 'none';
+        this.$mainDevSettingsActions.style.display = 'flex';
+      }else{
+        this.$mainDevSettingsPanel.style.display = 'block';
+        this.$mainDevSettingsActions.style.display = 'none';
+      }
+    }
+
+    if(isDesktopRuntime && this.$btnMainDevSettings && this.$mainDevSettingsPanel){
+      this.$btnMainDevSettings.addEventListener('click', ()=>{
+        if(this.$mainSettingsPrimary) this.$mainSettingsPrimary.style.display = 'none';
+        if(this.$mainSettingsDesktopActions) this.$mainSettingsDesktopActions.style.display = 'none';
+        if(this.$mainSettingsBackRow) this.$mainSettingsBackRow.style.display = 'none';
+        this.$mainDevSettingsPanel.style.display = 'block';
+      });
+    }
+    if(isDesktopRuntime && this.$btnMainDevSettingsClose && this.$mainDevSettingsPanel){
+      this.$btnMainDevSettingsClose.addEventListener('click', ()=>{
+        this.$mainDevSettingsPanel.style.display = 'none';
+        if(this.$mainSettingsPrimary) this.$mainSettingsPrimary.style.display = 'block';
+        if(this.$mainSettingsDesktopActions) this.$mainSettingsDesktopActions.style.display = 'flex';
+        if(this.$mainSettingsBackRow) this.$mainSettingsBackRow.style.display = 'flex';
+      });
+    }
+
+    if(isDesktopRuntime && this.$btnMainFullscreen){
+      const updateFsLabel = ()=>{
+        const isFs = !!(document.fullscreenElement || document.webkitFullscreenElement);
+        this.$btnMainFullscreen.textContent = isFs ? 'Windowed' : 'Fullscreen';
+      };
+      const toggleFs = ()=>{
+        try{
+          const rootEl = document.documentElement;
+          const isFs = !!(document.fullscreenElement || document.webkitFullscreenElement);
+          if(isFs){
+            if(document.exitFullscreen){
+              document.exitFullscreen().catch(()=>{});
+            }else if(document.webkitExitFullscreen){
+              document.webkitExitFullscreen();
+            }
+          }else{
+            if(rootEl.requestFullscreen){
+              rootEl.requestFullscreen().catch(()=>{});
+            }else if(rootEl.webkitRequestFullscreen){
+              rootEl.webkitRequestFullscreen();
+            }
+          }
+        }catch(e){}
+      };
+      updateFsLabel();
+      this.$btnMainFullscreen.addEventListener('click', toggleFs);
+      document.addEventListener('fullscreenchange', updateFsLabel);
+      document.addEventListener('webkitfullscreenchange', updateFsLabel);
+    }
+
     // Automatic speed control toggle (main settings + in-game settings)
     const onAutoSpeedChange = (src)=>{
       const v = !!src.checked;
@@ -1056,6 +1183,27 @@ export class UIManager{
     // Exit confirmation buttons
     if(this.$exitCancel){ this.$exitCancel.addEventListener('click', ()=> this.emit('exitCancel')); }
     if(this.$exitConfirmBtn){ this.$exitConfirmBtn.addEventListener('click', ()=> this.emit('exitConfirm')); }
+
+    // Desktop-only exit choice overlay handlers (pause → Exit)
+    if(this.$appExitOverlay && isDesktopRuntime){
+      if(this.$btnAppExitCancel){
+        this.$btnAppExitCancel.addEventListener('click', ()=>{
+          this.$appExitOverlay.classList.remove('visible');
+        });
+      }
+      if(this.$btnAppExitMenu){
+        this.$btnAppExitMenu.addEventListener('click', ()=>{
+          this.$appExitOverlay.classList.remove('visible');
+          this.emit('exitToMenuImmediate');
+        });
+      }
+      if(this.$btnAppExitDesktop){
+        this.$btnAppExitDesktop.addEventListener('click', ()=>{
+          this.$appExitOverlay.classList.remove('visible');
+          this.emit('exitToDesktop');
+        });
+      }
+    }
 
     // Build map carousel in the menu (full-width selector)
     this.$mapList = document.getElementById('map-list');
