@@ -1,0 +1,46 @@
+{
+  // Status bar buttons provided by the "Commands" extension.
+  // These run the three main flows:
+  // - Browser dev server
+  // - Desktop Electron app
+  // - Full Unraid deploy
+  "commands.commands": [
+    {
+      "command": "commands.webDev",
+      "text": "🌐 Web",
+      "tooltip": "Run browser dev server",
+      "alignment": "left",
+      "sequence": [
+        {
+          "command": "workbench.action.tasks.runTask",
+          "args": "Browser: Run local web server"
+        }
+      ]
+    },
+    {
+      "command": "commands.desktopDev",
+      "text": "🖥 Desktop",
+      "tooltip": "Run Electron app",
+      "alignment": "left",
+      "sequence": [
+        {
+          "command": "workbench.action.tasks.runTask",
+          "args": "Desktop: Run Electron app"
+        }
+      ]
+    },
+    {
+      "command": "commands.deployUnraid",
+      "text": "⬆ Deploy",
+      "tooltip": "Build + deploy to Unraid",
+      "alignment": "left",
+      "sequence": [
+        {
+          "command": "workbench.action.tasks.runTask",
+          "args": "Deploy: Unraid full"
+        }
+      ]
+    }
+  ]
+}
+
