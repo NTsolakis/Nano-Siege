@@ -326,8 +326,10 @@ export class Game {
     this.missionUnlockLevel = this._readMissionUnlock();
     if(this.ui.setMissionUnlock) this.ui.setMissionUnlock(this.missionUnlockLevel);
 
-    // Initialize character HP portrait to current selection.
-    if(this.ui.setCharacterPortrait) this.ui.setCharacterPortrait(this.selectedCharacterKey || 'volt');
+    // Initialize character HP portrait to current selection once the
+    // game board is visible; we now do this at the start of each run
+    // instead of during Game construction so it always reflects the
+    // latest character pick.
 
     // Unlock audio on first user interaction
     window.addEventListener('pointerdown', ()=> audio.resume(), { once: true });
@@ -437,6 +439,7 @@ export class Game {
     this.characterSplashRadiusMul = 1.0;
     this.characterStatusEffectMul = 1.0; // slow + burn strength
     this.characterUpgradeCostMul = 1.0;
+    this.characterPlacementCostMul = 1.0;
     this.characterKillCounters = {
       cannon: 0
     };
@@ -454,6 +457,7 @@ export class Game {
     this.characterSplashRadiusMul = 1.0;
     this.characterStatusEffectMul = 1.0;
     this.characterUpgradeCostMul = 1.0;
+    this.characterPlacementCostMul = 1.0;
     const key = this.selectedCharacterKey || 'volt';
     if(key === 'volt'){
       // Volt — Cannon Specialist
@@ -463,8 +467,8 @@ export class Game {
       if(steps5 > 0){
         this.characterFireRateMul.cannon *= (1 + 0.03 * steps5);
       }
-      // Passive 3 (NanoCredits per Cannon kills) handled in enemy
-      // death logic via characterKillCounters.
+      // Passive 3: tower placement costs 20% less
+      this.characterPlacementCostMul = 0.8;
     } else if(key === 'lumen'){
       // Lumen — Laser Specialist
       // Passive 1: +10% Laser DPS
@@ -535,22 +539,22 @@ export class Game {
     const key = this.selectedCharacterKey || 'volt';
     const LINES = {
       volt: [
-        'Nanobots inbound. Let’s pick ’em off clean.',
-        'Targets spotted. Time to earn our keep.',
-        'Clean shots, quick work. Let’s move.',
-        'Steady aim. Let’s thin the swarm.'
+        'Targets in sight. Keep the cannons talking.',
+        'Clean lanes, fast shots—that\'s how we stay ahead.',
+        'More contacts. Good. I wasn’t done firing.',
+        'Steady hands, loud barrels. Keep it moving.'
       ],
       lumen: [
-        'Nanobot signatures detected. Optimizing firing paths.',
-        'Calm focus. We’ll cut through them.',
-        'Analyzing density… ready to slice the swarm.',
-        'Let’s stay sharp. Precision wins this fight.'
+        'Signatures locked. I\'ll carve them down efficiently.',
+        'Calm focus. We\'ll vaporize them on schedule.',
+        'Density mapped. Lasers will do the rest.',
+        'Stay where you are and let the beams work.'
       ],
       torque: [
-        'Big crowd coming. Let’s greet ’em properly.',
-        'Nanobots swarming? Good. Saves me the trouble of aiming.',
-        'Slow and steady won’t cut it today… let’s make some noise.',
-        'Let ’em bunch up. I’ll handle the rest.'
+        'Big crowd loading in. Perfect.',
+        'Lots of bodies, small hallway… my favorite combo.',
+        'Slow and steady won’t cut it—let\'s drown them in shrapnel.',
+        'Let \'em bunch up. I\'ll do the cleanup.'
       ]
     };
     const lines = LINES[key] || LINES.volt;
@@ -575,25 +579,25 @@ export class Game {
     const key = this.selectedCharacterKey || 'volt';
     const LINES = {
       volt: [
-        'Boss down. Next?',
-        'That one wasn’t even worth adjusting my aim.',
-        'Clean shot. Clean win.',
-        'Thought it could tank that? Cute.',
-        'Reloading… out of courtesy, not necessity.'
+        'Boss down. Cycle the cannons and move on.',
+        'Didn\'t even have to ease off the trigger.',
+        'Clean burst, clean finish.',
+        'Thought it could stand in front of a firing line. It was wrong.',
+        'Reloading—mostly so the guns don\'t feel left out.'
       ],
       lumen: [
-        'Boss neutralized. That was… statistically disappointing.',
-        'Its structural integrity was weaker than expected.',
-        'That was a boss? I’ve seen tougher vending machines.',
-        'Laser paths optimal. Threat nonexistent.',
-        'Precision solves everything.'
+        'Boss neutralized. Output was within expected margins.',
+        'Structural integrity failed faster than projected.',
+        'That was a boss? I\'ve debugged tougher vending machines.',
+        'Beam convergence optimal. Threat deleted.',
+        'Precision and patience. Everything else is noise.'
       ],
       torque: [
-        'Big guy popped nicely.',
-        'Cleanup’s gonna take longer than the fight.',
-        'Heh. Boom therapy.',
-        'Hope that boss liked crowds… ‘cause it just joined one.',
-        'Told ya. Let ’em group up.'
+        'Big target, bigger pop. Satisfying.',
+        'Cleanup\'s still going to take longer than the fight.',
+        'Nothing like a good detonation to clear the head.',
+        'Hope that boss liked company—it just joined the scrap pile.',
+        'Told you. Let them group up and I\'ll handle the rest.'
       ]
     };
     const lines = LINES[key] || LINES.volt;
@@ -614,25 +618,25 @@ export class Game {
     const key = this.selectedCharacterKey || 'volt';
     const LINES = {
       volt: [
-        'Reactor hit! Clean them up!',
-        'They slipped through—tighten your aim!',
-        'Reactor’s taking damage. Not on my watch.',
-        'That’s a bad hit. Shut it down, fast.',
-        'Eyes up! They’re breaking the line!'
+        'Reactor hit. Tighten the fire lanes, now.',
+        'They slipped through—no more freebies.',
+        'Core\'s taking scratches. I\'m not letting it crack.',
+        'Bad hit on the grid. We shut this down fast.',
+        'Eyes up. That line does not break again.'
       ],
       lumen: [
-        'Reactor integrity dropping.',
-        'Critical breach. Adjust defenses.',
-        'Energy spike detected—something got through.',
-        'Reactor touched. That can’t repeat.',
-        'Damage confirmed. Recalculating threat paths.'
+        'Reactor integrity dropping. I\'ll adjust firing solutions.',
+        'Breach registered. Defense layout needs correction.',
+        'Energy spike on the core—one slipped past.',
+        'Reactor touched. That statistic does not repeat.',
+        'Damage logged. Recalculating optimal kill zones.'
       ],
       torque: [
-        'Reactor took a smack. Unacceptable.',
-        'Who let that one through? Patch the gap!',
-        'Reactor got dinged—time for crowd control.',
-        'That hurt. Let’s make ’em regret it.',
-        'Reactor’s feeling it. More boom up front.'
+        'Reactor just took a hit. I don\'t like that.',
+        'Who let that one through? Patch the gap and double the shells.',
+        'Core got dinged—time for real crowd control.',
+        'That hurt. Let\'s make them regret getting this close.',
+        'Reactor\'s feeling it. More boom on the front line.'
       ]
     };
     const lines = LINES[key] || LINES.volt;
@@ -735,6 +739,12 @@ export class Game {
     this._updateCharacterPassivesForWave(0);
 
     this.reset();
+    // Ensure the HP portrait (blink/talk animation) is always synced
+    // to the character actually chosen on the map-select screen when
+    // a run begins, not just the initial default.
+    if(this.ui.setCharacterPortrait){
+      this.ui.setCharacterPortrait(this.selectedCharacterKey || 'volt');
+    }
     audio.resume();
     this.applyScaleMode('game');
     if(this.ui.setSandboxSettingsVisible) this.ui.setSandboxSettingsVisible(this.sandboxMode);
@@ -880,38 +890,38 @@ export class Game {
     const TABLE = {
       volt: {
         alert: [
-          'Reactor grid is cold… but sensors are screaming. Swarm inbound.',
-          'Quiet board, hot radar. We’ve got nanobots spinning up.',
-          'Empty lanes won’t stay empty. Contacts forming on the perimeter.'
+          'Sensors are lighting up—swarm building fast.',
+          'Radar just spiked. We\'ve got a crowd warming up.',
+          'Calm board, loud alarms. Something big is rolling in.'
         ],
         ready: [
-          'Alright, let’s lock this corridor down.',
-          'Got the lanes. Let’s keep the core clean.',
-          'Line ’em up. We’ll drop every last one.'
+          'Alright, let’s light up this corridor.',
+          'I\'ve got the angles—keep the shots flowing.',
+          'Line ’em up and keep the pace high.'
         ]
       },
       lumen: {
         alert: [
-          'Background static just spiked. Enemy signatures compiling near the grid.',
-          'Chamber’s quiet, but telemetry says otherwise. Nanite wave forming.',
-          'No paths yet… but their approach vectors are crystallizing.'
+          'Background noise rising. Enemy signatures compiling near the grid.',
+          'Chamber\'s still, but the numbers say otherwise.',
+          'No tracks yet… but their paths are already predictable.'
         ],
         ready: [
-          'I’ve got the angles. Let’s cut them apart.',
-          'Target paths resolved. Time to light the board.',
-          'Tracing optimal firing lanes. Let’s make this clean.'
+          'Trajectories resolved. We\'ll trim this down efficiently.',
+          'Paths locked. Minimal motion, maximum output.',
+          'I\'ll keep the beams tidy. Just don\'t get in the way.'
         ]
       },
       torque: {
         alert: [
-          'Empty floor, twitchy alarms. Feels like a storm before the swarm.',
-          'Reactor’s calm, but the siren’s not lying. We’re about to get crowded.',
-          'No tracks yet… give ’em ten seconds and they’ll be pouring in.'
+          'Quiet floor, twitchy alarms. Classic.',
+          'Core\'s calm, but the siren\'s not faking it.',
+          'No tracks yet… give \'em a moment and they\'ll pour in.'
         ],
         ready: [
-          'Good. More room for explosions. Let’s greet ’em.',
-          'Alright, let’s turn this quiet hallway into a kill zone.',
-          'Paths or no paths, I’m ready to make a mess.'
+          'Good. Plenty of room for explosions.',
+          'Let\'s turn this hallway into a pressure washer.',
+          'Paths or no paths, I\'m ready to make a mess.'
         ]
       }
     };
@@ -1004,11 +1014,19 @@ export class Game {
         else this.ui.setPauseMissionLabel('Select Game Mode');
       }
       this.ui.showPause(true);
+      if(this.ui.setHpPortraitPaused) this.ui.setHpPortraitPaused(true);
       this.ui.setPauseLabel('Resume');
       this.stopAllAudio();
     }
   }
-  resume(){ if(this.state==='paused'){ this.state='playing'; this.ui.showPause(false); this.ui.setPauseLabel('Pause'); } }
+  resume(){
+    if(this.state==='paused'){
+      this.state='playing';
+      this.ui.showPause(false);
+      if(this.ui.setHpPortraitPaused) this.ui.setHpPortraitPaused(false);
+      this.ui.setPauseLabel('Pause');
+    }
+  }
   retry(){ this.startGame(); }
   toMenu(){
     this.state='menu';
@@ -1997,7 +2015,9 @@ export class Game {
     const { gx, gy } = this.mouse;
     if(this.grid.canPlace(gx,gy)){
       const def = TOWER_TYPES[this.selectedTower];
-      const cost = def.cost;
+      const baseCost = def.cost;
+      const placeMul = this.characterPlacementCostMul || 1;
+      const cost = Math.max(0, Math.round(baseCost * placeMul));
       if(this.isCheatMode() || this.credits >= cost){
         if(!this.isCheatMode()){ this.credits -= cost; }
         this.grid.occupy(gx,gy);
@@ -3537,20 +3557,6 @@ export class Game {
             color: '#ffb347'
           });
           this.thermalVentingCd = buffs.thermalCooldown || 4;
-        }
-        // Character-specific kill triggers (Volt: Cannon kill economy)
-        if(this.selectedCharacterKey === 'volt' && lastHit && lastHit.meta){
-          const kind = lastHit.meta.towerKind || null;
-          if(kind === 'cannon'){
-            const counters = this.characterKillCounters || (this.characterKillCounters = { cannon:0 });
-            counters.cannon = (counters.cannon || 0) + 1;
-            if(counters.cannon % 10 === 0){
-              const bonus = 5;
-              this.credits += bonus;
-              this.ui.setCredits(this.credits);
-              this.addFloater(e.x, e.y - 14, `+${bonus}⚛`, COLORS.accent || '#17e7a4');
-            }
-          }
         }
         // Boss kill quips (only when the boss dies, not on leaks).
         if(e.isBoss){

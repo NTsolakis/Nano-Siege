@@ -250,6 +250,23 @@ export class UIManager{
     this.$hpCharInner = document.getElementById('hp-char-inner');
     this.$pilotDialog = document.getElementById('pilot-dialog');
     this.maxLives = (GAME_RULES && GAME_RULES.startingLives) ? GAME_RULES.startingLives : 30;
+    // HP portrait animation state (blink/talk loops). We keep a single
+    // active sheet pair (blink + talk) for whichever character is
+    // currently selected so the logic is identical for all characters.
+    this._hpAnim = {
+      key: null,
+      mode: 'blink', // 'blink' | 'talk'
+      frameIndex: 0,
+      frameTime: 0,
+      fps: 24,
+      paused: false,
+      blinkSheet: null,
+      talkSheet: null,
+      canvas: null,
+      ctx: null,
+      loopHandle: null,
+      lastTs: null
+    };
     // Ability buttons (visible, locked by default)
     this.$abilBomb = document.getElementById('btn-abil-bomb');
     this.$abilOverclock = document.getElementById('btn-abil-overclock');
@@ -337,8 +354,8 @@ export class UIManager{
         title: 'Volt — Cannon Specialist',
         lines: [
           '+10% Cannon damage.',
-          '+3% Cannon fire rate every 5 waves.',
-          '+5 NanoCredits per 10 Cannon kills.'
+          '+3% fire rate every 5 waves.',
+          'Tower placement costs 20% less.'
         ]
       },
       lumen: {
@@ -346,7 +363,7 @@ export class UIManager{
         lines: [
           '+10% Laser DPS.',
           '+3% Laser DPS every 5 waves.',
-          'All tower upgrades cost 20% less.'
+          'Tower upgrades cost 20% less.'
         ]
       },
       torque: {
@@ -604,8 +621,11 @@ export class UIManager{
       }
     };
     initTowerIcons();
-    // Character select icons: use the Volt / Torque / Lumen art and
-    // treat their flat backgrounds as transparent, similar to tower icons.
+    // Character portraits/icons (map select + HUD): use the Volt /
+    // Torque / Lumen art, punch out their flat backgrounds, and then
+    // auto‑crop to the opaque pixel bounds so each character fills the
+    // frame consistently even if the source sprites have different
+    // padding.
     const drawProcessedSpriteInto = (url, targetEl, opts={})=>{
       if(!targetEl || !url) return;
       if(typeof Image === 'undefined' || typeof document === 'undefined') return;
@@ -614,7 +634,54 @@ export class UIManager{
         img.src = url;
         img.onload = ()=>{
           try{
-            const source = punchOutSpriteBackground ? punchOutSpriteBackground(img) || img : img;
+            let source = punchOutSpriteBackground ? punchOutSpriteBackground(img) || img : img;
+            if(!opts.disableAutoCrop && typeof document !== 'undefined' && source && source.width && source.height){
+              try{
+                const off = document.createElement('canvas');
+                off.width = source.width;
+                off.height = source.height;
+                const oc = off.getContext('2d');
+                if(oc){
+                  oc.clearRect(0,0,off.width,off.height);
+                  oc.drawImage(source,0,0);
+                  const id = oc.getImageData(0,0,off.width,off.height);
+                  const data = id.data;
+                  let minX = off.width, minY = off.height, maxX = -1, maxY = -1;
+                  for(let y=0;y<off.height;y++){
+                    for(let x=0;x<off.width;x++){
+                      const idx = (y*off.width + x)*4;
+                      const a = data[idx+3];
+                      if(a>20){
+                        if(x<minX) minX = x;
+                        if(y<minY) minY = y;
+                        if(x>maxX) maxX = x;
+                        if(y>maxY) maxY = y;
+                      }
+                    }
+                  }
+                  if(maxX>=minX && maxY>=minY){
+                    const pad = (typeof opts.cropPad === 'number') ? opts.cropPad : 4;
+                    minX = Math.max(0, minX - pad);
+                    minY = Math.max(0, minY - pad);
+                    maxX = Math.min(off.width-1, maxX + pad);
+                    maxY = Math.min(off.height-1, maxY + pad);
+                    const cropW = maxX - minX + 1;
+                    const cropH = maxY - minY + 1;
+                    if(cropW>0 && cropH>0){
+                      const trimmed = document.createElement('canvas');
+                      trimmed.width = cropW;
+                      trimmed.height = cropH;
+                      const tc = trimmed.getContext('2d');
+                      if(tc){
+                        tc.clearRect(0,0,cropW,cropH);
+                        tc.drawImage(off, minX, minY, cropW, cropH, 0, 0, cropW, cropH);
+                        source = trimmed;
+                      }
+                    }
+                  }
+                }
+              }catch(e){}
+            }
             const size = opts.size || 96;
             const targetSize = opts.targetSize || 70;
             const canvas = document.createElement('canvas');
@@ -663,13 +730,12 @@ export class UIManager{
           key === 'lumen' ? 'data/Lumen.png' : null
         );
         if(!url) return;
-        // Scale characters so their portraits feel bold and readable
-        // inside the map-select icons. Volt/Lumen are ~1.45×, Torque
-        // slightly larger (2×) since his sprite is visually smaller.
-        const targetSize = key === 'torque'
-          ? Math.round(70 * 2.0)
-          : Math.round(70 * 1.45);
-        drawProcessedSpriteInto(url, iconEl, { size:96, targetSize, pixelated:true, replaceChildren:true });
+        // Auto-crop + uniform scale so each character fills the
+        // map-select icon consistently. Slightly increase the internal
+        // target size so the portraits read a bit larger while still
+        // fitting comfortably inside the frame.
+        const targetSize = 84;
+        drawProcessedSpriteInto(url, iconEl, { size:96, targetSize, replaceChildren:true });
       });
     };
     initCharacterIcons();
@@ -796,6 +862,12 @@ export class UIManager{
           if(!key || key === this.selectedCharacterKey) return;
           this.selectedCharacterKey = key;
           updateCharacterHighlight();
+          // Immediately sync the HP portrait to the newly selected
+          // character so blink/talk animations follow the map-select
+          // choice, even before the Game instance reacts.
+          if(typeof this.setCharacterPortrait === 'function'){
+            this.setCharacterPortrait(key);
+          }
           this.emit('selectCharacter', key);
         });
       });
@@ -1402,6 +1474,8 @@ export class UIManager{
       lumen: 'data/Lumen.png'
     };
     const safeKey = (key === 'torque' || key === 'lumen' || key === 'volt') ? key : 'volt';
+    // Keep UI's notion of the active character in sync.
+    this.selectedCharacterKey = safeKey;
     const url = map[safeKey] || map.volt;
     // Keep HUD tooltip in sync with the active character.
     if(this.characterTips && this.characterTips[safeKey]){
@@ -1411,99 +1485,276 @@ export class UIManager{
       this.$hpCharIcon.classList.remove('theme-volt','theme-lumen','theme-torque');
       this.$hpCharIcon.classList.add(`theme-${safeKey}`);
     }
-    if(!url) return;
-    // Torque: use a tighter crop of the non‑transparent pixels so the
-    // turtle fills the portrait frame (effectively ~2× larger), without
-    // affecting menu icons.
-    if(safeKey === 'torque' && typeof Image !== 'undefined' && typeof document !== 'undefined'){
-      try{
-        const img = new Image();
-        img.src = url;
-        img.onload = ()=>{
-          try{
-            const source = punchOutSpriteBackground ? punchOutSpriteBackground(img) || img : img;
-            const off = document.createElement('canvas');
-            off.width = source.width;
-            off.height = source.height;
-            const oc = off.getContext('2d');
-            if(!oc){ return; }
-            oc.clearRect(0,0,off.width,off.height);
-            oc.drawImage(source,0,0);
-            const id = oc.getImageData(0,0,off.width,off.height);
-            const data = id.data;
-            let minX = off.width, minY = off.height, maxX = -1, maxY = -1;
-            for(let y=0;y<off.height;y++){
-              for(let x=0;x<off.width;x++){
-                const idx = (y*off.width + x)*4;
-                const a = data[idx+3];
-                if(a>20){
-                  if(x<minX) minX = x;
-                  if(y<minY) minY = y;
-                  if(x>maxX) maxX = x;
-                  if(y>maxY) maxY = y;
-                }
-              }
-            }
-            if(maxX < minX || maxY < minY){
-              // Fallback to generic path if crop fails
-              if(this._drawProcessedSpriteInto){
-                this._drawProcessedSpriteInto(url, this.$hpCharSprite, { size:128, targetSize:128, pixelated:true, replaceChildren:true });
-              }
-              return;
-            }
-            const pad = 4;
-            minX = Math.max(0, minX - pad);
-            minY = Math.max(0, minY - pad);
-            maxX = Math.min(off.width-1, maxX + pad);
-            maxY = Math.min(off.height-1, maxY + pad);
-            const cropW = maxX - minX + 1;
-            const cropH = maxY - minY + 1;
-
-            const size = 128;
-            const canvas = document.createElement('canvas');
-            canvas.width = size;
-            canvas.height = size;
-            const ctx = canvas.getContext('2d');
-            if(!ctx) return;
-            ctx.clearRect(0,0,size,size);
-            const srcMax = Math.max(cropW, cropH) || 1;
-            const targetSize = size * 0.9; // leave slight border
-            const scale = targetSize / srcMax;
-            const drawW = cropW * scale;
-            const drawH = cropH * scale;
-            const dx = (size - drawW) / 2;
-            const dy = (size - drawH) / 2;
-            ctx.drawImage(source, minX, minY, cropW, cropH, dx, dy, drawW, drawH);
-            canvas.style.width = '100%';
-            canvas.style.height = '100%';
-            canvas.style.display = 'block';
-            canvas.style.imageRendering = 'pixelated';
-            this.$hpCharSprite.innerHTML = '';
-            this.$hpCharSprite.appendChild(canvas);
-          }catch(e){}
-        };
-      }catch(e){}
-      return;
+    // We no longer draw a separate static portrait into the HP card;
+    // the blinking/talking sprite sheets fully control what appears in
+    // the camera feed.
+    // Initialize / reset HP portrait animation for this character.
+    if(this._hpAnim){
+      const anim = this._hpAnim;
+      // Stop any previous loop so we always restart cleanly when the
+      // player changes characters or starts a new game.
+      if(anim.loopHandle && typeof window !== 'undefined' && window.cancelAnimationFrame){
+        try{ window.cancelAnimationFrame(anim.loopHandle); }catch(e){}
+        anim.loopHandle = null;
+      }
+      // When switching pilots, throw away any previously loaded sheets
+      // so the new character always uses their own art.
+      if(anim.key && anim.key !== safeKey){
+        anim.blinkSheet = null;
+        anim.talkSheet = null;
+      }
+      anim.key = safeKey;
+      anim.mode = 'blink';
+      anim.frameIndex = 0;
+      anim.frameTime = 0;
+      this._ensureHpSheetsForKey(safeKey);
+      this._startHpAnimLoop();
     }
-    if(!this._drawProcessedSpriteInto) return;
-    // In the in-game HUD portrait, fill most of the frame so each
-    // character reads clearly. Volt/Lumen use a slightly inset crop.
-    const targetSize = 118;
-    this._drawProcessedSpriteInto(url, this.$hpCharSprite, { size:128, targetSize, pixelated:true, replaceChildren:true });
   }
 
   showPilotLine(text, key='volt'){
     if(!this.$pilotDialog || !text) return;
     const el = this.$pilotDialog;
+    const safeKey = key || 'volt';
     el.textContent = text;
-    el.dataset.char = key || 'volt';
+    el.dataset.char = safeKey;
     el.classList.add('visible');
+    // Trigger talking animation on the active HP portrait; if a blink
+    // is in progress, the system will finish that blink before
+    // starting the talking loop for a smoother transition.
+    if(this._hpAnim){
+      this._requestHpTalkAnimation(safeKey);
+    }
     if(this._pilotTimer){
       try{ clearTimeout(this._pilotTimer); }catch(e){}
     }
     this._pilotTimer = setTimeout(()=>{
       el.classList.remove('visible');
     }, 4200);
+  }
+
+  _ensureHpSheetsForKey(key){
+    if(!this._hpAnim || !key) return;
+    const anim = this._hpAnim;
+    const baseMap = { volt:'Volt', torque:'Torque', lumen:'Lumen' };
+    const base = baseMap[key] || baseMap.volt;
+    const makeLoader = (kind)=>{
+      const existing = (kind === 'talk') ? anim.talkSheet : anim.blinkSheet;
+      // If we already have a ready sheet for this character and kind,
+      // there is nothing more to do.
+      if(existing && existing.ready && existing.key === key){
+        return;
+      }
+      // Files are expected as e.g. Volt-Blinking.png / Volt-Talking.png
+      const suffix = kind === 'talk' ? '-Talking' : '-Blinking';
+      const url = `data/${base}${suffix}.png`;
+      if(typeof Image === 'undefined' || typeof document === 'undefined'){
+        return;
+      }
+      const img = new Image();
+      const sheet = {
+        key,
+        img,
+        url,
+        cols: 4,
+        // Sprite sheets are laid out as 4 columns by 30 rows,
+        // plus one extra frame at the very end (4×30 + 1 = 121
+        // frames total). We treat this as a 4×31 grid and only
+        // use the first 121 cells; the remaining 3 cells in the
+        // last row are ignored.
+        frameCount: 121,
+        frameW: 0,
+        frameH: 0,
+        ready: false,
+        loading: true,
+        failed: false
+      };
+      if(kind === 'talk'){
+        anim.talkSheet = sheet;
+      }else{
+        anim.blinkSheet = sheet;
+      }
+      img.onload = ()=>{
+        // Treat the flat teal/blue background as transparent so only
+        // the pilot art is visible over the HUD camera feed.
+        let source = img;
+        try{
+          if(punchOutSpriteBackground){
+            const processed = punchOutSpriteBackground(img);
+            if(processed) source = processed;
+          }
+        }catch(e){}
+        const cols = sheet.cols || 4;
+        const totalFrames = sheet.frameCount || 121;
+        const totalRows = Math.max(1, Math.ceil(totalFrames / cols)); // 4×30 +1 → 31 rows
+        const fw = source.width / cols;
+        const fh = source.height / totalRows;
+        sheet.img = source;
+        sheet.frameW = fw;
+        sheet.frameH = fh;
+        sheet.frameCount = totalFrames;
+        sheet.ready = true;
+        sheet.loading = false;
+        sheet.failed = false;
+      };
+      img.onerror = ()=>{
+        sheet.ready = false;
+        sheet.loading = false;
+        sheet.failed = true;
+      };
+      img.src = url;
+    };
+    makeLoader('blink');
+    makeLoader('talk');
+  }
+
+  _ensureHpAnimCanvas(){
+    if(!this._hpAnim || !this.$hpCharSprite) return;
+    const anim = this._hpAnim;
+    if(anim.canvas && anim.ctx) return;
+    if(typeof document === 'undefined') return;
+    const canvas = document.createElement('canvas');
+    canvas.width = 128;
+    canvas.height = 128;
+    canvas.style.width = '100%';
+    canvas.style.height = '100%';
+    canvas.style.display = 'block';
+    canvas.style.imageRendering = 'auto';
+    this.$hpCharSprite.appendChild(canvas);
+    anim.canvas = canvas;
+    anim.ctx = canvas.getContext('2d');
+  }
+
+  _startHpAnimLoop(){
+    if(!this._hpAnim) return;
+    const anim = this._hpAnim;
+    if(anim.loopHandle || typeof window === 'undefined' || typeof window.requestAnimationFrame !== 'function'){
+      return;
+    }
+    const step = (ts)=>{
+      anim.loopHandle = window.requestAnimationFrame(step);
+      if(anim.lastTs == null){
+        anim.lastTs = ts;
+        return;
+      }
+      const dtMs = ts - anim.lastTs;
+      anim.lastTs = ts;
+      const dt = dtMs>0 ? dtMs/1000 : 0;
+      this._updateHpPortraitAnim(dt);
+    };
+    anim.lastTs = null;
+    anim.loopHandle = window.requestAnimationFrame(step);
+  }
+
+  setHpPortraitPaused(paused){
+    if(!this._hpAnim) return;
+    const anim = this._hpAnim;
+    anim.paused = !!paused;
+    if(!paused){
+      // When resuming from a pause, reset the timing origin so the
+      // next animation frame uses a fresh dt instead of a huge jump.
+      anim.lastTs = null;
+    }
+  }
+
+  _requestHpTalkAnimation(key){
+    if(!this._hpAnim) return;
+    const anim = this._hpAnim;
+    // If a talking animation is already running, ignore additional
+    // requests so we never restart or layer a second talking loop on
+    // top of the current one.
+    if(anim.mode === 'talk'){
+      return;
+    }
+    const safeKey = key || anim.key || 'volt';
+    anim.key = safeKey;
+    this._ensureHpSheetsForKey(safeKey);
+    // Simple flow: as soon as talking starts, switch to the talking
+    // sheet from frame 0 and let it run all the way to the end.
+    anim.mode = 'talk';
+    anim.frameIndex = 0;
+    anim.frameTime = 0;
+    this._startHpAnimLoop();
+  }
+
+  _updateHpPortraitAnim(dt){
+    if(!this._hpAnim || !this.$hpCharSprite) return;
+    const anim = this._hpAnim;
+    if(anim.paused){
+      return;
+    }
+    // Always follow the character whose portrait was last set.
+    const key = anim.key || 'volt';
+    if(!anim.blinkSheet){
+      // No sheet yet: kick off a load for this character.
+      this._ensureHpSheetsForKey(key);
+      return;
+    }
+    if(anim.blinkSheet.failed){
+      // One-time failure (e.g., missing file); nothing to animate.
+      return;
+    }
+    if(!anim.blinkSheet.ready){
+      // Still loading; try again on the next frame.
+      return;
+    }
+    const blinkSheet = anim.blinkSheet;
+    const talkSheet = anim.talkSheet && anim.talkSheet.ready ? anim.talkSheet : null;
+    this._ensureHpAnimCanvas();
+    if(!anim.canvas || !anim.ctx) return;
+
+    const blinkFrames = Math.max(1, blinkSheet.frameCount || 1);
+    const talkFrames = talkSheet && talkSheet.frameCount ? talkSheet.frameCount : 0;
+    const frameDur = 1 / (anim.fps || 24);
+
+    anim.frameTime += dt;
+    while(anim.frameTime >= frameDur){
+      anim.frameTime -= frameDur;
+      anim.frameIndex++;
+      if(anim.mode === 'talk' && talkSheet && talkFrames > 0){
+        if(anim.frameIndex >= talkFrames){
+          // Talking finished: return to blinking, starting at frame 0.
+          anim.mode = 'blink';
+          anim.frameIndex = 0;
+        }
+      }else{
+        // Blinking: simple loop over all frames.
+        if(anim.frameIndex >= blinkFrames){
+          anim.frameIndex = 0;
+        }
+      }
+    }
+
+    // Choose which sheet/frame to draw for the current mode.
+    let sheet = blinkSheet;
+    if(anim.mode === 'talk' && talkSheet && talkFrames > 0){
+      sheet = talkSheet;
+    }
+    const frameIndex = anim.frameIndex;
+
+    const ctx = anim.ctx;
+    const canvas = anim.canvas;
+    if(!ctx || !canvas || !sheet || !sheet.img) return;
+    const cols = sheet.cols || 1;
+    const frameW = sheet.frameW || (sheet.img.width / cols);
+    const frameH = sheet.frameH || frameW;
+    if(frameW<=0 || frameH<=0) return;
+    const fi = Math.max(0, Math.min(frameIndex, (sheet.frameCount||1)-1));
+    const col = fi % cols;
+    const row = Math.floor(fi / cols);
+    const sx = col * frameW;
+    const sy = row * frameH;
+
+    ctx.clearRect(0,0,canvas.width,canvas.height);
+    const margin = 6;
+    const maxW = canvas.width - margin*2;
+    const maxH = canvas.height - margin*2;
+    const scale = Math.min(maxW / frameW, maxH / frameH);
+    const drawW = frameW * scale;
+    const drawH = frameH * scale;
+    const dx = (canvas.width - drawW) / 2;
+    const dy = (canvas.height - drawH) / 2;
+    ctx.drawImage(sheet.img, sx, sy, frameW, frameH, dx, dy, drawW, drawH);
   }
   
   setStartEnabled(v){ this.$start.disabled = !v; }

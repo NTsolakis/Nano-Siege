@@ -4,43 +4,41 @@
   // - Browser dev server
   // - Desktop Electron app
   // - Full Unraid deploy
-  "commands.commands": [
-    {
-      "command": "commands.webDev",
-      "text": "🌐 Web",
-      "tooltip": "Run browser dev server",
-      "alignment": "left",
-      "sequence": [
-        {
-          "command": "workbench.action.tasks.runTask",
-          "args": "Browser: Run local web server"
-        }
-      ]
+  "commands.commands": {
+    "Web Dev": {
+      "command": "workbench.action.tasks.runTask",
+      "args": "Browser: Run local web server",
+      "statusBar": {
+        "alignment": "left",
+        "text": "🌐 Web",
+        "tooltip": "Run browser dev server"
+      }
     },
-    {
-      "command": "commands.desktopDev",
-      "text": "🖥 Desktop",
-      "tooltip": "Run Electron app",
-      "alignment": "left",
-      "sequence": [
-        {
-          "command": "workbench.action.tasks.runTask",
-          "args": "Desktop: Run Electron app"
-        }
-      ]
+    "Desktop Dev": {
+      "command": "workbench.action.tasks.runTask",
+      "args": "Desktop: Run Electron app",
+      "statusBar": {
+        "alignment": "left",
+        "text": "🖥 Desktop",
+        "tooltip": "Run Electron app"
+      }
     },
-    {
-      "command": "commands.deployUnraid",
-      "text": "⬆ Deploy",
-      "tooltip": "Build + deploy to Unraid",
-      "alignment": "left",
-      "sequence": [
-        {
-          "command": "workbench.action.tasks.runTask",
-          "args": "Deploy: Unraid full"
-        }
-      ]
+    "Deploy Unraid": {
+      "command": "workbench.action.tasks.runTask",
+      "args": "Deploy: Unraid full",
+      "statusBar": {
+        "alignment": "left",
+        "text": "⬆ Deploy",
+        "tooltip": "Build + deploy to Unraid"
+      }
+    },
+    "Git Pull": {
+      "command": "git.pull",
+      "statusBar": {
+        "alignment": "left",
+        "text": "⬇ Pull",
+        "tooltip": "git pull in workspace"
+      }
     }
-  ]
+  }
 }
-

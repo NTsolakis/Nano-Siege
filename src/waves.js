@@ -14,12 +14,16 @@ export function buildWave(w){
   // Make difficulty scale harder past wave 20
   if(w > 20){
     const extra = w - 20;
-    // Add more units gradually
-    count = Math.round(count + extra * 0.5);
-    // Increase HP multiplicatively per wave after 20 (modest but noticeable)
-    baseHp = Math.round(baseHp * (1 + 0.04 * extra));
-    // Increase speed a bit more, with a reasonable cap
-    baseSpeed = Math.round(baseSpeed + Math.min(30, extra * 1.0));
+    // Add more units gradually, but a bit softer so post‑20 waves
+    // don’t snowball quite as hard.
+    count = Math.round(count + extra * 0.3);
+    // Increase HP multiplicatively per wave after 20, but dial back
+    // the per‑wave growth so late‑game enemies are still threatening
+    // without being brick walls.
+    baseHp = Math.round(baseHp * (1 + 0.03 * extra));
+    // Increase speed a bit more, but with a gentler slope and a
+    // slightly lower cap so kiting/slow builds remain viable.
+    baseSpeed = Math.round(baseSpeed + Math.min(20, extra * 0.6));
   }
 
   // Grouped spawning parameters

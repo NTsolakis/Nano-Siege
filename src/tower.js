@@ -26,9 +26,9 @@ export const REACTOR_SPRITE = {
 };
 
 // Reusable helper: treat a sprite's flat background as transparent by
-// sampling corner pixels and zeroing out near‑background colors. This
+// sampling border pixels and zeroing out near‑background colors. This
 // lets us use the same art on both the game grid and UI without the
-// grey backing boxes.
+// backing boxes, even when the background is teal/blue instead of grey.
 export function punchOutSpriteBackground(img){
   if(typeof document === 'undefined') return img;
   try{
@@ -41,9 +41,12 @@ export function punchOutSpriteBackground(img){
     const id = c.getImageData(0, 0, off.width, off.height);
     const data = id.data;
     let bgR = 0, bgG = 0, bgB = 0, bgCount = 0;
-    const samplePixel = (x,y)=>{
-      if(x<0 || y<0 || x>=off.width || y>=off.height) return;
-      const idx = (y*off.width + x)*4;
+    const w = off.width;
+    const h = off.height;
+    if(w<=0 || h<=0) return img;
+    const sampleBorderPixel = (x,y)=>{
+      if(x<0 || y<0 || x>=w || y>=h) return;
+      const idx = (y*w + x)*4;
       const a = data[idx+3];
       if(a===0) return;
       bgR += data[idx];
@@ -51,17 +54,49 @@ export function punchOutSpriteBackground(img){
       bgB += data[idx+2];
       bgCount++;
     };
-    samplePixel(0,0);
-    samplePixel(off.width-1,0);
-    samplePixel(0,off.height-1);
-    samplePixel(off.width-1,off.height-1);
+    const step = Math.max(1, Math.floor(Math.min(w,h)/24));
+    for(let x=0;x<w;x+=step){
+      sampleBorderPixel(x,0);
+      sampleBorderPixel(x,h-1);
+    }
+    for(let y=0;y<h;y+=step){
+      sampleBorderPixel(0,y);
+      sampleBorderPixel(w-1,y);
+    }
     if(bgCount>0){
       bgR /= bgCount;
       bgG /= bgCount;
       bgB /= bgCount;
     }
     const bgSampled = bgCount>0;
-    const bgThreshSq = 20*20;
+    let bgThreshSq = 20*20;
+    if(bgSampled){
+      let maxDistSq = 0;
+      const measureBorderPixel = (x,y)=>{
+        if(x<0 || y<0 || x>=w || y>=h) return;
+        const idx = (y*w + x)*4;
+        const a = data[idx+3];
+        if(a===0) return;
+        const r = data[idx], g = data[idx+1], b = data[idx+2];
+        const dr = r-bgR, dg = g-bgG, db = b-bgB;
+        const distSq = dr*dr + dg*dg + db*db;
+        if(distSq>maxDistSq) maxDistSq = distSq;
+      };
+      for(let x=0;x<w;x+=step){
+        measureBorderPixel(x,0);
+        measureBorderPixel(x,h-1);
+      }
+      for(let y=0;y<h;y+=step){
+        measureBorderPixel(0,y);
+        measureBorderPixel(w-1,y);
+      }
+      if(maxDistSq>0){
+        const dynamic = maxDistSq*1.1;
+        const minSq = 18*18;
+        const maxSq = 60*60;
+        bgThreshSq = Math.max(minSq, Math.min(dynamic, maxSq));
+      }
+    }
     for(let i=0;i<data.length;i+=4){
       const r = data[i], g = data[i+1], b = data[i+2];
       const a = data[i+3];
