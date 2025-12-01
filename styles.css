@@ -1195,15 +1195,28 @@ canvas#game{display:block;max-width:100%;width:960px;height:auto;border:1px soli
   border-color:rgba(0,186,255,0.6);
 }
 .combat-stats-card .cs-row{
-  display:flex;
-  justify-content:space-between;
+  display:grid;
+  grid-template-columns: 1.5fr auto auto;
+  column-gap:10px;
   align-items:center;
   font-size:13px;
   padding:5px 0;
   border-bottom:1px solid rgba(255,255,255,0.05);
 }
 .combat-stats-card .cs-row:last-child{ border-bottom:none; }
-.combat-stats-card .cs-row span:last-child{ font-weight:700; color:#fff; }
+.combat-stats-card .cs-row:not(.cs-header) span:nth-child(2){ font-weight:700; color:#fff; }
+.combat-stats-card .cs-header{
+  font-size:11px;
+  text-transform:uppercase;
+  letter-spacing:.08em;
+  color:rgba(197,216,240,0.85);
+  border-bottom:1px solid rgba(255,255,255,0.12);
+  padding-bottom:3px;
+}
+.combat-stats-card .cs-header span:nth-child(2),
+.combat-stats-card .cs-header span:nth-child(3){
+  text-align:right;
+}
 .stage-wrap{
   --side-panel-width: clamp(200px, 14vw, 240px);
   flex:1;

@@ -278,6 +278,7 @@ class BaseTower {
     this.retargetDelay = 0.2;
     this.retargetTimer = 0;
     this.lastShotInterval = 0;
+    this.rotationSpeed = 6.0; // rad/s base; modified by character affinity
   }
   getRange(){
     const chronoBoost = buffs.chronoActive ? (1 + (buffs.chronoRangeBonus||0)) : 1;
@@ -335,9 +336,32 @@ class BaseTower {
     if(newId !== prevId){
       this._resonanceArmed = !!newId;
       this._lastTargetId = newId;
+      if(typeof this.onTargetSwitched === 'function'){
+        try{
+          this.onTargetSwitched(prevId, newId);
+        }catch(e){}
+      }
     }
     if(this.target){
-      const dx = this.target.x-this.x, dy=this.target.y-this.y; this.rotation=Math.atan2(dy,dx);
+      const dx = this.target.x-this.x, dy=this.target.y-this.y;
+      const desired = Math.atan2(dy,dx);
+      let current = this.rotation || 0;
+      let diff = desired - current;
+      while(diff > Math.PI) diff -= Math.PI*2;
+      while(diff < -Math.PI) diff += Math.PI*2;
+      let speed = this.rotationSpeed || 0;
+      if(this.game && typeof this.game.getTowerRotationSpeedMul === 'function'){
+        const mul = this.game.getTowerRotationSpeedMul(this.kind);
+        if(Number.isFinite(mul) && mul > 0){
+          speed *= mul;
+        }
+      }
+      const step = (dt && speed>0) ? (speed * dt) : Infinity;
+      if(step === Infinity || Math.abs(diff) <= step){
+        this.rotation = desired;
+      } else {
+        this.rotation = current + Math.sign(diff) * step;
+      }
     }
   }
   tickPerkTimers(dt){
@@ -547,6 +571,15 @@ export class CannonTower extends BaseTower{
       const range = this.getRange();
       const d2v = dist2(this.x,this.y,this.target.x,this.target.y);
       if(d2v > range*range) return;
+      // Gate firing on barrel alignment so rotation speed (and thus
+      // character affinity) meaningfully affects burst cadence.
+      const angDesired = Math.atan2(this.target.y - this.y, this.target.x - this.x);
+      let angCurrent = this.rotation || 0;
+      let diff = angDesired - angCurrent;
+      while(diff > Math.PI) diff -= Math.PI*2;
+      while(diff < -Math.PI) diff += Math.PI*2;
+      const maxErr = 0.20; // ~11° tolerance
+      if(Math.abs(diff) > maxErr) return;
     }
     if(this.target && this.cooldown<=0){
       const rateCharMul = this.game && typeof this.game.getTowerFireRateMul === 'function'
@@ -730,6 +763,18 @@ export class LaserTower extends BaseTower{
     this.burnCooldown = 0;
     this._buzz = null;
     this.hitSparks = [];
+    // Beam stability ramps up while tracking a target continuously and
+    // drops when switching targets. 0 → unstable, 1 → fully stabilized.
+    this.stability = 0;
+    this.stabilityRecoveryBase = 2.2; // per second → ~0.45s to full at 1.0x
+    this.stabilityDecayRate = 1.2;    // per second while not locked
+    this.stabilityLossOnSwitch = 0.7; // subtract when swapping to a new target
+    // Crit windows: roll once per window instead of per tick so the
+    // beam doesn't spam tiny crits every frame.
+    this.critWindowBase = 0.6; // seconds at stability 0 → grows slightly with stability
+    this._critWindowTimer = 0;
+    this._critMult = 1;
+    this._critIsCrit = false;
   }
   // Beam origin is very slightly offset so the laser lines up with the
   // central aperture in the sprite art rather than the exact tile center.
@@ -754,12 +799,72 @@ export class LaserTower extends BaseTower{
     ctx.closePath(); ctx.fill();
     ctx.restore();
   }
+  onTargetSwitched(prevId, newId){
+    if(prevId && newId && prevId !== newId){
+      const loss = this.stabilityLossOnSwitch != null ? this.stabilityLossOnSwitch : 0.7;
+      this.stability = Math.max(0, (this.stability || 0) - loss);
+      // Reset crit window when swapping targets so new locks get a fresh roll.
+      this._critWindowTimer = 0;
+      this._critMult = 1;
+      this._critIsCrit = false;
+    }
+  }
+  _updateCritWindow(dt, baseDps){
+    if(!this.target || !baseDps || baseDps <= 0){
+      this._critWindowTimer = 0;
+      this._critMult = 1;
+      this._critIsCrit = false;
+      return;
+    }
+    const s = Math.max(0, Math.min(1, this.stability || 0));
+    const base = this.critWindowBase || 0.6;
+    const dur = base * (0.7 + 0.6*s);
+    if(!(this._critWindowTimer > 0)){
+      this._critWindowTimer = dur;
+      this._computeCritWindow(baseDps);
+      return;
+    }
+    this._critWindowTimer -= dt;
+    if(this._critWindowTimer <= 0){
+      this._critWindowTimer = dur;
+      this._computeCritWindow(baseDps);
+    }
+  }
+  _computeCritWindow(baseDps){
+    const t = this.target;
+    if(!t || !baseDps || baseDps <= 0){
+      this._critMult = 1;
+      this._critIsCrit = false;
+      return;
+    }
+    // Reuse the global crit logic but treat it as a single roll per window.
+    const tp = this.applyTargetPainter(t, baseDps);
+    const mult = baseDps > 0 ? (tp.dmg / baseDps) : 1;
+    this._critMult = mult;
+    this._critIsCrit = !!tp.crit;
+  }
   update(dt,enemies){
     this.tickIdleTimer(dt);
     this.acquireTarget(enemies, dt);
     this.tickPerkTimers(dt);
     // age out hit sparks
     this.hitSparks = (this.hitSparks||[]).filter(s=> (s.age += dt) < s.ttl);
+    // Update beam stability based on whether we have an active lock.
+    {
+      const hasTarget = !!this.target;
+      const base = this.stabilityRecoveryBase || 0;
+      const decay = this.stabilityDecayRate || 0;
+      let stabMul = 1;
+      if(this.game && typeof this.game.getLaserStabilityMul === 'function'){
+        stabMul = this.game.getLaserStabilityMul();
+      }
+      const recRate = base * Math.max(0.25, Math.min(4, stabMul || 1));
+      if(hasTarget){
+        this.stability = Math.min(1, (this.stability || 0) + dt * recRate);
+      } else if(decay > 0){
+        this.stability = Math.max(0, (this.stability || 0) - dt * decay);
+      }
+    }
     if(this.target){
       // Only apply beam damage while target is within real attack range.
       const range = this.getRange();
@@ -777,10 +882,21 @@ export class LaserTower extends BaseTower{
         ? this.game.getTowerDamageMul('laser')
         : 1;
       let dps = baseDps * (1 + 0.2*this.rateLevel) * (buffs.dmgMul||1) * this.getFireRateBuff() * adaptive * charMul;
+      // Stability scales effective DPS so freshly acquired targets feel
+      // a bit softer until the beam "locks in".
+      {
+        const s = Math.max(0, Math.min(1, this.stability || 0));
+        const minScale = 0.45;
+        const scale = minScale + (1 - minScale) * s;
+        dps *= scale;
+      }
       dps = this.applyResonanceBonus(this.target, dps);
-      const tp = this.applyTargetPainter(this.target, dps);
-      dps = tp.dmg;
-      const isCrit = tp.crit;
+      // Crit windows: update once per window and apply a single multiplier
+      // so ticks share the same crit state instead of rolling individually.
+      this._updateCritWindow(dt, dps);
+      const critMult = this._critMult || 1;
+      const isCrit = !!this._critIsCrit;
+      dps *= critMult;
       const origin = this.getBeamOrigin();
       this.target.damage(dps*dt, 'laser', {
         dps,
@@ -864,23 +980,33 @@ export class LaserTower extends BaseTower{
     // beam
     if(this.target){
       const origin = this.getBeamOrigin();
+      const s = Math.max(0, Math.min(1, this.stability || 0));
+      const inv = 1 - s;
+      // Slight jitter on unstable beams; stable beams stay tight and bright.
+      const wobble = 4 * inv;
+      const tx = this.target.x + (Math.random()*2-1) * wobble;
+      const ty = this.target.y + (Math.random()*2-1) * wobble;
       ctx.save();
       ctx.strokeStyle = COLORS.accent2;
-      ctx.lineWidth = this.hasSlow? 4 : 3;
-      ctx.shadowColor = COLORS.accent2; ctx.shadowBlur = 12;
-      ctx.beginPath(); ctx.moveTo(origin.x,origin.y); ctx.lineTo(this.target.x, this.target.y); ctx.stroke();
+      const baseWidth = this.hasSlow ? 4 : 3;
+      ctx.lineWidth = baseWidth * (0.7 + 0.6*s);
+      ctx.shadowColor = COLORS.accent2; ctx.shadowBlur = 8 + 8*s;
+      ctx.globalAlpha = 0.6 + 0.4*s;
+      ctx.beginPath(); ctx.moveTo(origin.x,origin.y); ctx.lineTo(tx, ty); ctx.stroke();
       // inner highlight
-      ctx.globalAlpha = 0.6; ctx.strokeStyle = 'white'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(origin.x,origin.y); ctx.lineTo(this.target.x, this.target.y); ctx.stroke();
+      ctx.globalAlpha = 0.4 + 0.4*s;
+      ctx.strokeStyle = 'white'; ctx.lineWidth = 1.3 + 0.4*s; ctx.beginPath(); ctx.moveTo(origin.x,origin.y); ctx.lineTo(tx, ty); ctx.stroke();
       ctx.restore();
       // beam sparkles
-      const dx = this.target.x - origin.x, dy = this.target.y - origin.y;
+      const dx = tx - origin.x, dy = ty - origin.y;
       const d = Math.hypot(dx,dy)||1; const ux = dx/d, uy = dy/d;
       for(let i=0;i<6;i++){
         const t = (i+1)/7;
-        const px = origin.x + ux*d*t + (Math.random()*2-1)*4;
-        const py = origin.y + uy*d*t + (Math.random()*2-1)*4;
+        const jitter = 4 + 3*inv;
+        const px = origin.x + ux*d*t + (Math.random()*2-1)*jitter;
+        const py = origin.y + uy*d*t + (Math.random()*2-1)*jitter;
         ctx.save();
-        ctx.globalAlpha = 0.7;
+        ctx.globalAlpha = 0.4 + 0.5*s;
         ctx.shadowColor = COLORS.accent2; ctx.shadowBlur = 10;
         ctx.fillStyle = 'white';
         ctx.beginPath(); ctx.arc(px,py,1.5,0,Math.PI*2); ctx.fill();

@@ -113,12 +113,22 @@ export class UIManager{
     // Passive effects side panel (DOM, right of canvas)
     this.$passivePanel = document.getElementById('passive-panel');
     this.$passiveLines = document.getElementById('passive-lines');
+    this.$statBaseDmgRaw = document.getElementById('stat-basedmg-raw');
     this.$statBaseDmg = document.getElementById('stat-basedmg');
+    this.$statCritRaw = document.getElementById('stat-crit-raw');
+    this.$statCritDmgRaw = document.getElementById('stat-critdmg-raw');
     this.$statCritDmg = document.getElementById('stat-critdmg');
     this.$statCrit = document.getElementById('stat-crit');
+    this.$statSlowRaw = document.getElementById('stat-slow-raw');
     this.$statSlow = document.getElementById('stat-slow');
+    this.$statBurnRaw = document.getElementById('stat-burn-raw');
     this.$statBurn = document.getElementById('stat-burn');
+    this.$statTargetRaw = document.getElementById('stat-target-raw');
     this.$statTarget = document.getElementById('stat-target');
+    this.$statPuddleRaw = document.getElementById('stat-puddle-raw');
+    this.$statPuddle = document.getElementById('stat-puddle');
+    this.$statLaserStabRaw = document.getElementById('stat-laserstab-raw');
+    this.$statLaserStab = document.getElementById('stat-laserstab');
     this.$combatStats = document.getElementById('combat-stats');
     this.$combatToggle = document.getElementById('combat-stats-toggle');
     // Fullscreen main menus
@@ -353,25 +363,31 @@ export class UIManager{
       volt: {
         title: 'Volt — Cannon Specialist',
         lines: [
-          '+10% Cannon damage.',
-          '+3% fire rate every 5 waves.',
-          'Tower placement costs 20% less.'
+          '• Cannon: +12% damage, +3% fire rate /5 waves.',
+          '• Cannon: +15% rotation speed.',
+          '• Economy: -20% tower placement cost.',
+          '• Laser: -10% stability.',
+          '• Splash: -10% spread rate.'
         ]
       },
       lumen: {
         title: 'Lumen — Laser Specialist',
         lines: [
-          '+10% Laser DPS.',
-          '+3% Laser DPS every 5 waves.',
-          'Tower upgrades cost 20% less.'
+          '• Laser: +10% DPS, +3% DPS /5 waves.',
+          '• Laser: +25% stability.',
+          '• Economy: -20% tower upgrade costs.',
+          '• Cannon: -10% rotation speed.',
+          '• Splash: -10% spread rate.'
         ]
       },
       torque: {
         title: 'Torque — Splash Specialist',
         lines: [
-          '+10% Splash radius.',
-          '+5% Splash damage every 5 waves.',
-          'Burn and slow effects are 20% stronger.'
+          '• Splash: +20% radius, +5% DPS /5 waves.',
+          '• Splash: +20% spread rate.',
+          '• Debuffs: Burn & Slow +20% power.',
+          '• Cannon: -10% rotation speed.',
+          '• Laser: -5% stability.'
         ]
       }
     };
@@ -1485,28 +1501,32 @@ export class UIManager{
       this.$hpCharIcon.classList.remove('theme-volt','theme-lumen','theme-torque');
       this.$hpCharIcon.classList.add(`theme-${safeKey}`);
     }
-    // We no longer draw a separate static portrait into the HP card;
-    // the blinking/talking sprite sheets fully control what appears in
-    // the camera feed.
-    // Initialize / reset HP portrait animation for this character.
+    // Reset HP portrait animation for this character so each run and
+    // selection starts from a clean state with the correct sheets.
     if(this._hpAnim){
-      const anim = this._hpAnim;
-      // Stop any previous loop so we always restart cleanly when the
-      // player changes characters or starts a new game.
-      if(anim.loopHandle && typeof window !== 'undefined' && window.cancelAnimationFrame){
-        try{ window.cancelAnimationFrame(anim.loopHandle); }catch(e){}
-        anim.loopHandle = null;
+      try{
+        const anim = this._hpAnim;
+        if(anim.loopHandle && typeof window !== 'undefined' && window.cancelAnimationFrame){
+          window.cancelAnimationFrame(anim.loopHandle);
+        }
+      }catch(e){}
+      if(this.$hpCharSprite){
+        try{ this.$hpCharSprite.innerHTML = ''; }catch(e){}
       }
-      // When switching pilots, throw away any previously loaded sheets
-      // so the new character always uses their own art.
-      if(anim.key && anim.key !== safeKey){
-        anim.blinkSheet = null;
-        anim.talkSheet = null;
-      }
-      anim.key = safeKey;
-      anim.mode = 'blink';
-      anim.frameIndex = 0;
-      anim.frameTime = 0;
+      this._hpAnim = {
+        key: safeKey,
+        mode: 'blink',
+        frameIndex: 0,
+        frameTime: 0,
+        fps: 24,
+        paused: false,
+        blinkSheet: null,
+        talkSheet: null,
+        canvas: null,
+        ctx: null,
+        loopHandle: null,
+        lastTs: null
+      };
       this._ensureHpSheetsForKey(safeKey);
       this._startHpAnimLoop();
     }
@@ -1691,7 +1711,8 @@ export class UIManager{
       return;
     }
     if(anim.blinkSheet.failed){
-      // One-time failure (e.g., missing file); nothing to animate.
+      // One-time failure (e.g., missing sheet for this pilot); nothing
+      // to animate. Leave the existing portrait content untouched.
       return;
     }
     if(!anim.blinkSheet.ready){
@@ -1963,17 +1984,39 @@ export class UIManager{
     this.$passiveLines.appendChild(scroll);
   }
 
-  setCombatStats({ baseDamage=0, crit=0, critDmg=0, slow=0, burn=0, targeting=0 }={}){
-    const fmt = (v)=> {
-      const pct = Math.max(0, v*100);
-      return `+${Math.round(pct)}%`;
+  setCombatStats({
+    baseDamage=0, crit=0, critDmg=0, slow=0, burn=0, targeting=0, puddle=0, laserStab=0,
+    baseDamageRaw=1, critRaw=0, critDmgRaw=0, slowRaw=1, burnRaw=1, targetingRaw=1, puddleRaw=1, laserStabRaw=1
+  }={}){
+    const fmtDelta = (v)=> {
+      const pct = Math.round(v*100);
+      const sign = pct > 0 ? '+' : (pct < 0 ? '' : '+');
+      return `${sign}${pct}%`;
     };
-    if(this.$statBaseDmg) this.$statBaseDmg.textContent = fmt(baseDamage);
-    if(this.$statCrit) this.$statCrit.textContent = fmt(crit);
-    if(this.$statCritDmg) this.$statCritDmg.textContent = fmt(critDmg);
-    if(this.$statSlow) this.$statSlow.textContent = fmt(slow);
-    if(this.$statBurn) this.$statBurn.textContent = fmt(burn);
-    if(this.$statTarget) this.$statTarget.textContent = fmt(targeting);
+    const fmtMul = (v)=> {
+      const val = Number.isFinite(v) ? v : 1;
+      return `${val.toFixed(2)}x`;
+    };
+    const fmtPct = (v)=> {
+      const pct = Math.round(v*100);
+      return `${pct}%`;
+    };
+    if(this.$statBaseDmgRaw) this.$statBaseDmgRaw.textContent = fmtMul(baseDamageRaw);
+    if(this.$statBaseDmg) this.$statBaseDmg.textContent = fmtDelta(baseDamage);
+    if(this.$statCritRaw) this.$statCritRaw.textContent = fmtPct(critRaw);
+    if(this.$statCrit) this.$statCrit.textContent = fmtDelta(crit);
+    if(this.$statCritDmgRaw) this.$statCritDmgRaw.textContent = fmtPct(critDmgRaw);
+    if(this.$statCritDmg) this.$statCritDmg.textContent = fmtDelta(critDmg);
+    if(this.$statSlowRaw) this.$statSlowRaw.textContent = fmtMul(slowRaw);
+    if(this.$statSlow) this.$statSlow.textContent = fmtDelta(slow);
+    if(this.$statBurnRaw) this.$statBurnRaw.textContent = fmtMul(burnRaw);
+    if(this.$statBurn) this.$statBurn.textContent = fmtDelta(burn);
+    if(this.$statTargetRaw) this.$statTargetRaw.textContent = fmtMul(targetingRaw);
+    if(this.$statTarget) this.$statTarget.textContent = fmtDelta(targeting);
+    if(this.$statPuddleRaw) this.$statPuddleRaw.textContent = fmtMul(puddleRaw);
+    if(this.$statPuddle) this.$statPuddle.textContent = fmtDelta(puddle);
+    if(this.$statLaserStabRaw) this.$statLaserStabRaw.textContent = fmtMul(laserStabRaw);
+    if(this.$statLaserStab) this.$statLaserStab.textContent = fmtDelta(laserStab);
   }
 
   // Show/hide the wave status; label is fixed to "Wave in progress"

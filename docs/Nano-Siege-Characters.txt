@@ -1,5 +1,5 @@
 | Name   | Gender | Species           | Tower Affinity | Color  | Personality Type | Buff 1             | Buff 2                          | Buff 3                           |
 | ------ | ------ | ----------------- | -------------- | ------ | ---------------- | ------------------ | ------------------------------- | -------------------------------- |
-| Volt   | Male   | White Cat         | Cannon         | Green  | Energetic        | +10% Cannon damage | +3% Fire-rate every 5 waves     | –20% Tower placement cost        |
+| Volt   | Male   | White Cat         | Cannon         | Green  | Energetic        | +12% Cannon damage | +3% Fire-rate every 5 waves     | –20% Tower placement cost        |
 | Lumen  | Female | Silver Wolf       | Laser          | Cyan   | Apathetic        | +10% Laser DPS     | +3% Laser DPS every 5 waves     | –20% Tower upgrade costs         |
-| Torque | Male   | Pale Green Lizard | Splash         | Orange | Tough            | +10% Splash radius | +5% Splash damage every 5 waves | Burn + Slow effects 20% stronger |
+| Torque | Male   | Pale Green Lizard | Splash         | Orange | Tough            | +20% Splash radius | +5% Splash damage every 5 waves | Burn + Slow effects 20% stronger |

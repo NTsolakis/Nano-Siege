@@ -8,6 +8,7 @@ export const buffs = {
   slowPotencyMul: 1.0,   // slow pct multiplier
   burnDpsMul: 1.0,       // burn DPS multiplier
   splashRadiusMul: 1.0,  // splash radius multiplier
+  puddleSpreadSpeedMul: 1.0, // splash puddle growth speed (1 = base)
   projectileSpeedMul: 1.0, // legacy (no longer used)
   baseDamageMul: 1.0,    // base damage multiplier before other bonuses
   retargetSpeedBonus: 0, // fractional bonus to retarget speed (0.10 = +10%)

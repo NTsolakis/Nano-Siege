@@ -436,8 +436,15 @@ export class Game {
       laser: 1.0,
       splash: 1.0
     };
+    this.characterRotationSpeedMul = {
+      cannon: 1.0,
+      laser: 1.0,
+      splash: 1.0
+    };
     this.characterSplashRadiusMul = 1.0;
     this.characterStatusEffectMul = 1.0; // slow + burn strength
+    this.characterPuddleSpreadSpeedMul = 1.0; // splash puddle growth speed
+    this.characterLaserStabilityMul = 1.0; // laser beam stability ramp speed
     this.characterUpgradeCostMul = 1.0;
     this.characterPlacementCostMul = 1.0;
     this.characterKillCounters = {
@@ -454,21 +461,30 @@ export class Game {
     const steps5 = Math.max(0, Math.floor(waveNumber / 5));
     this.characterDamageMul = { cannon: 1.0, laser: 1.0, splash: 1.0 };
     this.characterFireRateMul = { cannon: 1.0, laser: 1.0, splash: 1.0 };
+    this.characterRotationSpeedMul = { cannon: 1.0, laser: 1.0, splash: 1.0 };
     this.characterSplashRadiusMul = 1.0;
     this.characterStatusEffectMul = 1.0;
+    this.characterPuddleSpreadSpeedMul = 1.0;
+    this.characterLaserStabilityMul = 1.0;
     this.characterUpgradeCostMul = 1.0;
     this.characterPlacementCostMul = 1.0;
     const key = this.selectedCharacterKey || 'volt';
     if(key === 'volt'){
       // Volt — Cannon Specialist
-      // Passive 1: +10% Cannon damage
-      this.characterDamageMul.cannon *= 1.10;
+      // Passive 1: +12% Cannon damage (stronger burst identity)
+      this.characterDamageMul.cannon *= 1.12;
       // Passive 2: +3% Cannon fire-rate every 5 waves
       if(steps5 > 0){
         this.characterFireRateMul.cannon *= (1 + 0.03 * steps5);
       }
+      // Passive: +15% Cannon rotation speed
+      this.characterRotationSpeedMul.cannon *= 1.15;
       // Passive 3: tower placement costs 20% less
       this.characterPlacementCostMul = 0.8;
+      // Weak synergy with splash puddle spread (slower bloom)
+      this.characterPuddleSpreadSpeedMul *= 0.90; // -10%
+      // Volt leans into rotation/burst; lasers stabilize more slowly.
+      this.characterLaserStabilityMul *= 0.90; // -10%
     } else if(key === 'lumen'){
       // Lumen — Laser Specialist
       // Passive 1: +10% Laser DPS
@@ -480,16 +496,28 @@ export class Game {
       this.characterDamageMul.laser *= laserMul;
       // Passive 3: All tower upgrades cost 20% less
       this.characterUpgradeCostMul = 0.8;
+      // Passive: -10% Cannon rotation speed (cannons feel sluggish early)
+      this.characterRotationSpeedMul.cannon *= 0.90;
+      // Splash puddles bloom a bit slower for Lumen.
+      this.characterPuddleSpreadSpeedMul *= 0.90; // -10%
+      // Lumen specializes in sustained beams; faster stability ramp.
+      this.characterLaserStabilityMul *= 1.25; // +25%
     } else if(key === 'torque'){
       // Torque — Splash Specialist
-      // Passive 1: +10% Splash radius
-      this.characterSplashRadiusMul *= 1.10;
+      // Passive 1: +20% Splash radius (larger max puddle size)
+      this.characterSplashRadiusMul *= 1.20;
       // Passive 2: +5% Splash damage every 5 waves
       if(steps5 > 0){
         this.characterDamageMul.splash *= (1 + 0.05 * steps5);
       }
       // Passive 3: Burn + Slow effects are 20% stronger (global)
       this.characterStatusEffectMul = 1.20;
+      // Strong synergy with splash puddle spread (faster bloom)
+      this.characterPuddleSpreadSpeedMul *= 1.20; // +20%
+      // Passive: -10% Cannon rotation speed
+      this.characterRotationSpeedMul.cannon *= 0.90;
+      // Torque is splash-focused; lasers stabilize slightly slower than neutral.
+      this.characterLaserStabilityMul *= 0.95; // -5%
     }
     // Sync any UI that depends on upgrade cost discount.
     if(this.ui && typeof this.ui.setUpgradeCostMultiplier === 'function'){
@@ -523,6 +551,25 @@ export class Game {
     const base = Math.max(1, buffs.splashRadiusMul || 1);
     const charMul = this.characterSplashRadiusMul || 1;
     return base * charMul;
+  }
+
+  getPuddleSpreadSpeedMul(){
+    const charMul = this.characterPuddleSpreadSpeedMul || 1;
+    const buffMul = buffs.puddleSpreadSpeedMul || 1;
+    return charMul * buffMul;
+  }
+
+  getLaserStabilityMul(){
+    return this.characterLaserStabilityMul || 1;
+  }
+
+  getTowerRotationSpeedMul(kind){
+    if(!kind) return 1;
+    const map = this.characterRotationSpeedMul || {};
+    if(kind === 'basic' || kind === 'cannon') return map.cannon || 1;
+    if(kind === 'laser') return map.laser || 1;
+    if(kind === 'splash') return map.splash || 1;
+    return 1;
   }
 
   getStatusEffectMul(){
@@ -873,6 +920,12 @@ export class Game {
     this.introPathTotal = cells.length;
     this.introLines = this._getIntroLines();
     this.state = 'intro';
+    // Trigger an immediate pilot line so the portrait starts in
+    // "talking" mode as soon as the cutscene begins.
+    const key = this.selectedCharacterKey || 'volt';
+    if(this.ui.showPilotLine && this.introLines && this.introLines.alert){
+      this.ui.showPilotLine(this.introLines.alert, key);
+    }
     // Disable wave start controls during the intro.
     if(this.ui.setStartEnabled) this.ui.setStartEnabled(false);
     if(this.ui.setWaveStatus) this.ui.setWaveStatus(false);
@@ -950,9 +1003,6 @@ export class Game {
         try{
           if(audio.bossIntro) audio.bossIntro();
         }catch(e){}
-        if(this.ui.showPilotLine && this.introLines && this.introLines.alert){
-          this.ui.showPilotLine(this.introLines.alert, key);
-        }
       }
     } else if(this.introPhase === 1){
       if(this.introTimer >= ALERT_TIME){
@@ -2370,10 +2420,36 @@ export class Game {
       slow = Math.max(0, Math.min(0.95, slow * mulS));
       ttl = Math.max(0.1, ttl * mulT);
     }
+    const isBubble = (kind === 'bubble');
+    // Base growth window for splash puddles (before character / perk modifiers).
+    const BASE_SPREAD_DURATION = 0.5; // seconds
+    const MIN_SPREAD_DURATION = 0.25;
+    const MAX_SPREAD_DURATION = 0.8;
+    let spreadDuration = 0;
+    let startRadius = radius;
+    let maxRadius = radius;
+    if(isBubble){
+      const speedMul = (typeof this.getPuddleSpreadSpeedMul === 'function')
+        ? this.getPuddleSpreadSpeedMul()
+        : 1;
+      const safeMul = Math.max(0.25, Math.min(4.0, speedMul || 1));
+      const baseDur = BASE_SPREAD_DURATION;
+      spreadDuration = Math.max(
+        MIN_SPREAD_DURATION,
+        Math.min(MAX_SPREAD_DURATION, baseDur / safeMul)
+      );
+      maxRadius = radius;
+      const baseStartFrac = 0.45;
+      startRadius = Math.max(4, maxRadius * baseStartFrac);
+    }
     this.hazardZones.push({
       x,
       y,
-      r: radius,
+      r: isBubble ? startRadius : radius,
+      maxRadius,
+      startRadius,
+      spreadDuration,
+      elapsed: 0,
       t: ttl,
       ttl,
       slow,
@@ -2391,6 +2467,14 @@ export class Game {
     this.hazardZones = this.hazardZones.filter(z=> (z.t -= dt) > 0);
     if(!this.hazardZones.length || !this.enemies.length) return;
     for(const z of this.hazardZones){
+      // Splash puddles grow from a small core to their full size over a short window.
+      if(z.kind === 'bubble' && z.spreadDuration && z.spreadDuration > 0){
+        z.elapsed = (z.elapsed || 0) + dt;
+        const frac = Math.max(0, Math.min(1, z.elapsed / z.spreadDuration));
+        const maxR = z.maxRadius || z.r || 0;
+        const startR = (z.startRadius != null ? z.startRadius : maxR) || 0;
+        z.r = startR + (maxR - startR) * frac;
+      }
       const interval = z.tickInterval || 0.25;
       z._tickAcc = (z._tickAcc || 0) + dt;
       const doTick = z.dps > 0 && z._tickAcc >= interval;
@@ -2411,24 +2495,24 @@ export class Game {
           }
           if(doTick && z.dps > 0){
             let dmg = z.dps * interval;
-            // Splash puddles: ensure a noticeable tick that scales with
-            // the global base damage stat. Baseline is 5 per tick at
-            // 0% base damage, increased proportionally by buffs.baseDamageMul.
-            if(z.kind === 'bubble'){
-              const baseMul = buffs.baseDamageMul || 1;
-              dmg = 5 * baseMul;
-            }
-            // Direct hit: if the puddle is spawning exactly under this enemy, treat this tick as a larger impact.
-            const directR2 = (z.r * 0.45) * (z.r * 0.45);
-            const isDirect = dist2(e.x, e.y, z.x, z.y) <= directR2;
             const meta = { color: z.color || COLORS.accent2 };
-            if(z.kind === 'bubble') meta.towerKind = 'splash';
-            if(isDirect && z.justSpawned){
-              e.damage(dmg, 'bullet', meta);
-            } else {
+            if(z.kind === 'bubble'){
+              // Scale bubble DoT with current puddle size so early ticks ramp up
+              // as the pool blooms, but keep a reasonable floor so it never
+              // feels completely empty.
+              const maxR = z.maxRadius || z.r || 1;
+              const curR = Math.max(0, Math.min(maxR, z.r || 0));
+              let areaFactor = 1;
+              if(maxR > 0){
+                const t = curR / maxR;
+                const minFactor = 0.6;
+                areaFactor = Math.max(minFactor, t);
+              }
+              dmg *= areaFactor;
               meta.small = true;
-              e.damage(dmg, 'bullet', meta);
+              meta.towerKind = 'splash';
             }
+            e.damage(dmg, 'bullet', meta);
           }
         }
       }
@@ -2846,18 +2930,49 @@ export class Game {
   }
   updateCombatStats(){
     if(!this.ui || !this.ui.setCombatStats) return;
-    const baseCrit = 0.05;  // +5% base crit chance
-    const baseCritDmg = 0.03; // +3% base crit damage
-    const crit = Math.max(0, Math.min(1, baseCrit + (buffs.targetPainterChance || 0)));
-    const critDmg = Math.max(0, baseCritDmg + (buffs.targetPainterBonus || 0));
+    const baseCrit = 0.05;      // +5% base crit chance
+    const baseCritDmg = 0.03;   // +3% base crit damage
+    const critRaw = Math.max(0, Math.min(1, baseCrit + (buffs.targetPainterChance || 0)));
+    const critDmgRaw = Math.max(0, baseCritDmg + (buffs.targetPainterBonus || 0));
+    const crit = critRaw - baseCrit;
+    const critDmg = critDmgRaw - baseCritDmg;
     const statusMul = this.getStatusEffectMul ? this.getStatusEffectMul() : 1;
-    const slowBonus = Math.max(0, (buffs.slowPotencyMul || 1) * statusMul - 1);
-    const burnBonus = Math.max(0, (buffs.burnDpsMul || 1) * statusMul - 1);
+    const slowRaw = (buffs.slowPotencyMul || 1) * statusMul;
+    const burnRaw = (buffs.burnDpsMul || 1) * statusMul;
+    const slowBonus = slowRaw - 1;
+    const burnBonus = burnRaw - 1;
     const dmgMul = (buffs.dmgMul || 1);
     const baseMul = (buffs.baseDamageMul || 1);
-    const baseDamage = Math.max(0, baseMul * dmgMul - 1);
-    const targeting = Math.max(0, buffs.retargetSpeedBonus || 0);
-    this.ui.setCombatStats({ baseDamage, crit, critDmg, slow: slowBonus, burn: burnBonus, targeting });
+    const baseDamageRaw = baseMul * dmgMul;
+    const baseDamage = baseDamageRaw - 1;
+    const targetingRaw = 1 + (buffs.retargetSpeedBonus || 0);
+    const targeting = targetingRaw - 1;
+    const spreadSpeed = (typeof this.getPuddleSpreadSpeedMul === 'function')
+      ? this.getPuddleSpreadSpeedMul()
+      : 1;
+    const puddleSpread = (spreadSpeed || 1) - 1;
+    const stabMul = (typeof this.getLaserStabilityMul === 'function')
+      ? this.getLaserStabilityMul()
+      : 1;
+    const laserStab = (stabMul || 1) - 1;
+    this.ui.setCombatStats({
+      baseDamage,
+      crit,
+      critDmg,
+      slow: slowBonus,
+      burn: burnBonus,
+      targeting,
+      puddle: puddleSpread,
+      laserStab,
+      baseDamageRaw,
+      critRaw,
+      critDmgRaw,
+      slowRaw,
+      burnRaw,
+      targetingRaw,
+      puddleRaw: spreadSpeed || 1,
+      laserStabRaw: stabMul || 1
+    });
   }
   refundPassive(key){
     if(!this.passives || !Array.isArray(this.passives.active)) return;
