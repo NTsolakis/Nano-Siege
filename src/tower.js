@@ -1,4 +1,4 @@
-import { COLORS, TOWER_TYPES } from './config.js';
+import { COLORS, TOWER_TYPES, MOARTER_MIN_RANGE_FRAC } from './config.js';
 import { buffs } from './rogue.js';
 import { audio } from './audio.js';
 import { dist2, clamp } from './utils.js';
@@ -142,7 +142,7 @@ function loadTowerSprite(key, url, angleOffset=0, sizeMul=1.3){
 
 if(typeof Image !== 'undefined'){
   // Save your images into /data with these filenames, or adjust paths.
-  // Cannon/Splash art is drawn “facing up” in the source, so rotate
+  // Cannon/Moarter art is drawn “facing up” in the source, so rotate
   // them 90° counter‑clockwise to align with our aim direction.
   const quarterTurnCCW = -Math.PI/2;
   // Size multipliers keep tower heads comfortably inside the pedestal
@@ -298,6 +298,11 @@ class BaseTower {
         this.retargetTimer = Math.max(this.retargetTimer||0, effective);
       }
     }
+    const range = this.getRange();
+    const minRange = (typeof this.getMinRange === 'function')
+      ? Math.max(0, this.getMinRange() || 0)
+      : 0;
+    const minR2 = minRange > 0 ? minRange*minRange : 0;
     if(!this.target){
       if((this.retargetTimer||0) > 0){
         if(prevId && prevId !== (this.target?.uid || null)){
@@ -308,14 +313,13 @@ class BaseTower {
       }
       let best = null;
       let bestDist2 = Infinity;
-      const range = this.getRange();
       // Hidden line-of-sight radius so towers can "see" farther than they can shoot.
       const visionRange = range * 2.0;
       const r2 = visionRange*visionRange;
       for(const e of enemies){
         if(!e.alive) continue;
         const d2v = dist2(this.x,this.y,e.x,e.y);
-        if(d2v <= r2 && d2v < bestDist2){
+        if(d2v <= r2 && d2v >= minR2 && d2v < bestDist2){
           bestDist2 = d2v;
           best = e;
         }
@@ -323,12 +327,12 @@ class BaseTower {
       this.target = best;
     } else {
       const d2v = dist2(this.x,this.y,this.target.x,this.target.y);
-      const range = this.getRange();
       const rangeR2 = range*range;
       const visionRange = range * 2.0;
       const visionR2 = visionRange*visionRange;
-      // Drop target if it leaves actual range or extended vision.
-      if(d2v > rangeR2 || d2v > visionR2){
+      // Drop target if it leaves actual range, falls inside the dead zone,
+      // or leaves extended vision.
+      if(d2v > rangeR2 || d2v > visionR2 || (minR2>0 && d2v < minR2)){
         this.target = null;
       }
     }
@@ -505,14 +509,23 @@ class BaseTower {
     ctx.restore();
   }
   drawIcon(ctx){ /* default: none */ }
-  drawRange(ctx){
-    // Range aura tinted to the tower's base color
+  drawRange(ctx, opts={}){
+    // Range aura tinted to the tower's base color. Used for both
+    // selection and hover previews; callers can tune opacity.
+    const { alpha=0.12, stroke=false } = opts || {};
     const hex = this.baseColor || COLORS.tower;
     const n = parseInt((hex||'#17e7a4').slice(1),16);
     const r=(n>>16)&255, g=(n>>8)&255, b=n&255;
+    const radius = this.getRange();
+    if(!radius || radius<=0) return;
     ctx.save();
-    ctx.fillStyle = `rgba(${r},${g},${b},0.12)`;
-    ctx.beginPath(); ctx.arc(this.x,this.y,this.getRange(),0,Math.PI*2); ctx.fill();
+    ctx.fillStyle = `rgba(${r},${g},${b},${alpha})`;
+    ctx.beginPath(); ctx.arc(this.x,this.y,radius,0,Math.PI*2); ctx.fill();
+    if(stroke){
+      ctx.lineWidth = 1.2;
+      ctx.strokeStyle = `rgba(${r},${g},${b},${Math.min(1, alpha*2)})`;
+      ctx.beginPath(); ctx.arc(this.x,this.y,radius,0,Math.PI*2); ctx.stroke();
+    }
     ctx.restore();
   }
   tickIdleTimer(dt){
@@ -1047,10 +1060,18 @@ export class SplashTower extends BaseTower{
     // While a shell is in flight we lock the aim direction so the barrel
     // does not sweep to new targets until the shot has landed.
     this._aimLock = null; // { x, y, ttl }
+    // Minimum firing distance: Moarter cannot hit very close targets.
+    this.minRangeFrac = MOARTER_MIN_RANGE_FRAC || 0.4;
+  }
+  getMinRange(){
+    const outer = this.getRange();
+    const frac = this.minRangeFrac != null ? this.minRangeFrac : (MOARTER_MIN_RANGE_FRAC || 0);
+    return Math.max(0, outer * frac);
   }
   getLeadDistance(){
-    // Aim roughly 1.5 tiles ahead of the current target along its path.
-    const tilesAhead = 1.5;
+    // Aim a bit ahead of the current target along its path, but keep
+    // the lead modest so impacts feel tightly synced with movement.
+    const tilesAhead = 1.0;
     return tilesAhead * this.tile;
   }
   drawIcon(ctx){
@@ -1094,8 +1115,10 @@ export class SplashTower extends BaseTower{
       : (buffs.splashRadiusMul||1);
     const puddleBaseR = this.tile * 0.6 * splashRadiusMul; // a bit wider than one tile
     const range = this.getRange();
-    // For actual shots, keep impact tiles within the real attack radius shown to the player.
+    const minRange = this.getMinRange();
+    // For actual shots, keep impact tiles within the real attack annulus shown to the player.
     const r2 = range*range;
+    const minR2 = minRange>0 ? minRange*minRange : 0;
 
     // Compute future impact point (ahead along the path) if we have a target.
     let impact = null;
@@ -1112,7 +1135,7 @@ export class SplashTower extends BaseTower{
       sx = gx * this.tile + this.tile/2;
       sy = gy * this.tile + this.tile/2;
       const d2 = dist2(this.x,this.y,sx,sy);
-      if(d2 <= r2){
+      if(d2 <= r2 && d2 >= minR2){
         impact = { x:sx, y:sy };
       } else {
         // Impact still out of real range; keep tracking but don't telegraph or fire yet.
@@ -1126,7 +1149,9 @@ export class SplashTower extends BaseTower{
     // we don't start aiming the next shot until the current one lands.
     if(!this._aimLock && this.target && impact){
       const cycle = this.lastShotInterval || (1 / this.fireRate);
-      const leadWindow = Math.min(1.0, cycle * 0.4); // up to ~1s of warning
+      // Slightly shorter pre-fire window so the aim prediction doesn't
+      // get too stale while enemies keep moving.
+      const leadWindow = Math.min(0.7, cycle * 0.3); // up to ~0.7s of warning
       if(this.cooldown <= leadWindow){
         const elapsed = leadWindow - this.cooldown;
         if(!this.telegraph || !this._telegraphLocked){
@@ -1191,9 +1216,9 @@ export class SplashTower extends BaseTower{
         this.rotation = Math.atan2(ady, adx);
       }
       const color = this.baseColor || COLORS.towerSplash;
-      // No explicit direct AoE burst here; damage is handled by the puddle DoT.
+      // Impact flash at the landing point (paired with the arc projectile).
       this.explosions.push({x:sx,y:sy,r:splashR,life:0.25});
-      // bubble shell visual travelling toward impact point (continuous stream)
+      // Single large shell visual travelling along a high arc toward impact.
       const dx = sx - this.x;
       const dy = sy - this.y;
       const dist = Math.hypot(dx,dy) || 1;
@@ -1201,26 +1226,46 @@ export class SplashTower extends BaseTower{
       // Lock aim along this trajectory until the shell has landed so the
       // barrel does not swing away while the bubbles are mid‑air.
       this._aimLock = { x:sx, y:sy, ttl:travel };
-      const bubbleCount = 4;
-      for(let i=0;i<bubbleCount;i++){
-        this.bubbles.push({
-          x0:this.x,
-          y0:this.y,
-          x1:sx,
-          y1:sy,
-          t:0,
-          ttl:travel,
-          phase:(i/bubbleCount)*0.3*travel,
-          r:6 + i
-        });
-      }
+      const arcHeight = this.tile * 0.8;
+      const projRadius = this.tile * 0.26;
+      this.bubbles.push({
+        x0:this.x,
+        y0:this.y,
+        x1:sx,
+        y1:sy,
+        t:0,
+        ttl:travel,
+        arcHeight,
+        r:projRadius
+      });
       // Spawn a lingering puddle that damages / applies modules on contact.
       // Lifetime bumped so enemies have more time to walk through it.
       const puddleTtl = Math.max(2.8, baseInterval*2.8);
-      const puddleDps = dmg * 0.35 / puddleTtl;
+      // Split total damage between an immediate impact burst and the
+      // lingering Acid puddle so Moarter feels punchy but still rewards
+      // enemies staying inside the pool. Weight the impact heavily so
+      // the "thump" is clearly visible in gameplay.
+      const impactShare = 0.75;
+      const dotShare = 0.25;
+      const impactDamage = dmg * impactShare;
+      const puddleDps = (dmg * dotShare) / puddleTtl;
       const puddleBurn = burn ? burn.dps * 0.6 : 0;
       // Puddle slow should only apply if the Slow Module is installed.
       const puddleSlow = slow ? slow.pct * 0.85 : 0;
+      // Immediate impact damage in a radius comparable to the initial
+      // Acid puddle size so the shell reliably "catches" enemies near
+      // the landing point.
+      if(this.game && this.game.enemies && impactDamage > 0){
+        const impactR = splashR;
+        const r2Impact = impactR * impactR;
+        for(const e of this.game.enemies){
+          if(!e.alive) continue;
+          if(dist2(e.x, e.y, sx, sy) <= r2Impact){
+            e.damage(impactDamage, 'bullet', { color, towerKind:'splash', impact:true });
+          }
+        }
+      }
+
       if(this.game && this.game.addHazardZone){
         this.game.addHazardZone({
           x:sx,
@@ -1250,6 +1295,45 @@ export class SplashTower extends BaseTower{
     }
   }
   tryHit(enemies){ /* hitscan AoE handled in update */ }
+  drawRange(ctx, opts={}){
+    // Visualize Moarter's dead zone as an inner ring and the usable
+    // firing radius as an outer ring.
+    const { alpha=0.12, stroke=false } = opts || {};
+    const hex = this.baseColor || COLORS.towerSplash;
+    const n = parseInt((hex||'#17e7a4').slice(1),16);
+    const r=(n>>16)&255, g=(n>>8)&255, b=n&255;
+    const outer = this.getRange();
+    if(!outer || outer<=0) return;
+    const inner = this.getMinRange();
+    const minR = Math.max(0, inner||0);
+    ctx.save();
+    ctx.fillStyle = `rgba(${r},${g},${b},${alpha})`;
+    if(minR > 0){
+      // Donut fill: inner dead zone left transparent.
+      ctx.beginPath();
+      ctx.arc(this.x,this.y,outer,0,Math.PI*2);
+      ctx.arc(this.x,this.y,minR,Math.PI*2,0,true);
+      ctx.closePath();
+      ctx.fill();
+    } else {
+      ctx.beginPath();
+      ctx.arc(this.x,this.y,outer,0,Math.PI*2);
+      ctx.fill();
+    }
+    if(stroke){
+      ctx.lineWidth = 1.2;
+      ctx.strokeStyle = `rgba(${r},${g},${b},${Math.min(1, alpha*2)})`;
+      ctx.beginPath(); ctx.arc(this.x,this.y,outer,0,Math.PI*2); ctx.stroke();
+    }
+    if(minR > 0){
+      ctx.setLineDash([5,4]);
+      ctx.lineWidth = 1;
+      ctx.strokeStyle = `rgba(${r},${g},${b},${Math.min(1, alpha*2)})`;
+      ctx.beginPath(); ctx.arc(this.x,this.y,minR,0,Math.PI*2); ctx.stroke();
+      ctx.setLineDash([]);
+    }
+    ctx.restore();
+  }
   draw(ctx){
     const spr = TOWER_SPRITES.splash;
     const hasSprite = spr && spr.loaded;
@@ -1290,15 +1374,18 @@ export class SplashTower extends BaseTower{
       ctx.fill();
     }
     ctx.restore();
-    // bubble shells (purely visual)
+    // Arc shell projectile (visual flight of the Moarter round)
     for(const b of this.bubbles){
-      const phase = b.phase || 0;
-      const p = clamp((b.t + phase) / b.ttl, 0, 1);
-      const x = b.x0 + (b.x1 - b.x0)*p;
-      const y = b.y0 + (b.y1 - b.y0)*p - 6*(1-p);
-      const baseR = b.r || 6;
+      const p = clamp(b.t / (b.ttl || 0.0001), 0, 1);
+      const baseX = b.x0 + (b.x1 - b.x0)*p;
+      const baseY = b.y0 + (b.y1 - b.y0)*p;
+      const arcH = (b.arcHeight != null ? b.arcHeight : (this.tile * 0.5));
+      const offset = Math.sin(Math.PI * p) * arcH;
+      const x = baseX;
+      const y = baseY - offset;
+      const baseR = b.r || (this.tile * 0.22);
       const r = baseR * (0.9 + 0.4*p);
-      const alpha = 0.25 + 0.5*(1-p);
+      const alpha = 0.35 + 0.45*(1-p);
       ctx.save();
       ctx.globalAlpha = alpha;
       const tint = this.baseColor || COLORS.towerSplash;

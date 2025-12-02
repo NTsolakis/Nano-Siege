@@ -7,14 +7,14 @@ export const buffs = {
   rangeMul: 1.0,         // range multiplier
   slowPotencyMul: 1.0,   // slow pct multiplier
   burnDpsMul: 1.0,       // burn DPS multiplier
-  splashRadiusMul: 1.0,  // splash radius multiplier
-  puddleSpreadSpeedMul: 1.0, // splash puddle growth speed (1 = base)
+  splashRadiusMul: 1.0,  // Acid puddle radius multiplier (Moarter)
+  puddleSpreadSpeedMul: 1.0, // Acid puddle growth speed (1 = base)
   projectileSpeedMul: 1.0, // legacy (no longer used)
   baseDamageMul: 1.0,    // base damage multiplier before other bonuses
   retargetSpeedBonus: 0, // fractional bonus to retarget speed (0.10 = +10%)
   cannonStartRangeLevel: 0, // starting range level for new Cannons
   cannonStartRateLevel: 0,  // starting fire rate level for new Cannons
-  splashStartRateLevel: 0,  // starting fire rate level for new Splash towers
+  splashStartRateLevel: 0,  // starting fire rate level for new Moarter towers
   laserStartRangeLevel: 0,  // starting range level for new Laser towers
   laserStartRateLevel: 0,   // starting fire rate level for new Laser towers
   burnDurationBonus: 0,    // additional burn duration (s)
@@ -31,8 +31,8 @@ export const buffs = {
   fluxBurstDuration: 4,    // overheat window duration
   ionicChance: 0,          // chance to arc on kill
   ionicDamagePct: 0,       // portion of last hit damage to arc
-  ionicRangeFactor: 1,     // scales arc range with splash stat
-  cryoFractureBonus: 0,    // bonus dmg vs slowed targets for splash hits
+  ionicRangeFactor: 1,     // scales arc range with Moarter/Acid stat
+  cryoFractureBonus: 0,    // bonus dmg vs slowed targets for Moarter hits
   thermalVenting: false,   // enable scorch patch on burning kills
   thermalSlow: 0,          // scorch slow pct
   thermalDuration: 0,      // scorch duration
@@ -42,7 +42,7 @@ export const buffs = {
   targetPainterThreshold: 0.7, // HP ratio to qualify
   fragmentEliteBonus: 0,   // bonus fragments on elite/boss kills
   rerollDiscount: 0,       // % reroll cost discount
-  singularityEvery: 0,     // every Nth splash explosion pulls/slow
+  singularityEvery: 0,     // every Nth Moarter explosion pulls/slow
   singularitySlow: 0,      // pull slow pct
   singularityDuration: 0,  // duration of singularity slow
   chronoInterval: 0,       // seconds between chrono pulses
@@ -85,13 +85,13 @@ export const PERKS = [
   { key:'range', name:'Telemetry Uplink', desc:'+10% tower range', baseCost: 100, slotPassive:true, tier:'common' },
   { key:'slow', name:'Cryo Nanites', desc:'+10% slow potency', baseCost: 110, slotPassive:true, tier:'common' },
   { key:'burn', name:'Incendiary Mix', desc:'+20% burn DPS', baseCost: 110, slotPassive:true, tier:'common' },
-  { key:'splash', name:'Shrapnel Matrix', desc:'+15% splash radius', baseCost: 120, slotPassive:true, tier:'common' },
+  { key:'splash', name:'Shrapnel Matrix', desc:'+15% Acid puddle radius', baseCost: 120, slotPassive:true, tier:'common' },
   { key:'base_dmg_1', name:'Low-Gain Amplifier', desc:'+1% base damage to all towers.', baseCost: 80, slotPassive:true, tier:'common' },
   { key:'base_dmg_3', name:'Focused Charge Bus', desc:'+3% base damage to all towers.', baseCost: 100, slotPassive:true, tier:'common' },
   { key:'base_dmg_5', name:'Ferrofluid Coating', desc:'+5% base damage to all towers.', baseCost: 120, slotPassive:true, tier:'common' },
   { key:'starter_cannon_range1', name:'Barrel Calibration Protocol', desc:'New Cannons spawn with Range Level 1 for free (future placements).', baseCost: 120, slotPassive:true, tier:'common', stackLimit:1 },
   { key:'starter_cannon_rate1', name:'Servo Primer', desc:'New Cannons spawn with Fire Rate Level 1 for free (future placements).', baseCost: 120, slotPassive:true, tier:'common', stackLimit:1 },
-  { key:'starter_splash_rate1', name:'Hydraulic Primer', desc:'New Splash towers spawn with Fire Rate Level 1 for free (future placements).', baseCost: 120, slotPassive:true, tier:'common', stackLimit:1 },
+  { key:'starter_splash_rate1', name:'Hydraulic Primer', desc:'New Moarter towers spawn with Fire Rate Level 1 for free (future placements).', baseCost: 120, slotPassive:true, tier:'common', stackLimit:1 },
   { key:'starter_laser_range1', name:'Beam Focus Protocol', desc:'New Lasers spawn with Range Level 1 for free (future placements).', baseCost: 120, slotPassive:true, tier:'common', stackLimit:1 },
   { key:'starter_laser_rate1', name:'Pulse Sync Protocol', desc:'New Lasers spawn with Fire Rate Level 1 for free (future placements).', baseCost: 120, slotPassive:true, tier:'common', stackLimit:1 },
   // Common crit micro-boosters
@@ -112,7 +112,7 @@ export const PERKS = [
    { key:'sub_retarget', name:'Recursive Lock Subroutine', desc:'Towers retarget 22% faster after enemy death.', baseCost: 210, slotPassive:true, tier:'rare' },
   { key:'starter_cannon_range2', name:'Extended Ballistics Subroutine', desc:'New Cannons spawn with Range Level 2 for free (future placements).', baseCost: 210, slotPassive:true, tier:'rare', stackLimit:1 },
   { key:'starter_cannon_rate2', name:'Rapid Cycling Servos', desc:'New Cannons spawn with Fire Rate Level 2 for free (future placements).', baseCost: 210, slotPassive:true, tier:'rare', stackLimit:1 },
-  { key:'starter_splash_rate2', name:'Pressurized Manifold', desc:'New Splash towers spawn with Fire Rate Level 2 for free (future placements).', baseCost: 210, slotPassive:true, tier:'rare', stackLimit:1 },
+  { key:'starter_splash_rate2', name:'Pressurized Manifold', desc:'New Moarter towers spawn with Fire Rate Level 2 for free (future placements).', baseCost: 210, slotPassive:true, tier:'rare', stackLimit:1 },
   { key:'starter_laser_range2', name:'Photon Relay Subroutine', desc:'New Lasers spawn with Range Level 2 for free (future placements).', baseCost: 210, slotPassive:true, tier:'rare', stackLimit:1 },
   { key:'starter_laser_rate2', name:'Pulse Repeater Subroutine', desc:'New Lasers spawn with Fire Rate Level 2 for free (future placements).', baseCost: 210, slotPassive:true, tier:'rare', stackLimit:1 },
   { key:'base_dmg_10', name:'Kinetic Overbalance', desc:'+10% base damage to all towers.', baseCost: 190, slotPassive:true, tier:'rare' },
@@ -120,8 +120,8 @@ export const PERKS = [
   { key:'base_dmg_20', name:'Firing Solution Optimizer', desc:'+20% base damage to all towers.', baseCost: 240, slotPassive:true, tier:'rare' },
   { key:'starter_cannon_burn', name:'Thermal Shelling Suite', desc:'New Cannons spawn with Burn Module installed.', baseCost: 200, slotPassive:true, tier:'rare', stackLimit:1 },
   { key:'starter_cannon_slow', name:'Cryo Shock Bracing', desc:'New Cannons spawn with Slow Module installed.', baseCost: 200, slotPassive:true, tier:'rare', stackLimit:1 },
-  { key:'starter_splash_burn', name:'Ignition Gel Manifold', desc:'New Splash towers spawn with Burn Module installed.', baseCost: 200, slotPassive:true, tier:'rare', stackLimit:1 },
-  { key:'starter_splash_slow', name:'Cryo Flux Valves', desc:'New Splash towers spawn with Slow Module installed.', baseCost: 200, slotPassive:true, tier:'rare', stackLimit:1 },
+  { key:'starter_splash_burn', name:'Ignition Gel Manifold', desc:'New Moarter towers spawn with Burn Module installed.', baseCost: 200, slotPassive:true, tier:'rare', stackLimit:1 },
+  { key:'starter_splash_slow', name:'Cryo Flux Valves', desc:'New Moarter towers spawn with Slow Module installed.', baseCost: 200, slotPassive:true, tier:'rare', stackLimit:1 },
   { key:'starter_laser_burn', name:'Thermal Lance Emulator', desc:'New Lasers spawn with Burn Module installed.', baseCost: 200, slotPassive:true, tier:'rare', stackLimit:1 },
   { key:'starter_laser_slow', name:'Phase Chill Matrix', desc:'New Lasers spawn with Slow Module installed.', baseCost: 200, slotPassive:true, tier:'rare', stackLimit:1 },
 
@@ -133,14 +133,14 @@ export const PERKS = [
   { key:'reactor_aegis', name:'Reactor Aegis', desc:'Core gains a 10 HP overshield each wave; regenerates between waves.', baseCost: 260, slotPassive:true, tier:'super', unique:true },
   { key:'starter_cannon_range3', name:'Orbital Range Uplink', desc:'New Cannons spawn with Range Level 3 for free (future placements).', baseCost: 260, slotPassive:true, tier:'super' },
   { key:'starter_cannon_rate3', name:'Ballistic Turbo Lattice', desc:'New Cannons spawn with Fire Rate Level 3 for free (future placements).', baseCost: 260, slotPassive:true, tier:'super' },
-  { key:'starter_splash_rate3', name:'Cascade Firing Lattice', desc:'New Splash towers spawn with Fire Rate Level 3 for free (future placements).', baseCost: 260, slotPassive:true, tier:'super' },
+  { key:'starter_splash_rate3', name:'Cascade Firing Lattice', desc:'New Moarter towers spawn with Fire Rate Level 3 for free (future placements).', baseCost: 260, slotPassive:true, tier:'super' },
   { key:'starter_laser_range3', name:'Diffraction Halo', desc:'New Lasers spawn with Range Level 3 for free (future placements).', baseCost: 260, slotPassive:true, tier:'super' },
   { key:'starter_laser_rate3', name:'Quantum Pulse Accelerator', desc:'New Lasers spawn with Fire Rate Level 3 for free (future placements).', baseCost: 260, slotPassive:true, tier:'super' },
   { key:'base_dmg_50', name:'Primed Warheads', desc:'+50% base damage to all towers.', baseCost: 300, slotPassive:true, tier:'super', unique:true },
   { key:'base_dmg_100', name:'Quantum Payload', desc:'+100% base damage to all towers.', baseCost: 340, slotPassive:true, tier:'super', unique:true },
   { key:'base_dmg_200', name:'Singularity Munitions', desc:'+200% base damage to all towers.', baseCost: 420, slotPassive:true, tier:'super', unique:true },
   { key:'starter_cannon_burnslow', name:'Cryo-Thermal Siege Array', desc:'New Cannons spawn with both Slow and Burn Modules installed.', baseCost: 260, slotPassive:true, tier:'super', stackLimit:1 },
-  { key:'starter_splash_burnslow', name:'Cascade Cryo-Thermal Core', desc:'New Splash towers spawn with both Slow and Burn Modules installed.', baseCost: 260, slotPassive:true, tier:'super', stackLimit:1 },
+  { key:'starter_splash_burnslow', name:'Cascade Cryo-Thermal Core', desc:'New Moarter towers spawn with both Slow and Burn Modules installed.', baseCost: 260, slotPassive:true, tier:'super', stackLimit:1 },
   { key:'starter_laser_burnslow', name:'Prismatic Lockdown Beam', desc:'New Lasers spawn with both Slow and Burn Modules installed.', baseCost: 260, slotPassive:true, tier:'super', stackLimit:1 },
   { key:'anom_retarget', name:'Temporal Targeting Matrix', desc:'Towers retarget 40% faster after enemy death.', baseCost: 260, slotPassive:true, tier:'super', unique:true },
 

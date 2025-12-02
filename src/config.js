@@ -25,7 +25,7 @@ export const COLORS = {
   // Distinct tower base colors
   towerBasic: '#17e7a4',   // green-teal
   towerLaser: '#62f0ff',   // cyan
-  towerSplash: '#ff9e00',  // orange
+  towerSplash: '#ff9e00',  // orange (Moarter)
   // Flying drone enemy accent
   drone: '#7ce0ff',
   range: 'rgba(23,231,164,0.12)',
@@ -156,10 +156,18 @@ export const GAME_RULES = {
   rerollPriceScale: 2.0,     // price multiplier per reroll
 };
 
+// Moarter (acid mortar) specific tuning: fraction of its outer range
+// that is treated as a minimum distance "dead zone". Shots will only
+// be fired at enemies between min and max range, and the inner ring
+// is visualized in the range preview.
+export const MOARTER_MIN_RANGE_FRAC = 0.4;
+
 export const TOWER_TYPES = {
   basic: { key:'basic', name:'Cannon', cost:30, range:150, damage:15, fireRate:2.0, bulletSpeed:360 },
   laser: { key:'laser', name:'Laser', cost:45, range:170, dps:25, slowPct:0.35 },
-  splash:{ key:'splash', name:'Splash', cost:60, range:135, damage:15, fireRate:1.2, splashRadius:60, bulletSpeed:300 }
+  // Moarter gets a larger default outer range so both its minimum
+  // dead zone and effective firing ring feel more substantial.
+  splash:{ key:'splash', name:'Moarter', cost:60, range:160, damage:15, fireRate:1.2, splashRadius:60, bulletSpeed:300 }
 };
 
 export const UPGRADE_COSTS = {

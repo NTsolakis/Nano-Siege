@@ -306,7 +306,7 @@ export class UIManager{
       // Tower palette tooltips
       tower_basic: { title:'Cannon', lines:['Single‑target ballistic turret.', 'Solid all‑rounder; supports slow/burn.'] },
       tower_laser: { title:'Laser', lines:['Continuous beam damage over time.', 'Great vs tough enemies; precise aim.'] },
-      tower_splash: { title:'Splash', lines:['Explosive shells with area damage.', 'Strong vs groups; pairs well with slow.'] }
+      tower_splash: { title:'Moarter', lines:['Launches arcing shells that create Acid puddles.', 'Strong vs groups; excels at area control.'] }
     };
     this.hideChamberTooltip = ()=> this.clearTip();
     this.showChamberTooltip = (payload)=>{
@@ -375,7 +375,7 @@ export class UIManager{
           '• Cannon: +15% rotation speed.',
           '• Cannon: -20% placement cost.',
           '• Laser: -10% stability.',
-          '• Splash: -10% spread rate.'
+          '• Acid Puddles: -10% spread rate.'
         ]
       },
       lumen: {
@@ -386,14 +386,14 @@ export class UIManager{
           '• Laser: -20% placement cost.',
           '• Economy: -20% tower upgrade costs.',
           '• Cannon: -10% rotation speed.',
-          '• Splash: -10% spread rate.'
+          '• Acid Puddles: -10% spread rate.'
         ]
       },
       torque: {
-        title: 'Torque — Splash Specialist',
+        title: 'Torque — Moarter Specialist',
         lines: [
-          '• Splash: +20% radius, +5% DPS /5 waves.',
-          '• Splash: +20% spread rate, -20% placement cost.',
+          '• Moarter: +20% Acid puddle radius, +5% DPS /5 waves.',
+          '• Moarter: +20% Acid Spread rate, -20% placement cost.',
           '• Debuffs: Burn & Slow +20% power.',
           '• Cannon: -10% rotation speed.',
           '• Laser: -5% stability.'
@@ -814,7 +814,7 @@ export class UIManager{
       } else if(kind === 'laser'){
         rateDesc = 'Laser beam deals increased damage over time.';
       } else if(kind === 'splash'){
-        rateDesc = 'Splash explosions and puddles deal increased damage.';
+        rateDesc = 'Moarter shells and Acid puddles deal increased damage.';
       }
       this.tipText.rate.lines = [
         rateDesc,
@@ -839,8 +839,8 @@ export class UIManager{
         slowDesc = 'Laser beam slows enemies it hits.';
         burnDesc = 'Laser beam applies burning damage over time.';
       } else if(kind === 'splash'){
-        slowDesc = 'Splash puddles briefly slow enemies standing in them.';
-        burnDesc = 'Splash puddles apply burning damage over time.';
+        slowDesc = 'Acid puddles briefly slow enemies standing in them.';
+        burnDesc = 'Acid puddles apply burning damage over time.';
       }
       this.tipText.slow.lines = [
         tower.hasSlow ? 'Installed' : 'Not installed',

@@ -592,13 +592,31 @@ export class Enemy {
     } else {
       // Skip visual spam for silent ticks (e.g., invisible chip damage)
       const isDot = !!meta.small;
-      const minAmt = isDot ? 0.4 : 1.5;
+      // Lower the visibility floor for Moarter/Acid puddle ticks so
+      // players can clearly see DoT numbers as enemies walk through.
+      let minAmt = isDot ? 0.4 : 1.5;
+      if(isDot && meta.towerKind === 'splash'){
+        minAmt = 0.15;
+      }
       if(!(meta.silent) && amount > 0 && amount >= minAmt){
         const minGap = 100; // ms between floaters (reduce rapid spam/flicker)
         if(nowTs - this._lastHitFx >= minGap){
           const val = Math.max(1, Math.round(amount));
           const textVal = meta.crit ? `✦${val}` : `-${val}`;
           const anchor = this._labelAnchor();
+          // Choose floater color based on damage source so Moarter
+          // impact vs Acid puddle DoT are easy to distinguish.
+          let color = meta.color || null;
+          if(meta.impact && !meta.crit){
+            // Moarter impact burst: bright orange.
+            color = '#ffc46b';
+          } else if(isDot && meta.towerKind === 'splash' && !meta.crit){
+            // Acid puddle DoT: bright yellow so it stands apart.
+            color = '#ffe66b';
+          } else if(meta.type === 'burn' && !meta.crit){
+            // Burn ticks keep their fire-red tint.
+            color = '#ff5370';
+          }
           this.hitFx.push({
             age: 0,
             ttl: meta.crit ? 1.35 : (isDot ? 0.8 : 1.15), // DoT ticks are shorter
@@ -606,7 +624,7 @@ export class Enemy {
             r: Math.max(6, this.radius - 2),
             ax: anchor.x,
             ay: anchor.y,
-            color: meta.crit ? '#ffd47c' : (meta.color || null),
+            color: meta.crit ? '#ffd47c' : color,
             crit: !!meta.crit,
             small: !!meta.small
           });

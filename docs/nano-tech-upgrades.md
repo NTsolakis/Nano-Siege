@@ -35,14 +35,14 @@ Design notes for future Nano-Tech upgrade expansions. Tiers align with the in-ga
 11. **Telemetry Uplink** — +10% tower range.  
 12. **Cryo Nanites** — +10% slow potency.  
 13. **Incendiary Mix** — +20% burn DPS.  
-14. **Shrapnel Matrix** — +15% splash radius.  
+14. **Shrapnel Matrix** — +15% Acid puddle radius.  
 15. **Venture Funding** — Instant +100 NanoCredits.  
 16. **Reactor Patch** — Restores +5 HP (up to max).  
 
 **Placement Starter Protocols (new):**
 - **Barrel Calibration Protocol** — Cannons you place start with Range Level 1 at no cost (future placements only).  
 - **Servo Primer** — Cannons you place start with Fire Rate Level 1 at no cost.  
-- **Hydraulic Primer** — Splash towers you place start with Fire Rate Level 1 at no cost.  
+- **Hydraulic Primer** — Moarter towers you place start with Fire Rate Level 1 at no cost.  
 - **Beam Focus Protocol** — Lasers you place start with Range Level 1 at no cost.  
 - **Pulse Sync Protocol** — Lasers you place start with Fire Rate Level 1 at no cost.  
 
@@ -60,7 +60,7 @@ Design notes for future Nano-Tech upgrade expansions. Tiers align with the in-ga
 1. **Recursive Burst Subroutine**  
    Every 7 shots, a tower fires 3 shots rapidly.
 2. **Chain Discharge**  
-   Splash damage chains to 1 additional nearby enemy for 30% damage.
+   Moarter splash damage chains to 1 additional nearby enemy for 30% damage.
 3. **Phase Compression**  
    Enemies slowed by Cryo effects take +15% damage.
 4. **Nanobot Spur**  
@@ -95,15 +95,15 @@ Design notes for future Nano-Tech upgrade expansions. Tiers align with the in-ga
 **Placement Starter Subroutines (rare, Level 2 starters):**
 - **Extended Ballistics Subroutine** — Cannons you place start with Range Level 2 for free.  
 - **Rapid Cycling Servos** — Cannons you place start with Fire Rate Level 2 for free.  
-- **Pressurized Manifold** — Splash towers you place start with Fire Rate Level 2 for free.  
+- **Pressurized Manifold** — Moarter towers you place start with Fire Rate Level 2 for free.  
 - **Photon Relay Subroutine** — Lasers you place start with Range Level 2 for free.  
 - **Pulse Repeater Subroutine** — Lasers you place start with Fire Rate Level 2 for free.  
 
 **Module Starters (rare, free module installs on spawn):**
 - **Thermal Shelling Suite** — Cannons you place start with Burn Module installed.  
 - **Cryo Shock Bracing** — Cannons you place start with Slow Module installed.  
-- **Ignition Gel Manifold** — Splash towers you place start with Burn Module installed.  
-- **Cryo Flux Valves** — Splash towers you place start with Slow Module installed.  
+- **Ignition Gel Manifold** — Moarter towers you place start with Burn Module installed.  
+- **Cryo Flux Valves** — Moarter towers you place start with Slow Module installed.  
 - **Thermal Lance Emulator** — Lasers you place start with Burn Module installed.  
 - **Phase Chill Matrix** — Lasers you place start with Slow Module installed.  
 
@@ -150,13 +150,13 @@ Design notes for future Nano-Tech upgrade expansions. Tiers align with the in-ga
 **Placement Starter Anomalies (super-rare, Level 3 starters):**
 - **Orbital Range Uplink** — Cannons you place start with Range Level 3 for free.  
 - **Ballistic Turbo Lattice** — Cannons you place start with Fire Rate Level 3 for free.  
-- **Cascade Firing Lattice** — Splash towers you place start with Fire Rate Level 3 for free.  
+- **Cascade Firing Lattice** — Moarter towers you place start with Fire Rate Level 3 for free.  
 - **Diffraction Halo** — Lasers you place start with Range Level 3 for free.  
 - **Quantum Pulse Accelerator** — Lasers you place start with Fire Rate Level 3 for free.  
 
 **Module Starters (super-rare, both modules on spawn):**
 - **Cryo-Thermal Siege Array** — Cannons you place start with both Slow and Burn Modules installed.  
-- **Cascade Cryo-Thermal Core** — Splash towers you place start with both Slow and Burn Modules installed.  
+- **Cascade Cryo-Thermal Core** — Moarter towers you place start with both Slow and Burn Modules installed.  
 - **Prismatic Lockdown Beam** — Lasers you place start with both Slow and Burn Modules installed.  
 
 **Base Damage Boosters (Anomalies):**
@@ -173,9 +173,9 @@ Here are rare-tier Subroutines themed around:
 • Range
 • Burn Module
 • Slow Module
-• Splash
+• Moarter
 • Laser Damage
-• Tower types (Cannons, Lasers, Cryo/Slow, Burners, Splashers)
+• Tower types (Cannons, Lasers, Cryo/Slow, Burners, Moarters)
 
 All designed to feel powerful but not run-breaking like Anomalies.
 
@@ -200,8 +200,8 @@ All designed to feel powerful but not run-breaking like Anomalies.
    All towers start with Level 3 Range, dramatically increasing early-game map coverage.  
    Projectile towers’ shots travel faster as a side effect.
 
-6. **Splash Core Upgrade**  
-   All AoE/Splash towers start with Level 2 Splash Radius.  
+6. **Acid Core Upgrade**  
+   All AoE/Moarter towers start with Level 2 Acid puddle radius.  
    Additionally, splash damage deals +10% to enemies at the very center of the explosion.
 
 7. **Multi-Point Laser Mesh**  
@@ -228,8 +228,8 @@ All designed to feel powerful but not run-breaking like Anomalies.
     Laser towers start with: Slow Module at Level 1 and +1 damage level.  
     Beams do tiny but meaningful slow pulses.
 
-13. **Splash Ignition Kernel**  
-    Splash towers instantly ignite any enemy hit by the inner 20% of their explosion radius.
+13. **Moarter Ignition Kernel**  
+    Moarter shells instantly ignite any enemy hit by the inner 20% of their explosion radius.
 
 14. **Stabilized Coil Array**  
     Laser towers begin with: Level 2 range and Level 1 fire rate.  
@@ -241,7 +241,7 @@ All designed to feel powerful but not run-breaking like Anomalies.
 
 ### Ultra-Flexible Rare Subroutines (Rare but Build-Defining)
 16. **Arsenal Blueprint Optimization**  
-    Your first three towers placed each start with: Level 2 Fire Rate, Level 2 Range, Level 1 Splash (even for non-splash towers → small AoE).  
+    Your first three towers placed each start with: Level 2 Fire Rate, Level 2 Range, Level 1 Acid (even for non-Moarter towers → small AoE puddles).  
     This one creates extremely unique run setups.
 
 17. **Specialty Loadout Selector**  

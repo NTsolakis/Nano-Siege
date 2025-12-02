@@ -1,4 +1,4 @@
-import { CANVAS_W, CANVAS_H, TILE_SIZE, GAME_RULES, COLORS, getHpColor, prewarmHpColors } from './config.js';
+import { CANVAS_W, CANVAS_H, TILE_SIZE, GAME_RULES, COLORS, getHpColor, prewarmHpColors, MOARTER_MIN_RANGE_FRAC } from './config.js';
 import { now, dist2 } from './utils.js';
 import { Grid } from './grid.js';
 import { Enemy } from './enemy.js';
@@ -448,7 +448,7 @@ export class Game {
     };
     this.characterSplashRadiusMul = 1.0;
     this.characterStatusEffectMul = 1.0; // slow + burn strength
-    this.characterPuddleSpreadSpeedMul = 1.0; // splash puddle growth speed
+    this.characterPuddleSpreadSpeedMul = 1.0; // Acid puddle growth speed
     this.characterLaserStabilityMul = 1.0; // laser beam stability ramp speed
     this.characterUpgradeCostMul = 1.0;
     this.characterPlacementCostMul = 1.0;
@@ -487,7 +487,7 @@ export class Game {
       this.characterRotationSpeedMul.cannon *= 1.15;
       // Preferred tower: Cannon placement cost -20%
       this.characterTowerCostMul.cannon *= 0.8;
-      // Weak synergy with splash puddle spread (slower bloom)
+      // Weak synergy with Acid puddle spread (slower bloom)
       this.characterPuddleSpreadSpeedMul *= 0.90; // -10%
       // Volt leans into rotation/burst; lasers stabilize more slowly.
       this.characterLaserStabilityMul *= 0.90; // -10%
@@ -506,23 +506,23 @@ export class Game {
       this.characterTowerCostMul.laser *= 0.8;
       // Passive: -10% Cannon rotation speed (cannons feel sluggish early)
       this.characterRotationSpeedMul.cannon *= 0.90;
-      // Splash puddles bloom a bit slower for Lumen.
+      // Acid puddles bloom a bit slower for Lumen.
       this.characterPuddleSpreadSpeedMul *= 0.90; // -10%
       // Lumen specializes in sustained beams; faster stability ramp.
       this.characterLaserStabilityMul *= 1.25; // +25%
     } else if(key === 'torque'){
-      // Torque — Splash Specialist
-      // Passive 1: +20% Splash radius (larger max puddle size)
+      // Torque — Moarter Specialist
+      // Passive 1: +20% Acid puddle radius (larger max puddle size)
       this.characterSplashRadiusMul *= 1.20;
-      // Passive 2: +5% Splash damage every 5 waves
+      // Passive 2: +5% Moarter damage every 5 waves
       if(steps5 > 0){
         this.characterDamageMul.splash *= (1 + 0.05 * steps5);
       }
       // Passive 3: Burn + Slow effects are 20% stronger (global)
       this.characterStatusEffectMul = 1.20;
-      // Strong synergy with splash puddle spread (faster bloom)
+      // Strong synergy with Acid puddle spread (faster bloom)
       this.characterPuddleSpreadSpeedMul *= 1.20; // +20%
-      // Preferred tower: Splash placement cost -20%
+      // Preferred tower: Moarter placement cost -20%
       this.characterTowerCostMul.splash *= 0.8;
       // Passive: -10% Cannon rotation speed
       this.characterRotationSpeedMul.cannon *= 0.90;
@@ -543,14 +543,7 @@ export class Game {
         const types = ['basic','laser','splash'];
         const costs = {};
         for(const key of types){
-          const def = TOWER_TYPES[key];
-          if(!def) continue;
-          const base = def.cost || 0;
-          const placeMul = this.characterPlacementCostMul || 1;
-          const typeMul = (typeof this.getTowerCostMul === 'function')
-            ? this.getTowerCostMul(def.key || key)
-            : 1;
-          costs[key] = Math.max(0, Math.round(base * placeMul * typeMul));
+          costs[key] = this.getTowerPlacementCost(key);
         }
         this.ui.setTowerCosts(costs);
       }
@@ -607,6 +600,28 @@ export class Game {
     if(kind === 'laser') return map.laser || 1;
     if(kind === 'splash') return map.splash || 1;
     return 1;
+  }
+
+  getTowerPlacementCost(type){
+    if(!type) return Infinity;
+    const def = TOWER_TYPES[type];
+    if(!def) return Infinity;
+    const base = def.cost || 0;
+    const placeMul = this.characterPlacementCostMul || 1;
+    const typeMul = (typeof this.getTowerCostMul === 'function')
+      ? this.getTowerCostMul(def.key || type)
+      : 1;
+    return Math.max(0, Math.round(base * placeMul * typeMul));
+  }
+
+  getTowerPreviewRange(type){
+    if(!type) return 0;
+    const def = TOWER_TYPES[type];
+    if(!def || !def.range) return 0;
+    const baseRange = def.range || 0;
+    const chronoBoost = buffs.chronoActive ? (1 + (buffs.chronoRangeBonus||0)) : 1;
+    const globalMul = buffs.rangeMul || 1;
+    return baseRange * globalMul * chronoBoost;
   }
 
   getStatusEffectMul(){
@@ -2102,12 +2117,9 @@ export class Game {
     const { gx, gy } = this.mouse;
     if(this.grid.canPlace(gx,gy)){
       const def = TOWER_TYPES[this.selectedTower];
-      const baseCost = def.cost;
-      const placeMul = this.characterPlacementCostMul || 1;
-      const typeMul = (typeof this.getTowerCostMul === 'function')
-        ? this.getTowerCostMul(def.key || this.selectedTower)
-        : 1;
-      const cost = Math.max(0, Math.round(baseCost * placeMul * typeMul));
+      const cost = (typeof this.getTowerPlacementCost === 'function')
+        ? this.getTowerPlacementCost(this.selectedTower)
+        : (def?.cost || 0);
       if(this.isCheatMode() || this.credits >= cost){
         if(!this.isCheatMode()){ this.credits -= cost; }
         this.grid.occupy(gx,gy);
@@ -2461,7 +2473,7 @@ export class Game {
       ttl = Math.max(0.1, ttl * mulT);
     }
     const isBubble = (kind === 'bubble');
-    // Base growth window for splash puddles (before character / perk modifiers).
+    // Base growth window for Acid puddles (before character / perk modifiers).
     const BASE_SPREAD_DURATION = 0.5; // seconds
     const MIN_SPREAD_DURATION = 0.25;
     const MAX_SPREAD_DURATION = 0.8;
@@ -2507,7 +2519,7 @@ export class Game {
     this.hazardZones = this.hazardZones.filter(z=> (z.t -= dt) > 0);
     if(!this.hazardZones.length || !this.enemies.length) return;
     for(const z of this.hazardZones){
-      // Splash puddles grow from a small core to their full size over a short window.
+      // Acid puddles grow from a small core to their full size over a short window.
       if(z.kind === 'bubble' && z.spreadDuration && z.spreadDuration > 0){
         z.elapsed = (z.elapsed || 0) + dt;
         const frac = Math.max(0, Math.min(1, z.elapsed / z.spreadDuration));
@@ -2523,7 +2535,7 @@ export class Game {
       const statusMul = this.getStatusEffectMul ? this.getStatusEffectMul() : 1;
       for(const e of this.enemies){
         if(!e.alive) continue;
-        // Flying drones are immune to ground splash puddles (bubble zones),
+        // Flying drones are immune to ground Acid puddles (bubble zones),
         // but can still be affected by other hazard types.
         if(e.isFlying && z.kind === 'bubble') continue;
         if(dist2(e.x, e.y, z.x, z.y) <= r2){
@@ -2549,6 +2561,12 @@ export class Game {
                 areaFactor = Math.max(minFactor, t);
               }
               dmg *= areaFactor;
+              // Ensure Acid puddles have a satisfying base DoT: even the
+              // earliest ticks should land for a few points of damage.
+              const MIN_TICK_DMG = 4;
+              if(dmg < MIN_TICK_DMG){
+                dmg = MIN_TICK_DMG;
+              }
               meta.small = true;
               meta.towerKind = 'splash';
             }
@@ -4089,10 +4107,12 @@ export class Game {
     // Show range only for the selected or hovered tower to reduce clutter
     const hoveredTower = (this.state!=='menu') ? this.getTowerAt(this.mouse.gx, this.mouse.gy) : null;
     for(const t of this.towers){
-      if(t === this.selected || t === hoveredTower){
-        t.drawRange(ctx);
+      if(t === this.selected){
+        t.drawRange(ctx, { alpha:0.18, stroke:true });
+      } else if(t === hoveredTower){
+        t.drawRange(ctx, { alpha:0.08, stroke:false });
       }
-      // Splash tower ground telegraph (drawn under enemies)
+      // Moarter tower ground telegraph (drawn under enemies)
       if(t.kind === 'splash' && t.telegraph){
         const z = t.telegraph;
         const lifeP = Math.max(0, Math.min(1, z.t / z.ttl));
@@ -4187,13 +4207,57 @@ export class Game {
       ctx.restore();
     }
 
-    // Placement ghost
+    // Placement ghost + range preview
     if(this.placing && this.state==='playing'){
       const { gx, gy } = this.mouse;
       if(gx>=0 && gy>=0 && gx<this.grid.w && gy<this.grid.h){
         const x = gx*TILE_SIZE, y = gy*TILE_SIZE;
         const def = TOWER_TYPES[this.selectedTower];
-        const ok = this.grid.canPlace(gx,gy) && this.credits>=def.cost;
+        const costPreview = (typeof this.getTowerPlacementCost === 'function')
+          ? this.getTowerPlacementCost(this.selectedTower)
+          : (def?.cost || 0);
+        const ok = this.grid.canPlace(gx,gy) && this.credits>=costPreview;
+        const cx = x + TILE_SIZE/2;
+        const cy = y + TILE_SIZE/2;
+        const previewRange = (typeof this.getTowerPreviewRange === 'function')
+          ? this.getTowerPreviewRange(this.selectedTower)
+          : (def?.range || 0);
+        if(previewRange && previewRange>0){
+          ctx.save();
+          let hex = COLORS.accent;
+          if(this.selectedTower==='basic') hex = COLORS.towerBasic;
+          else if(this.selectedTower==='laser') hex = COLORS.towerLaser;
+          else if(this.selectedTower==='splash') hex = COLORS.towerSplash;
+          const n = parseInt((hex||'#17e7a4').slice(1),16);
+          const rr=(n>>16)&255, gg=(n>>8)&255, bb=n&255;
+          const alpha = ok ? 0.14 : 0.10;
+          ctx.fillStyle = `rgba(${rr},${gg},${bb},${alpha})`;
+          if(this.selectedTower === 'splash'){
+            const frac = MOARTER_MIN_RANGE_FRAC || 0;
+            const innerR = Math.max(0, previewRange * frac);
+            // Donut: fill between inner dead zone and outer firing radius
+            ctx.beginPath();
+            ctx.arc(cx,cy,previewRange,0,Math.PI*2);
+            if(innerR > 0){
+              ctx.arc(cx,cy,innerR,Math.PI*2,0,true);
+            }
+            ctx.closePath();
+            ctx.fill();
+            if(innerR > 0){
+              ctx.setLineDash([5,4]);
+              ctx.lineWidth = 1;
+              ctx.strokeStyle = ok ? `rgba(${rr},${gg},${bb},${Math.min(1, alpha*2)})` : 'rgba(255,83,112,0.7)';
+              ctx.beginPath(); ctx.arc(cx,cy,innerR,0,Math.PI*2); ctx.stroke();
+              ctx.setLineDash([]);
+            }
+          } else {
+            ctx.beginPath(); ctx.arc(cx,cy,previewRange,0,Math.PI*2); ctx.fill();
+          }
+          ctx.lineWidth = 1.2;
+          ctx.strokeStyle = ok ? `rgba(${rr},${gg},${bb},0.7)` : 'rgba(255,83,112,0.7)';
+          ctx.beginPath(); ctx.arc(cx,cy,previewRange,0,Math.PI*2); ctx.stroke();
+          ctx.restore();
+        }
         ctx.save();
         ctx.globalAlpha = 1;
         if(ok){
