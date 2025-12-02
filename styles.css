@@ -1147,8 +1147,9 @@ canvas#game{display:block;max-width:100%;width:960px;height:auto;border:1px soli
   top:8px;
   left:8px;
   z-index:120;
-  padding:10px 12px;
-  width:180px;
+  padding:10px 14px;
+  min-width:210px;
+  width:210px;
   border-radius:14px;
   background:rgba(8,12,18,0.9);
   border:1px solid rgba(0,186,255,0.18);
@@ -1196,8 +1197,8 @@ canvas#game{display:block;max-width:100%;width:960px;height:auto;border:1px soli
 }
 .combat-stats-card .cs-row{
   display:grid;
-  grid-template-columns: 1.5fr auto auto;
-  column-gap:10px;
+  grid-template-columns: 1.6fr auto auto;
+  column-gap:12px;
   align-items:center;
   font-size:13px;
   padding:5px 0;
@@ -1213,9 +1214,19 @@ canvas#game{display:block;max-width:100%;width:960px;height:auto;border:1px soli
   border-bottom:1px solid rgba(255,255,255,0.12);
   padding-bottom:3px;
 }
+.combat-stats-card .cs-row span:nth-child(2),
+.combat-stats-card .cs-row span:nth-child(3){
+  text-align:right;
+}
+.combat-stats-card .cs-row:not(.cs-header) span:nth-child(2),
+.combat-stats-card .cs-row:not(.cs-header) span:nth-child(3){
+  padding-left:8px;
+  border-left:1px solid rgba(255,255,255,0.08);
+}
 .combat-stats-card .cs-header span:nth-child(2),
 .combat-stats-card .cs-header span:nth-child(3){
-  text-align:right;
+  padding-left:8px;
+  border-left:1px solid rgba(255,255,255,0.18);
 }
 .stage-wrap{
   --side-panel-width: clamp(200px, 14vw, 240px);

@@ -62,17 +62,25 @@ export class UIManager{
     this.$palette = document.querySelector('.tower-palette');
     this.$towerBtns = Array.from(document.querySelectorAll('.tower-palette .tower-btn'));
     this.$towerIcons = Array.from(document.querySelectorAll('.tower-palette .tower-icon'));
-    // Keep tower palette prices in sync with config so any tuning to
-    // TOWER_TYPES costs is reflected automatically in the UI labels.
-    if(this.$towerBtns && this.$towerBtns.length){
+    // Helper: update tower palette prices; Game can call this to reflect
+    // character-specific discounts so the labels always match actual costs.
+    this.setTowerCosts = (costs)=>{
+      if(!this.$towerBtns || !this.$towerBtns.length) return;
       for(const btn of this.$towerBtns){
         const key = btn?.dataset?.tower;
-        const def = key && TOWER_TYPES[key];
-        if(!def) continue;
         const span = btn.querySelector('.tower-cost');
-        if(span) span.textContent = `(${def.cost})`;
+        if(!span) continue;
+        const def = key && TOWER_TYPES[key];
+        const base = def ? def.cost : null;
+        const v = (costs && Object.prototype.hasOwnProperty.call(costs, key)) ? costs[key] : base;
+        if(v != null){
+          span.textContent = `(${v})`;
+        }
       }
-    }
+    };
+    // Initialize palette prices with base config values; Game will
+    // override with character-adjusted costs when appropriate.
+    this.setTowerCosts();
     // Upgrade panel
     this.$upg = document.getElementById('upgrade-panel');
     this.$upgTitle = this.$upg ? this.$upg.querySelector('.upg-title') : null;
@@ -365,7 +373,7 @@ export class UIManager{
         lines: [
           '• Cannon: +12% damage, +3% fire rate /5 waves.',
           '• Cannon: +15% rotation speed.',
-          '• Economy: -20% tower placement cost.',
+          '• Cannon: -20% placement cost.',
           '• Laser: -10% stability.',
           '• Splash: -10% spread rate.'
         ]
@@ -375,6 +383,7 @@ export class UIManager{
         lines: [
           '• Laser: +10% DPS, +3% DPS /5 waves.',
           '• Laser: +25% stability.',
+          '• Laser: -20% placement cost.',
           '• Economy: -20% tower upgrade costs.',
           '• Cannon: -10% rotation speed.',
           '• Splash: -10% spread rate.'
@@ -384,7 +393,7 @@ export class UIManager{
         title: 'Torque — Splash Specialist',
         lines: [
           '• Splash: +20% radius, +5% DPS /5 waves.',
-          '• Splash: +20% spread rate.',
+          '• Splash: +20% spread rate, -20% placement cost.',
           '• Debuffs: Burn & Slow +20% power.',
           '• Cannon: -10% rotation speed.',
           '• Laser: -5% stability.'

@@ -157,9 +157,9 @@ export const GAME_RULES = {
 };
 
 export const TOWER_TYPES = {
-  basic: { key:'basic', name:'Cannon', cost:25, range:150, damage:15, fireRate:2.0, bulletSpeed:360 },
-  laser: { key:'laser', name:'Laser', cost:50, range:170, dps:25, slowPct:0.35 },
-  splash:{ key:'splash', name:'Splash', cost:75, range:135, damage:15, fireRate:1.2, splashRadius:60, bulletSpeed:300 }
+  basic: { key:'basic', name:'Cannon', cost:30, range:150, damage:15, fireRate:2.0, bulletSpeed:360 },
+  laser: { key:'laser', name:'Laser', cost:45, range:170, dps:25, slowPct:0.35 },
+  splash:{ key:'splash', name:'Splash', cost:60, range:135, damage:15, fireRate:1.2, splashRadius:60, bulletSpeed:300 }
 };
 
 export const UPGRADE_COSTS = {

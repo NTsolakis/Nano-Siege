@@ -436,6 +436,11 @@ export class Game {
       laser: 1.0,
       splash: 1.0
     };
+    this.characterTowerCostMul = {
+      cannon: 1.0,
+      laser: 1.0,
+      splash: 1.0
+    };
     this.characterRotationSpeedMul = {
       cannon: 1.0,
       laser: 1.0,
@@ -461,6 +466,7 @@ export class Game {
     const steps5 = Math.max(0, Math.floor(waveNumber / 5));
     this.characterDamageMul = { cannon: 1.0, laser: 1.0, splash: 1.0 };
     this.characterFireRateMul = { cannon: 1.0, laser: 1.0, splash: 1.0 };
+    this.characterTowerCostMul = { cannon: 1.0, laser: 1.0, splash: 1.0 };
     this.characterRotationSpeedMul = { cannon: 1.0, laser: 1.0, splash: 1.0 };
     this.characterSplashRadiusMul = 1.0;
     this.characterStatusEffectMul = 1.0;
@@ -479,8 +485,8 @@ export class Game {
       }
       // Passive: +15% Cannon rotation speed
       this.characterRotationSpeedMul.cannon *= 1.15;
-      // Passive 3: tower placement costs 20% less
-      this.characterPlacementCostMul = 0.8;
+      // Preferred tower: Cannon placement cost -20%
+      this.characterTowerCostMul.cannon *= 0.8;
       // Weak synergy with splash puddle spread (slower bloom)
       this.characterPuddleSpreadSpeedMul *= 0.90; // -10%
       // Volt leans into rotation/burst; lasers stabilize more slowly.
@@ -496,6 +502,8 @@ export class Game {
       this.characterDamageMul.laser *= laserMul;
       // Passive 3: All tower upgrades cost 20% less
       this.characterUpgradeCostMul = 0.8;
+      // Preferred tower: Laser placement cost -20%
+      this.characterTowerCostMul.laser *= 0.8;
       // Passive: -10% Cannon rotation speed (cannons feel sluggish early)
       this.characterRotationSpeedMul.cannon *= 0.90;
       // Splash puddles bloom a bit slower for Lumen.
@@ -514,17 +522,37 @@ export class Game {
       this.characterStatusEffectMul = 1.20;
       // Strong synergy with splash puddle spread (faster bloom)
       this.characterPuddleSpreadSpeedMul *= 1.20; // +20%
+      // Preferred tower: Splash placement cost -20%
+      this.characterTowerCostMul.splash *= 0.8;
       // Passive: -10% Cannon rotation speed
       this.characterRotationSpeedMul.cannon *= 0.90;
       // Torque is splash-focused; lasers stabilize slightly slower than neutral.
       this.characterLaserStabilityMul *= 0.95; // -5%
     }
     // Sync any UI that depends on upgrade cost discount.
-    if(this.ui && typeof this.ui.setUpgradeCostMultiplier === 'function'){
-      this.ui.setUpgradeCostMultiplier(this.characterUpgradeCostMul || 1);
-      // Refresh upgrade panel labels if one is open.
-      if(this.selected && this.ui.setUpgradePanel){
-        this.ui.setUpgradePanel(this.selected, this.credits);
+    if(this.ui){
+      if(typeof this.ui.setUpgradeCostMultiplier === 'function'){
+        this.ui.setUpgradeCostMultiplier(this.characterUpgradeCostMul || 1);
+        // Refresh upgrade panel labels if one is open.
+        if(this.selected && this.ui.setUpgradePanel){
+          this.ui.setUpgradePanel(this.selected, this.credits);
+        }
+      }
+      // Update tower palette prices to reflect current character discounts.
+      if(typeof this.ui.setTowerCosts === 'function'){
+        const types = ['basic','laser','splash'];
+        const costs = {};
+        for(const key of types){
+          const def = TOWER_TYPES[key];
+          if(!def) continue;
+          const base = def.cost || 0;
+          const placeMul = this.characterPlacementCostMul || 1;
+          const typeMul = (typeof this.getTowerCostMul === 'function')
+            ? this.getTowerCostMul(def.key || key)
+            : 1;
+          costs[key] = Math.max(0, Math.round(base * placeMul * typeMul));
+        }
+        this.ui.setTowerCosts(costs);
       }
     }
   }
@@ -566,6 +594,15 @@ export class Game {
   getTowerRotationSpeedMul(kind){
     if(!kind) return 1;
     const map = this.characterRotationSpeedMul || {};
+    if(kind === 'basic' || kind === 'cannon') return map.cannon || 1;
+    if(kind === 'laser') return map.laser || 1;
+    if(kind === 'splash') return map.splash || 1;
+    return 1;
+  }
+
+  getTowerCostMul(kind){
+    if(!kind) return 1;
+    const map = this.characterTowerCostMul || {};
     if(kind === 'basic' || kind === 'cannon') return map.cannon || 1;
     if(kind === 'laser') return map.laser || 1;
     if(kind === 'splash') return map.splash || 1;
@@ -2067,7 +2104,10 @@ export class Game {
       const def = TOWER_TYPES[this.selectedTower];
       const baseCost = def.cost;
       const placeMul = this.characterPlacementCostMul || 1;
-      const cost = Math.max(0, Math.round(baseCost * placeMul));
+      const typeMul = (typeof this.getTowerCostMul === 'function')
+        ? this.getTowerCostMul(def.key || this.selectedTower)
+        : 1;
+      const cost = Math.max(0, Math.round(baseCost * placeMul * typeMul));
       if(this.isCheatMode() || this.credits >= cost){
         if(!this.isCheatMode()){ this.credits -= cost; }
         this.grid.occupy(gx,gy);
