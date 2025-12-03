@@ -271,6 +271,7 @@ export class Enemy {
     this.reward = opts.reward ?? 10;
     this.variant = opts.variant || 'base';
     this.bossIndex = (typeof opts.bossIndex === 'number') ? opts.bossIndex : null;
+    this.archetype = opts.archetype || null; // 'normal' | 'armored' | 'shielded' (wave role)
     // Color by dynamic type palette or legacy/blobs
     let color = COLORS.enemy;
     const m = /^t(\d+)$/.exec(this.variant||'');
@@ -382,6 +383,65 @@ export class Enemy {
     this.legPairs = Math.max(3, Math.min(6, pairs)); // clamp 6–12 legs
     this.legLengthFactor = 1 + 0.08*tierVal + 0.12*(this.bossIndex||0);
     this.armorLevel = (this.isBoss ? 2 + (this.bossIndex||0) : Math.min(2, Math.floor(tierVal/2)));
+    // Defensive stats: armor (flat reduction) and regenerating shields.
+    const archetype = this.archetype || 'normal';
+    const hpMax = this.maxHp || 0;
+    let armorBase = 0;
+    let shieldFrac = 0;
+    if(archetype === 'armored'){
+      armorBase = hpMax * 0.08;
+      shieldFrac = 0.08;
+    } else if(archetype === 'shielded'){
+      armorBase = hpMax * 0.03;
+      shieldFrac = 0.25;
+    } else {
+      // "Normal" archetype has no innate armor by default; only
+      // dedicated armored variants (introduced after the first boss)
+      // gain significant armor values.
+      armorBase = 0;
+      shieldFrac = 0;
+    }
+    if(this.isBoss){
+      const idx = (this.bossIndex != null ? this.bossIndex : 0) | 0;
+      const scale = 1.35 + idx*0.15;
+      if(idx === 0){
+        // First boss: pure armor tank (no innate shields).
+        if(armorBase <= 0 && hpMax > 0){
+          armorBase = hpMax * 0.08;
+        }
+        armorBase *= scale;
+        shieldFrac = 0;
+      } else if(idx === 1){
+        // Second boss: pure shielded core (no innate armor).
+        armorBase = 0;
+        const baseShield = (shieldFrac > 0 ? shieldFrac : 0.30);
+        shieldFrac = baseShield;
+      } else {
+        // Third and later bosses: both armor and shields.
+        if(armorBase <= 0 && hpMax > 0){
+          armorBase = hpMax * 0.05;
+        }
+        armorBase *= scale;
+        const bossShieldMin = 0.20 + idx*0.05;
+        shieldFrac = Math.max(shieldFrac, bossShieldMin);
+      }
+    }
+    this.armor = (typeof opts.armor === 'number') ? Math.max(0, opts.armor) : Math.max(0, armorBase);
+    const maxShieldBase = hpMax * shieldFrac;
+    this.maxShield = (typeof opts.maxShield === 'number') ? Math.max(0, opts.maxShield) : Math.max(0, maxShieldBase);
+    this.shield = (typeof opts.shield === 'number') ? Math.max(0, opts.shield) : this.maxShield;
+    this.shieldRegenDelay = (typeof opts.shieldRegenDelay === 'number')
+      ? Math.max(0, opts.shieldRegenDelay)
+      : (this.maxShield > 0 ? 3.0 : 0);
+    const regenPerSec = (this.maxShield > 0) ? this.maxShield * 0.15 : 0;
+    this.shieldRegenRate = (typeof opts.shieldRegenRate === 'number')
+      ? Math.max(0, opts.shieldRegenRate)
+      : Math.max(0, regenPerSec);
+    this._shieldRegenTimer = 0;
+    // Slightly boost visual armor rings for explicitly armored archetypes.
+    if(archetype === 'armored'){
+      this.armorLevel = (this.armorLevel || 0) + 1;
+    }
     // Horizontal facing: 1 (right) or -1 (left)
     this.facing = (this.lastUx >= 0 ? 1 : -1);
     this.uid = ENEMY_UID++;
@@ -459,6 +519,9 @@ export class Enemy {
         if(this.phaseTimer >= this.phaseOff){ this.phaseTimer = 0; this.intangible = true; this.hitFx = []; }
       }
     }
+    // Regenerating energy shields: only begin regenerating after a delay
+    // without taking damage, and never exceed the maxShield value.
+    this._updateShield(dt);
     // Update slows
     if(this.slows.length){
       for(const s of this.slows) s.t -= dt;
@@ -579,64 +642,280 @@ export class Enemy {
     // If intangible and requires laser, ignore non-laser sources
     if(this.laserOnly && this.intangible && src!=='laser') return;
     const nowTs = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
-    this.lastHit = { amount, src, meta, time: nowTs };
-    this.hp -= amount;
+    const raw = Math.max(0, amount || 0);
+    const breakdown = this._computeDamageBreakdown(raw, src, meta || {});
+    const dmg = breakdown.hpDamage || 0;
+    this.lastHit = { amount: dmg, src, meta, time: nowTs };
+    // Any hit (even fully absorbed by shields) should delay regen.
+    this._onDamaged();
+    if(dmg > 0){
+      this.hp -= dmg;
+    }
     if(src === 'laser'){
       const anchor = this._labelAnchor();
       if(!this.laserCounter){ this.laserCounter = { total: 0, last: nowTs }; }
       this.laserCounter.ax = anchor.x;
       this.laserCounter.ay = anchor.y;
-      this.laserCounter.total += Math.max(0, amount);
+      if(dmg > 0){
+        this.laserCounter.total += Math.max(0, dmg);
+      }
       this.laserCounter.last = nowTs;
       if(meta.color) this.laserCounter.color = meta.color;
+      // For lasers, also show layered shield/armor indicators so
+      // players can tell when the beam is burning through layers.
+      this._emitLayeredFloaters(breakdown, src, meta, nowTs);
     } else {
-      // Skip visual spam for silent ticks (e.g., invisible chip damage)
-      const isDot = !!meta.small;
-      // Lower the visibility floor for Moarter/Acid puddle ticks so
-      // players can clearly see DoT numbers as enemies walk through.
-      let minAmt = isDot ? 0.4 : 1.5;
-      if(isDot && meta.towerKind === 'splash'){
-        minAmt = 0.15;
-      }
-      if(!(meta.silent) && amount > 0 && amount >= minAmt){
-        const minGap = 100; // ms between floaters (reduce rapid spam/flicker)
-        if(nowTs - this._lastHitFx >= minGap){
-          const val = Math.max(1, Math.round(amount));
-          const textVal = meta.crit ? `✦${val}` : `-${val}`;
-          const anchor = this._labelAnchor();
-          // Choose floater color based on damage source so Moarter
-          // impact vs Acid puddle DoT are easy to distinguish.
-          let color = meta.color || null;
-          if(meta.impact && !meta.crit){
-            // Moarter impact burst: bright orange.
-            color = '#ffc46b';
-          } else if(isDot && meta.towerKind === 'splash' && !meta.crit){
-            // Acid puddle DoT: bright yellow so it stands apart.
-            color = '#ffe66b';
-          } else if(meta.type === 'burn' && !meta.crit){
-            // Burn ticks keep their fire-red tint.
-            color = '#ff5370';
-          }
-          this.hitFx.push({
-            age: 0,
-            ttl: meta.crit ? 1.35 : (isDot ? 0.8 : 1.15), // DoT ticks are shorter
-            text: textVal,
-            r: Math.max(6, this.radius - 2),
-            ax: anchor.x,
-            ay: anchor.y,
-            color: meta.crit ? '#ffd47c' : color,
-            crit: !!meta.crit,
-            small: !!meta.small
-          });
-          if(this.hitFx.length > 6) this.hitFx.shift();
-          this._lastHitFx = nowTs;
-        }
-      }
+      this._emitLayeredFloaters(breakdown, src, meta, nowTs);
     }
     if(this.hp <= 0){
       this.flushLaserCounter(true);
       this.alive = false;
     }
+  }
+
+  _onDamaged(){
+    if(this.maxShield && this.maxShield > 0){
+      this._shieldRegenTimer = this.shieldRegenDelay || 0;
+    }
+  }
+
+  _updateShield(dt){
+    const maxShield = this.maxShield || 0;
+    if(maxShield <= 0) return;
+    if(this._shieldRegenTimer != null && this._shieldRegenTimer > 0){
+      this._shieldRegenTimer -= dt;
+      return;
+    }
+    const rate = this.shieldRegenRate || 0;
+    if(rate <= 0) return;
+    const cur = this.shield != null ? this.shield : maxShield;
+    if(cur >= maxShield) return;
+    this.shield = Math.min(maxShield, cur + rate * dt);
+  }
+
+  _emitLayeredFloaters(breakdown, src, meta, nowTs){
+    if(!breakdown || meta?.silent) return;
+    const hp = Math.max(0, breakdown.hpDamage || 0);
+    const shieldHit = Math.max(0, breakdown.shieldDamage || 0);
+    const armorBlocked = Math.max(0, breakdown.armorBlocked || 0);
+    const isDot = !!meta.small;
+    // Nothing meaningful to show.
+    if(hp <= 0 && shieldHit <= 0 && armorBlocked <= 0) return;
+
+    // Base thresholds so we don't spam tiny numbers.
+    let hpMin = isDot ? 0.4 : 1.5;
+    if(isDot && meta.towerKind === 'splash') hpMin = 0.15;
+    // Lasers tick very frequently; allow smaller visible numbers.
+    if(src === 'laser') hpMin = Math.min(hpMin, 0.3);
+    const shieldMin = isDot ? 0.25 : 1.0;
+    const armorMin = 1.0;
+
+    const minGap = 100; // ms between floaters
+    if(nowTs - (this._lastHitFx || 0) < minGap) return;
+
+    const anchor = this._labelAnchor();
+    const entries = [];
+
+    // HP / passthrough damage (original color)
+    if(hp >= hpMin){
+      let color = meta.color || null;
+      if(meta.impact && !meta.crit){
+        color = '#ffc46b'; // Moarter impact burst
+      } else if(isDot && meta.towerKind === 'splash' && !meta.crit){
+        color = '#ffe66b'; // Acid puddle DoT
+      } else if(meta.type === 'burn' && !meta.crit){
+        color = '#ff5370'; // Burn ticks
+      }
+      entries.push({
+        amount: hp,
+        color: meta.crit ? '#ffd47c' : color,
+        crit: !!meta.crit,
+        small: !!meta.small,
+        dy: 0,
+        ttl: meta.crit ? 1.35 : (isDot ? 0.8 : 1.15)
+      });
+    }
+
+    // Shield hits (purple) – only when shield actually absorbed damage.
+    if(shieldHit >= shieldMin){
+      entries.push({
+        amount: shieldHit,
+        color: '#aa7bff',
+        crit: false,
+        small: true,
+        dy: -10,
+        ttl: isDot ? 0.8 : 1.0
+      });
+    }
+
+    // Armor mitigation (silver) – show how much of the hit the armor soaked.
+    if(armorBlocked >= armorMin){
+      entries.push({
+        amount: armorBlocked,
+        color: '#dde5f5',
+        crit: false,
+        small: true,
+        dy: 10,
+        ttl: isDot ? 0.8 : 1.0
+      });
+    }
+
+    if(!entries.length) return;
+
+    for(const e of entries){
+      const val = Math.max(1, Math.round(e.amount));
+      const textVal = e.crit ? `✦${val}` : `-${val}`;
+      this.hitFx.push({
+        age: 0,
+        ttl: e.ttl,
+        text: textVal,
+        r: Math.max(6, this.radius - 2),
+        ax: anchor.x,
+        ay: anchor.y + (e.dy || 0),
+        color: e.color,
+        crit: !!e.crit,
+        small: !!e.small
+      });
+      if(this.hitFx.length > 6) this.hitFx.shift();
+    }
+    this._lastHitFx = nowTs;
+  }
+
+  _applyShieldAbsorption(rawDamage){
+    return this._drainShield(rawDamage, 1);
+  }
+
+  _drainShield(rawDamage, efficiency=1){
+    let dmg = Math.max(0, rawDamage || 0);
+    const maxShield = this.maxShield || 0;
+    const curShield = this.shield || 0;
+    if(maxShield <= 0 || curShield <= 0 || dmg <= 0){
+      return { remaining: dmg, shieldUsed: 0 };
+    }
+    const eff = Math.max(0, efficiency || 0);
+    if(eff <= 0){
+      return { remaining: dmg, shieldUsed: 0 };
+    }
+    // Treat `efficiency` > 1 as “better at stripping shields”: each
+    // point of damage removes `eff` points of shield before any
+    // remaining damage is allowed to hit armor/HP. Damage only
+    // passes through once the shield is fully depleted.
+    const maxShieldSpend = curShield / eff;
+    const spentOnShield = Math.min(dmg, maxShieldSpend);
+    const removed = spentOnShield * eff;
+    this.shield = Math.max(0, curShield - removed);
+    const consumed = spentOnShield;
+    return {
+      remaining: Math.max(0, dmg - consumed),
+      shieldUsed: consumed
+    };
+  }
+
+  _classifyDamageType(src, meta={}){
+    const kind = meta && meta.towerKind ? meta.towerKind : null;
+    if(src === 'laser') return 'laser';
+    if(src === 'burn' || meta.type === 'burn') return 'burn';
+    if(src === 'bullet'){
+      if(kind === 'splash'){
+        if(meta.impact) return 'mortarImpact';
+        if(meta.small) return 'mortarDot';
+        return 'mortarImpact';
+      }
+      return 'cannon';
+    }
+    if(src === 'drone' || src === 'arc') return 'cannon';
+    // Bombs and other generic damage behave like cannon shots by default.
+    return 'cannon';
+  }
+
+  _computeDamageAmount(rawDamage, src, meta={}){
+    // Deprecated helper kept for backwards-compat; delegate to the
+    // new breakdown function and return only HP damage.
+    const br = this._computeDamageBreakdown(rawDamage, src, meta);
+    return br.hpDamage || 0;
+  }
+
+  _computeDamageBreakdown(rawDamage, src, meta={}){
+    let dmg = Math.max(0, rawDamage || 0);
+    if(dmg <= 0) return { hpDamage: 0, shieldDamage: 0, armorBlocked: 0 };
+    const armor = Math.max(0, this.armor || 0);
+    const type = this._classifyDamageType(src, meta || {});
+    let shieldDamage = 0;
+    let armorBlocked = 0;
+    let hpDamage = 0;
+    switch(type){
+      case 'laser': {
+        // Laser beams are highly efficient at shredding shields: for
+        // each point of DPS, remove more shield HP than cannon fire.
+        {
+          const res = this._drainShield(dmg, 1.7);
+          dmg = res.remaining;
+          shieldDamage += res.shieldUsed || 0;
+        }
+        const armorEffect = armor * 0.25;
+        const post = dmg - armorEffect;
+        const minPass = dmg * 0.5;
+        hpDamage = Math.max(post, minPass, 0);
+        armorBlocked = Math.max(0, dmg - hpDamage);
+        break;
+      }
+      case 'mortarImpact': {
+        // Moarter impact is decent but not amazing versus shields; its
+        // strength is punching through armor.
+        {
+          const res = this._drainShield(dmg, 0.7);
+          dmg = res.remaining;
+          shieldDamage += res.shieldUsed || 0;
+        }
+        const armorSoft = armor * 0.5;
+        const post = dmg - armorSoft;
+        const minPass = dmg * 0.5;
+        hpDamage = Math.max(post, minPass, 0);
+        armorBlocked = Math.max(0, dmg - hpDamage);
+        break;
+      }
+      case 'mortarDot': {
+        // Acid puddle DoT ignores armor entirely but does not interact
+        // with energy shields. As long as a shield is up, the DoT
+        // cannot chip HP or drain the shield.
+        const maxShield = this.maxShield || 0;
+        if(maxShield > 0 && this.shield && this.shield > 0){
+          hpDamage = 0;
+        } else {
+          hpDamage = Math.max(dmg, 0);
+        }
+        break;
+      }
+      case 'burn': {
+        // Generic burn DoT (e.g. incendiary modules) is stopped by
+        // shields at a normal rate but ignores armor once it reaches HP.
+        {
+          const res = this._applyShieldAbsorption(dmg);
+          dmg = res.remaining;
+          shieldDamage += res.shieldUsed || 0;
+        }
+        hpDamage = Math.max(dmg, 0);
+        break;
+      }
+      case 'cannon':
+      default: {
+        {
+          const res = this._applyShieldAbsorption(dmg);
+          dmg = res.remaining;
+          shieldDamage += res.shieldUsed || 0;
+        }
+        const post = dmg - armor;
+        const minPass = dmg * 0.10;
+        hpDamage = Math.max(post, minPass, 0);
+        armorBlocked = Math.max(0, dmg - hpDamage);
+        break;
+      }
+    }
+    return {
+      hpDamage,
+      shieldDamage,
+      armorBlocked
+    };
   }
 
   flushLaserCounter(force=false){
@@ -869,17 +1148,28 @@ export class Enemy {
             }
           }
           ctx.shadowBlur = 0;
-          // Armor/plating outlines (scale with tier/boss)
+          // Armor/plating outlines (scale with tier/boss). Increase
+          // glow and thickness so high-armor enemies are easier to
+          // spot at a glance.
           const plates = Math.max(0, Math.min(5, this.armorLevel||0));
-          for(let i=0;i<plates;i++){
-            const s = 1.05 + i*0.12;
-            ctx.save();
-            const a = 0.12 + i*0.06 + 0.08*Math.sin(this.age*2 + i*0.8);
-            ctx.globalAlpha = Math.max(0.05, Math.min(0.6, a));
-            ctx.strokeStyle = 'white';
-            ctx.lineWidth = 2;
-            ctx.beginPath(); ctx.ellipse(0, 0, R*0.9*s, R*0.75*s, 0, 0, Math.PI*2); ctx.stroke();
-            ctx.restore();
+          if(plates > 0){
+            const baseStrength = Math.min(1, (this.armorLevel||0) / 4);
+            for(let i=0;i<plates;i++){
+              const s = 1.05 + i*0.12;
+              ctx.save();
+              const wobble = Math.sin(this.age*2 + i*0.8);
+              const a = 0.18 + i*0.08 + 0.15*wobble;
+              ctx.globalAlpha = Math.max(0.08, Math.min(0.9, a * (0.6 + baseStrength)));
+              const lw = 2 + 0.6*i + 1.2*baseStrength;
+              ctx.lineWidth = lw;
+              ctx.strokeStyle = 'rgba(220,230,255,0.95)';
+              ctx.shadowColor = 'rgba(200,210,240,0.9)';
+              ctx.shadowBlur = 6 + 3*i + 6*baseStrength;
+              ctx.beginPath();
+              ctx.ellipse(0, 0, R*0.9*s, R*0.75*s, 0, 0, Math.PI*2);
+              ctx.stroke();
+              ctx.restore();
+            }
           }
         }
         // Body core
@@ -968,11 +1258,67 @@ export class Enemy {
       const debugEnabled = (typeof window !== 'undefined' && window.NANO_SPRITE_DEBUG && window.NANO_SPRITE_DEBUG.enabled === true);
       if(!debugEnabled){
         const w = 24, h = 4;
-        const pct = Math.max(0, this.hp/this.maxHp);
+        const baseX = this.pos.x - w/2;
+        const baseY = this.pos.y - this.radius - 10;
+        const hpPct = (this.maxHp > 0) ? Math.max(0, Math.min(1, this.hp/this.maxHp)) : 0;
         ctx.fillStyle = 'rgba(0,0,0,0.5)';
-        ctx.fillRect(this.pos.x - w/2, this.pos.y - this.radius - 10, w, h);
-        ctx.fillStyle = COLORS.accent;
-        ctx.fillRect(this.pos.x - w/2, this.pos.y - this.radius - 10, w*pct, h);
+        ctx.fillRect(baseX, baseY, w, h);
+        if(hpPct > 0){
+          ctx.fillStyle = COLORS.accent;
+          ctx.fillRect(baseX, baseY, w*hpPct, h);
+        }
+        // Shield bar (if any) just above HP, plus an energy bubble
+        // around the body so shielded enemies read clearly at a glance.
+        const maxShield = this.maxShield || 0;
+        const shieldVal = this.shield || 0;
+        if(maxShield > 0 && shieldVal > 0){
+          const shieldPct = Math.max(0, Math.min(1, shieldVal / maxShield));
+          const shH = 2;
+          const shY = baseY - shH - 1;
+          ctx.fillStyle = 'rgba(170,123,255,0.9)';
+          ctx.fillRect(baseX, shY, w*shieldPct, shH);
+          // Bubble-style shield around the enemy
+          const frac = shieldPct;
+          const R = this.getBodyRadius();
+          const pulse = 0.9 + 0.2*Math.sin((this.age||0)*3);
+          const bubbleR = R * (1.25 + 0.15*frac);
+          ctx.save();
+          const cx = this.pos.x;
+          const cy = this.pos.y;
+          ctx.globalAlpha = 0.25 + 0.30*frac * pulse;
+          const g = ctx.createRadialGradient(
+            cx, cy, bubbleR*0.2,
+            cx, cy, bubbleR
+          );
+          g.addColorStop(0, 'rgba(170,123,255,0.0)');
+          g.addColorStop(0.45, 'rgba(170,123,255,0.40)');
+          g.addColorStop(1, 'rgba(170,123,255,0.0)');
+          ctx.fillStyle = g;
+          ctx.beginPath();
+          ctx.arc(cx, cy, bubbleR, 0, Math.PI*2);
+          ctx.fill();
+          // Outer rim
+          ctx.globalAlpha = 0.55 + 0.35*frac * pulse;
+          ctx.strokeStyle = 'rgba(198,163,255,0.95)';
+          ctx.lineWidth = this.isBoss ? 2.6 : 1.8;
+          ctx.beginPath();
+          ctx.arc(cx, cy, bubbleR, 0, Math.PI*2);
+          ctx.stroke();
+          ctx.restore();
+        }
+        // Armor bar (if any) just below HP, in a bright silver so
+        // heavily-armored enemies stand out even when shielded.
+        const armorVal = this.armor || 0;
+        if(armorVal > 0){
+          const armorCap = (this.maxHp || 1) * 0.18;
+          const armorPct = Math.max(0, Math.min(1, armorVal / armorCap));
+          if(armorPct > 0){
+            const arH = 2;
+            const arY = baseY + h + 1;
+            ctx.fillStyle = 'rgba(220,230,255,0.95)';
+            ctx.fillRect(baseX, arY, w*armorPct, arH);
+          }
+        }
       }
     }
 

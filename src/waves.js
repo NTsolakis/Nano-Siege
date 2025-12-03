@@ -4,6 +4,32 @@
 // Only the most recent `maxActiveEnemyTypes` are active; oldest types rotate out.
 import { GAME_RULES } from './config.js';
 
+// Map a wave index to an enemy archetype for that spawn:
+//  - 'normal'  → baseline (little armor, no shield)
+//  - 'armored' → heavier armor, small or no shield
+//  - 'shielded'→ light armor, noticeable regenerating shield
+function pickEnemyArchetype(w){
+  const r = Math.random();
+  // Before the first boss (wave 10), stick to pure
+  // "normal" enemies so shields/armor only appear
+  // once players have cleared that milestone.
+  if(w <= 10) return 'normal';
+  if(w <= 20){
+    if(r < 0.60) return 'normal';
+    if(r < 0.80) return 'armored';
+    return 'shielded';
+  }
+  if(w <= 30){
+    if(r < 0.50) return 'normal';
+    if(r < 0.75) return 'armored';
+    return 'shielded';
+  }
+  // Endgame
+  if(r < 0.45) return 'normal';
+  if(r < 0.75) return 'armored';
+  return 'shielded';
+}
+
 export function buildWave(w){
   const enemies = [];
   // Base scaling per wave
@@ -56,7 +82,8 @@ export function buildWave(w){
     const spMult = 1 + tier*0.06;     // and a small speed bump
     const hp = Math.round(baseHp * hpMult);
     const speed = Math.round(baseSpeed * spMult);
-    return { hp, speed, reward: 0, variant: `t${tier}` };
+    const archetype = pickEnemyArchetype(w);
+    return { hp, speed, reward: 0, variant: `t${tier}`, archetype };
   };
 
   // Build a pool of enemies by type, then emit them in random-sized groups

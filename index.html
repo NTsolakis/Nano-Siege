@@ -380,6 +380,8 @@
             <button id="btn-main-modes">Game Modes</button>
             <button id="btn-main-leaderboard">Leaderboard</button>
             <button id="btn-main-settings">Settings</button>
+            <button id="btn-main-howto">How to Play</button>
+            <button id="btn-main-bug">Bug Reports &amp; Suggestions</button>
             <button id="btn-main-loaduser">Sign In</button>
             <button id="btn-main-download">Download</button>
           </div>
@@ -402,6 +404,147 @@
         </div>
       </section>
 
+      <!-- Bug Reports & Suggestions -->
+      <section id="bug-overlay" class="overlay mainmenu">
+        <div class="panel mainmenu-panel">
+          <h2>Bug Reports &amp; Suggestions</h2>
+          <p class="tag">Help refine Nano‑Siege by reporting issues and sharing ideas.</p>
+
+          <form id="bug-form" class="bug-form" action="https://formspree.io/f/xjknrlka" method="POST">
+            <label for="bug-type">Category</label>
+            <select id="bug-type" name="type" required>
+              <option value="Bug">Bug</option>
+              <option value="Suggestion">Suggestion</option>
+              <option value="Balance Issue">Balance Issue</option>
+              <option value="UI Problem">UI Problem</option>
+              <option value="Graphics / Animation">Graphics / Animation</option>
+              <option value="Performance">Performance</option>
+              <option value="Other">Other</option>
+            </select>
+
+            <label for="bug-message">Message</label>
+            <textarea id="bug-message" name="message" rows="6" placeholder="Describe what happened, or what you'd like added." required></textarea>
+
+            <label for="bug-email">Your Email (optional)</label>
+            <input id="bug-email" type="email" name="email" placeholder="nick@example.com" />
+
+            <!-- Sends confirmation to dev inbox -->
+            <input type="hidden" name="_replyto" value="NickCTsolakis@gmail.com">
+            <input type="hidden" name="_subject" value="Nano-Siege Report">
+
+            <div id="bug-status" class="bug-status"></div>
+
+            <div class="actions" style="margin-top:14px">
+              <button type="button" id="btn-bug-back">Back</button>
+              <button type="submit">Submit Report</button>
+            </div>
+            <p class="bug-footer">Reports are sent securely via Formspree.</p>
+          </form>
+        </div>
+      </section>
+
+      <!-- Fullscreen How To Play -->
+      <section id="howto-overlay" class="overlay mainmenu">
+        <div class="panel mainmenu-panel">
+          <h2>How to Play — Nano‑Siege</h2>
+          <p class="tag">Core concepts, roles, and tips for defending the reactor.</p>
+
+          <div class="howto-body">
+            <section class="howto-section">
+              <h3>The Situation</h3>
+              <p>The Mothership’s core systems have been overrun by rogue nanobots. Your job is simple: keep the Reactor alive long enough to purge the swarm.</p>
+              <p>Each map represents a different internal sector of the ship. Nanobots enter along designated paths. Your towers control the rest.</p>
+            </section>
+
+            <section class="howto-section">
+              <h3>Reactor Core</h3>
+              <ul>
+                <li>The Reactor is the center of your defense. If enemies reach it, they hit its HP.</li>
+                <li>Run out of HP and the sector is lost.</li>
+                <li>Some upgrades and abilities can restore Reactor health, but it’s better to stop damage before it happens.</li>
+              </ul>
+            </section>
+
+            <section class="howto-section">
+              <h3>Tower Placement</h3>
+              <p>You build towers using Nano Credits earned by destroying enemies.</p>
+              <ul class="howto-tower-list">
+                <li><span class="howto-pill cannon">Cannons (green)</span> – kinetic shots; reliable single‑target fire.</li>
+                <li><span class="howto-pill laser">Lasers (cyan)</span> – constant DPS; pierce and melt through groups.</li>
+                <li><span class="howto-pill splash">Splash (orange)</span> – area damage; synergizes with burn and slow.</li>
+              </ul>
+              <ul>
+                <li>Place towers on open nodes, never on the path itself.</li>
+                <li>Towers fire automatically once placed.</li>
+                <li>Positioning matters more than overbuilding — good angles win fights.</li>
+              </ul>
+            </section>
+
+            <section class="howto-section">
+              <h3>Armor &amp; Shields</h3>
+              <p>Different nanobots use different forms of protection:</p>
+              <ul>
+                <li><strong>Shields</strong> take damage first. Laser towers excel here: stable damage‑over‑time that doesn’t get wasted on shield breaks.</li>
+                <li><strong>Armor</strong> reduces incoming damage per hit. Cannons stay reliable because large single shots punch through armor efficiently.</li>
+                <li><strong>Unarmored units</strong> rely on speed or swarming. Splash towers and status effects (slow / burn) handle them well.</li>
+              </ul>
+              <p>Understanding which towers counter which protection type helps you scale into later waves.</p>
+            </section>
+
+            <section class="howto-section">
+              <h3>Synergy</h3>
+              <ul>
+                <li>Splash slows and burns enemies, making them easier for Cannons to finish.</li>
+                <li>Lasers strip shields clean, exposing armored units to Cannon burst.</li>
+                <li>Cannon crits knock units into splash zones, chaining clean‑ups.</li>
+              </ul>
+              <p>You aren’t just placing towers — you’re building a defense network.</p>
+            </section>
+
+            <section class="howto-section">
+              <h3>Waves</h3>
+              <ul>
+                <li>Each wave enters from the marked entry point.</li>
+                <li>Higher waves introduce tougher armor, faster swarms, shielded elites, and boss units that require focused fire.</li>
+                <li>Between waves, you can adjust positioning, build new towers, and pick from Nano‑Tech upgrades that modify your entire run.</li>
+              </ul>
+            </section>
+
+            <section class="howto-section">
+              <h3>Nano‑Tech Upgrades</h3>
+              <p>After certain milestones, you’ll receive a selection of temporary upgrades. These can affect:</p>
+              <ul class="howto-bullets-tight">
+                <li>tower damage &amp; fire rate</li>
+                <li>status effects (slow / burn / puddle power)</li>
+                <li>credits and fragment gains</li>
+                <li>range, splash radius, and special mechanics unique to each pilot</li>
+              </ul>
+              <p>You can reroll your upgrade choices, but credits spent rerolling can’t be used on towers — choose carefully.</p>
+            </section>
+
+            <section class="howto-section">
+              <h3>Pilots</h3>
+              <p>You select one of three specialists:</p>
+              <ul class="howto-pilot-list">
+                <li><span class="howto-pill cannon">Volt</span> – Cannon expert; aggressive setup, fast tempo.</li>
+                <li><span class="howto-pill laser">Lumen</span> – Laser specialist; efficient and precise.</li>
+                <li><span class="howto-pill splash">Torque</span> – Splash engineer; tougher, control‑oriented approach.</li>
+              </ul>
+              <p>Each pilot has minor stat adjustments and passive traits that shift the tone of your run.</p>
+            </section>
+
+            <section class="howto-section">
+              <h3>Objective</h3>
+              <p>Survive all waves, keep the Reactor stable, and shut down the nanobot incursion before the sector is lost.</p>
+              <p><strong>Simple loop. Clean execution. Clear stakes.</strong></p>
+            </section>
+          </div>
+
+          <div class="actions" style="margin-top:18px">
+            <button id="btn-howto-back">Back</button>
+          </div>
+        </div>
+      </section>
       <!-- Fullscreen Map Select (Endless Cycle) -->
       <section id="mapselect-overlay" class="overlay mainmenu">
         <div class="panel mapselect-panel">

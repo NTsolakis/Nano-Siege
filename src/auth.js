@@ -71,8 +71,10 @@ export async function fetchLeaderboard(mapKey) {
   return apiGet('/api/leaderboard' + suffix);
 }
 
-export async function submitLeaderboard(username, waves, perfectCombo=0, map=null) {
-  return apiRequest('/api/leaderboard', { waves, perfectCombo, map });
+export async function submitLeaderboard(username, waves, perfectCombo=0, map=null, character=null) {
+  // Username is inferred from the auth token server-side; we include
+  // map + character metadata so the backend can store per‑pilot runs.
+  return apiRequest('/api/leaderboard', { waves, perfectCombo, map, character });
 }
 
 export async function logoutUser() {

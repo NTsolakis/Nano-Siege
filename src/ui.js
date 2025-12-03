@@ -37,7 +37,7 @@ function detectRuntimeFlavor(){
 
 export class UIManager{
   constructor(){
-    this.listeners = { startWave: [], startGame: [], pause: [], resume: [], retry: [], restart: [], sandboxStart: [], sandboxReset: [], sandboxOpen: [], toMenu: [], toMissionSelect: [], selectTowerType: [], upgradeSlow: [], upgradeRate: [], upgradeRange: [], upgradeBurn: [], sellTower: [], sellConfirm: [], sellCancel: [], selectMap: [], toggleFast: [], closeUpg: [], toggleVolume: [], setVolume: [], shopBuy: [], shopReroll: [], shopContinue: [], shopBuyAbility: [], useBomb: [], useOverclock: [], useCryo: [], toggleDev: [], toggleDebug: [], toggleAutoSpeed: [], exitConfirm: [], exitCancel: [], exitToMenuImmediate: [], exitToDesktop: [], openShop: [], closeShop: [], devUnlockUlts: [], devUpgradeMax: [], mainNew: [], mainLoad: [], mainAssembly: [], loadSlot: [], openAssembly: [], closeAssembly: [], startMission: [], assemblySave: [], assemblyLoad: [], openAssemblyCore: [], menuBack: [], mainSettings: [], mainSettingsBack: [], loadBack: [], loginUser: [], openCreateUser: [], closeCreateUser: [], createUser: [], openLeaderboard: [], closeLeaderboard: [], leaderboardSignIn: [], logout: [], removePassive: [], leaderboardSelectMap: [], pauseLoginOpen: [], mainDownload: [] };
+    this.listeners = { startWave: [], startGame: [], pause: [], resume: [], retry: [], restart: [], sandboxStart: [], sandboxReset: [], sandboxOpen: [], toMenu: [], toMissionSelect: [], selectTowerType: [], upgradeSlow: [], upgradeRate: [], upgradeRange: [], upgradeBurn: [], sellTower: [], sellConfirm: [], sellCancel: [], selectMap: [], toggleFast: [], closeUpg: [], toggleVolume: [], setVolume: [], shopBuy: [], shopReroll: [], shopContinue: [], shopBuyAbility: [], useBomb: [], useOverclock: [], useCryo: [], toggleDev: [], toggleDebug: [], toggleAutoSpeed: [], exitConfirm: [], exitCancel: [], exitToMenuImmediate: [], exitToDesktop: [], openShop: [], closeShop: [], devUnlockUlts: [], devUpgradeMax: [], mainNew: [], mainLoad: [], mainAssembly: [], loadSlot: [], openAssembly: [], closeAssembly: [], startMission: [], assemblySave: [], assemblyLoad: [], openAssemblyCore: [], menuBack: [], mainSettings: [], mainSettingsBack: [], loadBack: [], loginUser: [], openCreateUser: [], closeCreateUser: [], createUser: [], openLeaderboard: [], closeLeaderboard: [], leaderboardSignIn: [], logout: [], removePassive: [], leaderboardSelectMap: [], pauseLoginOpen: [], mainDownload: [], mainHowTo: [], closeHowTo: [], mainBug: [], closeBug: [] };
     const flavor = detectRuntimeFlavor();
     this.isDesktopRuntime = !!flavor.isDesktop;
     this.isLocalRuntime = !!flavor.isLocal;
@@ -187,6 +187,12 @@ export class UIManager{
     this.$btnMainAssembly = document.getElementById('btn-main-assembly');
     this.$btnMainSandbox = document.getElementById('btn-main-sandbox');
     this.$btnMainSettings = document.getElementById('btn-main-settings');
+    this.$btnMainHowTo = document.getElementById('btn-main-howto');
+    this.$howToOverlay = document.getElementById('howto-overlay');
+    this.$btnMainBug = document.getElementById('btn-main-bug');
+    this.$bugOverlay = document.getElementById('bug-overlay');
+    this.$bugForm = document.getElementById('bug-form');
+    this.$bugStatus = document.getElementById('bug-status');
     // Main settings controls
     this.$mainSettingsPrimary = document.getElementById('mainsettings-primary');
     this.$mainSettingsDesktopActions = document.getElementById('mainsettings-desktop-actions');
@@ -1090,6 +1096,78 @@ export class UIManager{
     if(this.$volSliderMain){ this.$volSliderMain.addEventListener('input', ()=> this.emit('setVolume', parseInt(this.$volSliderMain.value,10)||0)); }
     const $btnMainSettingsBack = document.getElementById('btn-main-settings-back');
     if($btnMainSettingsBack){ $btnMainSettingsBack.addEventListener('click', ()=> this.emit('mainSettingsBack')); }
+    const $btnHowToBack = document.getElementById('btn-howto-back');
+    if(this.$btnMainHowTo){
+      this.$btnMainHowTo.addEventListener('click', ()=>{
+        // Hide the main menu while the How To Play overlay is active so
+        // panels do not visually stack.
+        if(this.showMainMenu) this.showMainMenu(false);
+        if(this.$howToOverlay) this.$howToOverlay.classList.add('visible');
+        this.updateModalMask();
+        this.emit('mainHowTo');
+      });
+    }
+    if($btnHowToBack){
+      $btnHowToBack.addEventListener('click', ()=>{
+        if(this.$howToOverlay) this.$howToOverlay.classList.remove('visible');
+        // Return to the main menu entry point.
+        if(this.showMainMenu) this.showMainMenu(true);
+        this.updateModalMask();
+        this.emit('closeHowTo');
+      });
+    }
+    const $btnBugBack = document.getElementById('btn-bug-back');
+    if(this.$btnMainBug){
+      this.$btnMainBug.addEventListener('click', ()=>{
+        if(this.showMainMenu) this.showMainMenu(false);
+        if(this.$bugOverlay) this.$bugOverlay.classList.add('visible');
+        this.updateModalMask();
+        this.emit('mainBug');
+      });
+    }
+    if($btnBugBack){
+      $btnBugBack.addEventListener('click', ()=>{
+        if(this.$bugOverlay) this.$bugOverlay.classList.remove('visible');
+        if(this.showMainMenu) this.showMainMenu(true);
+        this.updateModalMask();
+        this.emit('closeBug');
+      });
+    }
+    if(this.$bugForm){
+      this.$bugForm.addEventListener('submit', async (ev)=>{
+        ev.preventDefault();
+        if(this.$bugStatus){
+          this.$bugStatus.textContent = 'Sending report…';
+          this.$bugStatus.style.color = COLORS.accent || '#17e7a4';
+        }
+        try{
+          const action = this.$bugForm.getAttribute('action') || 'https://formspree.io/f/xjknrlka';
+          const fd = new FormData(this.$bugForm);
+          const res = await fetch(action, {
+            method:'POST',
+            body: fd,
+            headers:{ 'Accept':'application/json' }
+          });
+          if(res.ok){
+            if(this.$bugStatus){
+              this.$bugStatus.textContent = 'Thank you — your report has been submitted.';
+              this.$bugStatus.style.color = COLORS.accent || '#17e7a4';
+            }
+            this.$bugForm.reset();
+          } else {
+            if(this.$bugStatus){
+              this.$bugStatus.textContent = 'Submission failed. Please try again in a moment.';
+              this.$bugStatus.style.color = COLORS.danger || '#ff5370';
+            }
+          }
+        }catch(e){
+          if(this.$bugStatus){
+            this.$bugStatus.textContent = 'Network error while sending report.';
+            this.$bugStatus.style.color = COLORS.danger || '#ff5370';
+          }
+        }
+      });
+    }
     // Abilities
     if(this.$abilBomb){ this.$abilBomb.addEventListener('click', ()=> this.emit('useBomb')); }
     if(this.$abilOverclock){ this.$abilOverclock.addEventListener('click', ()=> this.emit('useOverclock')); }
@@ -2103,7 +2181,9 @@ export class UIManager{
     const modesVisible = this.$modesOverlay && this.$modesOverlay.classList.contains('visible');
     const assemblyVisible = this.$assembly && this.$assembly.classList.contains('visible');
     const mainSettingsVisible = this.$mainSettings && this.$mainSettings.classList.contains('visible');
-    const modalActive = !!(loadVisible || createVisible || boardVisible || mapSelVisible || modesVisible || assemblyVisible || mainSettingsVisible);
+    const howtoVisible = this.$howToOverlay && this.$howToOverlay.classList.contains('visible');
+    const bugVisible = this.$bugOverlay && this.$bugOverlay.classList.contains('visible');
+    const modalActive = !!(loadVisible || createVisible || boardVisible || mapSelVisible || modesVisible || assemblyVisible || mainSettingsVisible || howtoVisible || bugVisible);
     this.$root.classList.toggle('modal-overlay', modalActive);
     const menuVisible = this.$mainMenu && this.$mainMenu.classList.contains('visible');
     document.body.classList.toggle('mainmenu-visible', modalActive || menuVisible);
@@ -2187,6 +2267,13 @@ export class UIManager{
       const perfect = Math.max(0, entry.perfectCombo || 0);
       const parts = [`${entry.waves ?? 0} waves`];
       parts.push(`Perfect Combo ${perfect}`);
+      // Optional: show which pilot was used for this run.
+      const pilotKey = entry.character || entry.pilot || null;
+      if(pilotKey){
+        const labelMap = { volt:'Volt', lumen:'Lumen', torque:'Torque' };
+        const label = labelMap[pilotKey] || pilotKey;
+        parts.push(`Pilot ${label}`);
+      }
       waves.textContent = parts.join(' • ');
       nameWrap.appendChild(waves);
       li.appendChild(nameWrap);

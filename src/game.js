@@ -15,6 +15,54 @@ import { loginUser as apiLoginUser, saveUserState as apiSaveUserState, createUse
 
 const SHOP_OFFER_COUNT = 6;
 
+// Optional starfield / space backdrop drawn behind the gameboard while
+// playing on the main reactor map. This is rendered inside the canvas
+// so it always lines up with the board area between side panels.
+const SPACE_BG = {
+  img: null,
+  loaded: false
+};
+if(typeof Image !== 'undefined'){
+  (()=>{
+    try{
+      const img = new Image();
+      img.onload = ()=>{
+        SPACE_BG.img = img;
+        SPACE_BG.loaded = true;
+      };
+      img.onerror = ()=>{
+        SPACE_BG.img = null;
+        SPACE_BG.loaded = false;
+      };
+      img.src = 'data/Space-Background.png';
+    }catch(e){}
+  })();
+}
+
+// Assembly Core (Nanocore chamber) backdrop, used inside the playable
+// area while the chamber canvas scene is active. This is layered on
+// top of the global space background but underneath chamber nodes.
+const ASSEMBLYCORE_BG = {
+  img: null,
+  loaded: false
+};
+if(typeof Image !== 'undefined'){
+  (()=>{
+    try{
+      const img = new Image();
+      img.onload = ()=>{
+        ASSEMBLYCORE_BG.img = img;
+        ASSEMBLYCORE_BG.loaded = true;
+      };
+      img.onerror = ()=>{
+        ASSEMBLYCORE_BG.img = null;
+        ASSEMBLYCORE_BG.loaded = false;
+      };
+      img.src = 'data/Assemblycore-Background.png';
+    }catch(e){}
+  })();
+}
+
 export class Game {
   constructor(canvas){
     this.canvas = canvas; this.ctx = canvas.getContext('2d');
@@ -271,6 +319,10 @@ export class Game {
     this.ui.on('leaderboardSignIn', ()=> this.handleLeaderboardSignIn());
     this.ui.on('logout', (payload)=> this.handleLogout(payload));
     this.ui.on('pauseLoginOpen', ()=> { this.profileOrigin = 'pause'; });
+    this.ui.on('mainHowTo', ()=> this.handleOpenHowTo());
+    this.ui.on('closeHowTo', ()=> this.handleCloseHowTo());
+    this.ui.on('mainBug', ()=> this.handleOpenBug());
+    this.ui.on('closeBug', ()=> this.handleCloseBug());
     this.ui.on('openAssemblyCore', ()=> this.openAssemblyCore());
     this.ui.on('removePassive', (key)=> this.refundPassive(key));
     this.ui.on('leaderboardSelectMap', (key)=>{ if(key){ this.leaderboardMapKey = key; this.refreshLeaderboard(key); } });
@@ -1534,7 +1586,8 @@ export class Game {
     try{
       const perfect = Math.max(0, this.bestPerfectCombo || 0);
       const mapKey = this.selectedMap?.key || (MAPS[0]?.key);
-      await apiSubmitLeaderboard(this.currentUser.username, Math.floor(value), Math.floor(perfect), mapKey);
+      const pilot = this.selectedCharacterKey || 'volt';
+      await apiSubmitLeaderboard(this.currentUser.username, Math.floor(value), Math.floor(perfect), mapKey, pilot);
     }catch(e){
       // Ignore submission failures silently
     }
@@ -1973,6 +2026,29 @@ export class Game {
     this.resetAbilityUnlocks();
     this.state = 'menu';
   }
+
+  handleOpenHowTo(){
+    // For now this is purely a UI overlay handled in ui.js; we just
+    // ensure other fullscreen overlays remain hidden if needed.
+    if(this.ui && this.ui.updateModalMask){
+      this.ui.updateModalMask();
+    }
+  }
+  handleCloseHowTo(){
+    if(this.ui && this.ui.updateModalMask){
+      this.ui.updateModalMask();
+    }
+  }
+  handleOpenBug(){
+    if(this.ui && this.ui.updateModalMask){
+      this.ui.updateModalMask();
+    }
+  }
+  handleCloseBug(){
+    if(this.ui && this.ui.updateModalMask){
+      this.ui.updateModalMask();
+    }
+  }
   handleAssemblySave(){
     // Save current user profile to backend (Assembly War screen).
     this.saveUserProfile();
@@ -2261,7 +2337,8 @@ export class Game {
       reward: def.reward,
       variant: def.variant,
       radius: def.radius,
-      bossIndex: typeof def.bossTier === 'number' ? def.bossTier : undefined
+      bossIndex: typeof def.bossTier === 'number' ? def.bossTier : undefined,
+      archetype: def.archetype
     });
     const wps = path;
     // If a specific spawn position along the path is provided, place there
@@ -3384,8 +3461,8 @@ export class Game {
     this.teleport = { t:0, fade:0.12, phase:'out', durOut:0.7, durIn:0.6, target, msg };
     this.teleDots = [];
     for(let i=0;i<50;i++) this.teleDots.push({ x: Math.random()*CANVAS_W, y: Math.random()*CANVAS_H, r:1+Math.random()*2, p: Math.random()*Math.PI*2 });
-    // Restore combat stats panel now that we are leaving
-    // the Assembly Core view.
+    // Restore combat stats panel now that we are leaving the
+    // Assembly Core view.
     if(typeof document !== 'undefined'){
       const cs = document.getElementById('combat-stats');
       if(cs) cs.style.display = '';
@@ -3632,6 +3709,14 @@ export class Game {
       e.update(dt);
       if(wasAlive && !e.alive && e.reachedEnd){
         let damage = 1;
+        // Boss leaks are significantly more punishing than regular
+        // enemies so they feel like true wave anchors. Scale their
+        // reactor damage by boss index so later bosses hit harder.
+        if(e.isBoss){
+          const tier = (typeof e.bossIndex === 'number') ? e.bossIndex : 0;
+          // First boss: 3 HP, then 4, 5, ...
+          damage = Math.max(3, 3 + tier);
+        }
         if(this.reactorShield>0){
           const absorb = Math.min(this.reactorShield, damage);
           this.reactorShield = Math.max(0, this.reactorShield - absorb);
@@ -4430,11 +4515,50 @@ export class Game {
   drawBackground(ctx){
     const C = this.grid.colors;
     const t = this.time || 0;
+
+    // 1) Space backdrop: cover the entire canvas with the starfield
+    // art, preserving its aspect ratio but ensuring no letterboxing
+    // inside the play area.
+    const img = SPACE_BG.img;
+    if(img && SPACE_BG.loaded && img.naturalWidth && img.naturalHeight){
+      const iw = img.naturalWidth;
+      const ih = img.naturalHeight;
+      const canvasRatio = CANVAS_W / CANVAS_H;
+      const imgRatio = iw / ih;
+      let dw, dh;
+      if(imgRatio > canvasRatio){
+        // Image is wider than canvas → fit height, crop sides
+        dh = CANVAS_H;
+        dw = dh * imgRatio;
+      } else {
+        // Image is taller than canvas → fit width, crop top/bottom
+        dw = CANVAS_W;
+        dh = dw / imgRatio;
+      }
+      const dx = (CANVAS_W - dw) / 2;
+      const dy = (CANVAS_H - dh) / 2;
+      ctx.save();
+      ctx.globalAlpha = 1;
+      ctx.drawImage(img, dx, dy, dw, dh);
+      ctx.restore();
+    } else {
+      // Fallback: keep the original gradient if the image fails to load.
+      ctx.save();
+      const bgGrad = ctx.createLinearGradient(0, 0, CANVAS_W, CANVAS_H);
+      bgGrad.addColorStop(0, '#020713');
+      bgGrad.addColorStop(0.5, '#041726');
+      bgGrad.addColorStop(1, '#021721');
+      ctx.fillStyle = bgGrad;
+      ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
+      ctx.restore();
+    }
+
+    // 2) Overlay subtle neon glow/motifs on top of the space art so the
+    // chamber still feels connected to the reactor theme.
     // helper: hex -> rgba string with alpha
     const hexToRgb = (h)=>{ const n=parseInt((h||'#00baff').slice(1),16); return {r:(n>>16)&255,g:(n>>8)&255,b:n&255}; };
     const c = hexToRgb(C.accent2||'#00baff');
     const glowA = 0.12;
-    // Slowly drift the background glow
     const gx = CANVAS_W*0.15 + Math.sin(t*0.12)*30;
     const gy = CANVAS_H*0.2  + Math.cos(t*0.09)*24;
     const grad = ctx.createRadialGradient(gx,gy,0,gx,gy, Math.max(CANVAS_W,CANVAS_H)*0.6);
@@ -4442,7 +4566,6 @@ export class Game {
     grad.addColorStop(1,'rgba(0,0,0,0)');
     ctx.fillStyle = grad; ctx.fillRect(0,0,CANVAS_W,CANVAS_H);
 
-    // secondary moving color wash for more vibrancy
     const c2 = hexToRgb(C.accent || '#17e7a4');
     const gx2 = CANVAS_W*0.8 + Math.cos(t*0.15)*40;
     const gy2 = CANVAS_H*0.75 + Math.sin(t*0.11)*36;
@@ -4451,7 +4574,6 @@ export class Game {
     grad2.addColorStop(1,'rgba(0,0,0,0)');
     ctx.fillStyle = grad2; ctx.fillRect(0,0,CANVAS_W,CANVAS_H);
 
-    // subtle motifs
     const motif = this.selectedMap?.motif || 'circuit';
     ctx.save();
     if(motif==='diagonal'){
@@ -4812,19 +4934,47 @@ export class Game {
 
   // Canvas-based chamber scene (shop)
   drawChamber(ctx){
-    // background
+    // Background: Assembly Core art inside the playable area, layered
+    // above the global space backdrop but beneath chamber nodes.
     ctx.save();
-    ctx.fillStyle = '#0b1118'; ctx.fillRect(0,0,CANVAS_W,CANVAS_H);
+    const img = ASSEMBLYCORE_BG.img;
+    if(img && ASSEMBLYCORE_BG.loaded && img.naturalWidth && img.naturalHeight){
+      const iw = img.naturalWidth;
+      const ih = img.naturalHeight;
+      const canvasRatio = CANVAS_W / CANVAS_H;
+      const imgRatio = iw / ih;
+      let dw, dh;
+      if(imgRatio > canvasRatio){
+        // Wider than canvas: fit height, crop sides.
+        dh = CANVAS_H;
+        dw = dh * imgRatio;
+      } else {
+        // Taller than canvas: fit width, crop top/bottom.
+        dw = CANVAS_W;
+        dh = dw / imgRatio;
+      }
+      const dx = (CANVAS_W - dw) / 2;
+      const dy = (CANVAS_H - dh) / 2;
+      ctx.drawImage(img, dx, dy, dw, dh);
+    } else {
+      // Fallback flat background if art is missing.
+      ctx.fillStyle = '#0b1118';
+      ctx.fillRect(0,0,CANVAS_W,CANVAS_H);
+    }
     // subtle teleport dots
     if(this.teleDots && this.teleDots.length){
       for(const d of this.teleDots){ ctx.save(); ctx.globalAlpha = 0.35 + 0.35*Math.sin(this.time*2 + d.p); ctx.fillStyle = '#9fffe0'; ctx.beginPath(); ctx.arc(d.x, d.y, d.r, 0, Math.PI*2); ctx.fill(); ctx.restore(); }
     }
-    // grid lines
+    // grid lines overlay
     ctx.strokeStyle = 'rgba(255,255,255,0.06)';
     ctx.lineWidth = 1;
     const step = 40;
-    for(let x=0;x<=CANVAS_W;x+=step){ ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,CANVAS_H); ctx.stroke(); }
-    for(let y=0;y<=CANVAS_H;y+=step){ ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(CANVAS_W,y); ctx.stroke(); }
+    for(let x=0;x<=CANVAS_W;x+=step){
+      ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,CANVAS_H); ctx.stroke();
+    }
+    for(let y=0;y<=CANVAS_H;y+=step){
+      ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(CANVAS_W,y); ctx.stroke();
+    }
     // core position (no longer draws background hex; nodes render their own icons)
     const cx = CANVAS_W/2, cy = CANVAS_H/2;
     ctx.shadowBlur = 0;

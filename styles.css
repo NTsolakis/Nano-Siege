@@ -101,6 +101,11 @@ body.mainmenu-visible #game-container{
   box-shadow:0 16px 40px rgba(0,0,0,.55),0 0 18px rgba(0,186,255,.2);
   z-index:800;
 }
+/* Ensure the signed-in banner remains fully visible above the main
+ * menu panels on the title screen without affecting in-run overlays. */
+body.mainmenu-visible .signin-banner{
+  z-index:120000;
+}
 .signin-banner .label{
   font-size:11px;
   letter-spacing:.35em;
@@ -387,6 +392,111 @@ canvas#game{display:block;max-width:100%;width:960px;height:auto;border:1px soli
 #create-overlay .mainmenu-panel::before,
 #leaderboard-overlay .mainmenu-panel::before{
   content:\"\";position:absolute;inset:8px;border-radius:inherit;border:1px solid rgba(255,255,255,.05);opacity:.7;pointer-events:none;
+}
+
+/* How To Play layout */
+#howto-overlay .mainmenu-panel{
+  max-width:960px;
+}
+.howto-body{
+  margin-top:8px;
+  display:flex;
+  flex-direction:column;
+  gap:16px;
+  max-height:60vh;
+  overflow:auto;
+}
+.howto-section h3{
+  margin:0 0 4px;
+  font-size:14px;
+  letter-spacing:.24em;
+  text-transform:uppercase;
+  color:#a7f5ff;
+}
+.howto-section p{
+  margin:0 0 6px;
+  font-size:13px;
+  color:#c2e2ff;
+}
+.howto-section ul{
+  margin:0 0 6px 1.2em;
+  padding:0;
+  font-size:13px;
+  color:#9fb9dd;
+}
+.howto-bullets-tight li{
+  margin-bottom:2px;
+}
+.howto-tower-list li,
+.howto-pilot-list li{
+  margin-bottom:4px;
+}
+.howto-pill{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  padding:2px 8px;
+  border-radius:999px;
+  font-size:11px;
+  letter-spacing:.12em;
+  text-transform:uppercase;
+  margin-right:4px;
+  border:1px solid rgba(255,255,255,.18);
+  background:rgba(4,10,18,.9);
+}
+.howto-pill.cannon{
+  border-color:rgba(23,231,164,.6);
+  color:#a8ffde;
+}
+.howto-pill.laser{
+  border-color:rgba(0,186,255,.7);
+  color:#b5f2ff;
+}
+.howto-pill.splash{
+  border-color:rgba(255,158,0,.7);
+  color:#ffe2b3;
+}
+
+/* Bug Reports & Suggestions layout */
+#bug-overlay .mainmenu-panel{
+  max-width:640px;
+}
+.bug-form label{
+  display:block;
+  margin:10px 0 4px;
+  font-size:13px;
+  color:#c3cbd4;
+}
+.bug-form select,
+.bug-form textarea,
+.bug-form input[type="email"]{
+  width:100%;
+  padding:8px 10px;
+  border-radius:8px;
+  border:1px solid rgba(255,255,255,0.12);
+  background:rgba(4,10,18,0.96);
+  color:#d7e1e8;
+  font-size:13px;
+  resize:vertical;
+}
+.bug-form select:focus,
+.bug-form textarea:focus,
+.bug-form input[type="email"]:focus{
+  outline:none;
+  border-color:var(--accent-2);
+  box-shadow:0 0 0 1px rgba(0,186,255,0.5);
+}
+.bug-status{
+  min-height:18px;
+  margin-top:8px;
+  font-size:12px;
+  color:#8aa7c7;
+}
+.bug-footer{
+  margin-top:10px;
+  font-size:12px;
+  color:#737982;
+  text-align:center;
 }
 .mainmenu-panel h2{margin-bottom:6px;color:#b8f9ff;letter-spacing:.35em;text-transform:uppercase;text-align:center}
 .mainmenu-panel .tag{color:#8aa7c7;letter-spacing:.2em;text-transform:uppercase;font-size:12px;margin-bottom:18px}
@@ -1133,8 +1243,15 @@ canvas#game{display:block;max-width:100%;width:960px;height:auto;border:1px soli
 @keyframes currencyShard{0%{transform:rotate(0deg)}100%{transform:rotate(360deg)}}
 @keyframes currencyGlow{0%,100%{opacity:.5;transform:scale(.9)}50%{opacity:1;transform:scale(1.05)}}
 @keyframes currencyCore{0%{transform:rotate(0deg)}100%{transform:rotate(-360deg)}}
-#canvas-shell{display:flex;justify-content:center;align-items:flex-start;padding:2px 6px 0;margin:0;width:100%}
-#canvas-shell{position:relative}
+#canvas-shell{
+  display:flex;
+  justify-content:center;
+  align-items:flex-start;
+  padding:2px 6px 0;
+  margin:0;
+  width:100%;
+  position:relative;
+}
 #canvas-shell canvas{
   width:100%;
   height:auto;
@@ -1235,7 +1352,10 @@ canvas#game{display:block;max-width:100%;width:960px;height:auto;border:1px soli
   grid-template-columns:var(--side-panel-width) minmax(300px,1fr) var(--side-panel-width);
   gap:10px;
   padding:14px 0 16px;
-  background:#020308;
+  /* Space backdrop behind the central game column and side panels,
+   * constrained to the stage area so the global loading GIF remains
+   * visible in the outer margins. */
+  background:#020308 url('data/Space-Background.png') center bottom/cover no-repeat;
   align-items:stretch;
   margin-top:0;
 }

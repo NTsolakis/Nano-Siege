@@ -194,12 +194,13 @@ app.get('/api/leaderboard', (req, res) => {
 });
 
 app.post('/api/leaderboard', requireAuth, (req, res) => {
-  const { waves, perfectCombo, map } = req.body || {};
+  const { waves, perfectCombo, map, character } = req.body || {};
   if (!Number.isFinite(waves) || waves <= 0) {
     return res.status(400).json({ ok: false, error: 'waves required' });
   }
   const mapKey = (typeof map === 'string' && map.trim()) ? map.trim() : DEFAULT_MAP;
   const perfectVal = Number.isFinite(perfectCombo) ? Math.max(0, Math.floor(perfectCombo)) : 0;
+  const pilot = (typeof character === 'string' && character.trim()) ? character.trim() : null;
   const db = loadDb();
   db.leaderboard = db.leaderboard || [];
   let entry = db.leaderboard.find(e => e.username === req.user.username && (e.map || DEFAULT_MAP) === mapKey);
@@ -207,11 +208,19 @@ app.post('/api/leaderboard', requireAuth, (req, res) => {
     if (waves > (entry.waves || 0)) {
       entry.waves = Math.floor(waves);
       entry.updatedAt = Date.now();
+      if (pilot) entry.character = pilot;
     }
     entry.perfectCombo = Math.max(entry.perfectCombo || 0, perfectVal);
     entry.map = mapKey;
   } else {
-    db.leaderboard.push({ username: req.user.username, waves: Math.floor(waves), perfectCombo: perfectVal, updatedAt: Date.now(), map: mapKey });
+    db.leaderboard.push({
+      username: req.user.username,
+      waves: Math.floor(waves),
+      perfectCombo: perfectVal,
+      updatedAt: Date.now(),
+      map: mapKey,
+      character: pilot
+    });
   }
   saveDb(db);
   return res.json({ ok: true });
