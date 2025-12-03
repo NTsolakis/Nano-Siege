@@ -14,19 +14,26 @@ function pickEnemyArchetype(w){
   // "normal" enemies so shields/armor only appear
   // once players have cleared that milestone.
   if(w <= 10) return 'normal';
-  if(w <= 20){
-    if(r < 0.60) return 'normal';
+  // Early post-boss waves: keep armor/shielded units rare so players
+  // can acclimate to the new mechanics.
+  if(w <= 15){
+    if(r < 0.80) return 'normal';
+    if(r < 0.90) return 'armored';
+    return 'shielded';
+  }
+  if(w <= 25){
+    if(r < 0.65) return 'normal';
+    if(r < 0.85) return 'armored';
+    return 'shielded';
+  }
+  if(w <= 35){
+    if(r < 0.55) return 'normal';
     if(r < 0.80) return 'armored';
     return 'shielded';
   }
-  if(w <= 30){
-    if(r < 0.50) return 'normal';
-    if(r < 0.75) return 'armored';
-    return 'shielded';
-  }
-  // Endgame
-  if(r < 0.45) return 'normal';
-  if(r < 0.75) return 'armored';
+  // Endgame: all three archetypes common.
+  if(r < 0.50) return 'normal';
+  if(r < 0.80) return 'armored';
   return 'shielded';
 }
 
