@@ -80,7 +80,11 @@ function issueToken(res, username) {
   const token = jwt.sign(payload, JWT_SECRET, { expiresIn: '7d' });
   res.cookie(TOKEN_NAME, token, {
     httpOnly: true,
-    sameSite: 'lax',
+    // Allow the desktop/Electron build (file:// origin) to authenticate
+    // against the hosted API by sending cookies on XHR/fetch requests.
+    // Browser build at nano.nicksminecraft.net remains same-site. In
+    // production we always mark the cookie as Secure.
+    sameSite: 'none',
     secure: !!process.env.NODE_ENV && process.env.NODE_ENV !== 'development',
     path: '/'
   });

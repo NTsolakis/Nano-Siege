@@ -24,7 +24,8 @@ async function apiRequest(path, body) {
   const res = await fetch(API_BASE + path, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body || {})
+    body: JSON.stringify(body || {}),
+    credentials: 'include'
   });
   let data;
   try {
@@ -40,7 +41,7 @@ async function apiRequest(path, body) {
 }
 
 async function apiGet(path) {
-  const res = await fetch(API_BASE + path);
+  const res = await fetch(API_BASE + path, { credentials: 'include' });
   let data;
   try {
     data = await res.json();
