@@ -1589,7 +1589,14 @@ export class Game {
       const pilot = this.selectedCharacterKey || 'volt';
       await apiSubmitLeaderboard(this.currentUser.username, Math.floor(value), Math.floor(perfect), mapKey, pilot);
     }catch(e){
-      // Ignore submission failures silently
+      // Surface failures so we can diagnose desktop auth / network issues.
+      if(typeof console !== 'undefined' && console.error){
+        console.error('Leaderboard submission failed:', e);
+      }
+      if(this.ui && typeof this.ui.setLeaderboardStatus === 'function'){
+        const msg = (e && e.message) ? e.message : 'Could not submit leaderboard entry.';
+        this.ui.setLeaderboardStatus(msg, false);
+      }
     }
   }
 

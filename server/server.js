@@ -223,6 +223,16 @@ app.get('/api/leaderboard', (req, res) => {
 
 app.post('/api/leaderboard', requireAuth, (req, res) => {
   const { waves, perfectCombo, map, character } = req.body || {};
+  // Lightweight diagnostics to help trace desktop/Electron submissions.
+  try {
+    console.log('[leaderboard:submit]', {
+      user: req.user && req.user.username,
+      waves,
+      perfectCombo,
+      map,
+      character
+    });
+  } catch (e) {}
   if (!Number.isFinite(waves) || waves <= 0) {
     return res.status(400).json({ ok: false, error: 'waves required' });
   }
