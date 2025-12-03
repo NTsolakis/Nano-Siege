@@ -69,6 +69,7 @@ last_tag=$(git describe --tags --match "deploy-v*" --abbrev=0 2>/dev/null || ech
 changed_backend=0
 changed_game=0
 changed_launcher=0
+FORCE_LAUNCHER_BUMP="${FORCE_LAUNCHER_BUMP:-0}"
 
 if [ -z "$last_tag" ]; then
   echo "No previous deploy tag found. Treating this as an initial deploy."
@@ -113,6 +114,12 @@ else
       esac
     done <<< "$changed_files"
   fi
+fi
+
+# Allow manually forcing a launcher bump even if no launcher source
+# files changed in git (e.g. rebuilt binaries only).
+if [ "${FORCE_LAUNCHER_BUMP}" = "1" ]; then
+  changed_launcher=1
 fi
 
 # Build game-focused patch notes from commits that touched the
@@ -178,8 +185,10 @@ if [ "$bump_needed" -eq 1 ]; then
   jq \
     --arg v "$new_version" \
     --arg notes "$patch_notes" \
+    --argjson launcherChanged "$changed_launcher" \
     '.backendVersion = $v
      | .gameVersion = $v
+     | .launcherVersion = (if $launcherChanged == 1 then $v else .launcherVersion end)
      | .patchNotes = ($notes | split("\n"))' \
     "$META_SRC" > "$tmpfile"
   mv "$tmpfile" "$META_SRC"
