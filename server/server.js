@@ -80,19 +80,31 @@ function issueToken(res, username) {
   const token = jwt.sign(payload, JWT_SECRET, { expiresIn: '7d' });
   res.cookie(TOKEN_NAME, token, {
     httpOnly: true,
-    // Allow the desktop/Electron build (file:// origin) to authenticate
-    // against the hosted API by sending cookies on XHR/fetch requests.
-    // Browser build at nano.nicksminecraft.net remains same-site. In
-    // production we always mark the cookie as Secure.
     sameSite: 'none',
-    secure: !!process.env.NODE_ENV && process.env.NODE_ENV !== 'development',
+    // For SameSite=None to work in cross-site/Electron contexts,
+    // the cookie must always be Secure (HTTPS only).
+    secure: true,
     path: '/'
   });
-  return payload;
+  // Return both username + token so browser builds can keep using
+  // cookie auth while desktop builds may send the token explicitly
+  // via an Authorization header (Bearer).
+  return { username, token };
+}
+
+function getAuthToken(req) {
+  const header = req.headers && req.headers.authorization;
+  if (header && typeof header === 'string') {
+    const parts = header.split(' ');
+    if (parts.length === 2 && /^Bearer$/i.test(parts[0]) && parts[1]) {
+      return parts[1];
+    }
+  }
+  return req.cookies ? req.cookies[TOKEN_NAME] : null;
 }
 
 function requireAuth(req, res, next) {
-  const token = req.cookies ? req.cookies[TOKEN_NAME] : null;
+  const token = getAuthToken(req);
   if (!token) return res.status(401).json({ ok: false, error: 'auth required' });
   try {
     req.user = jwt.verify(token, JWT_SECRET);
@@ -121,8 +133,14 @@ app.post('/api/login', (req, res) => {
   const valid = bcrypt.compareSync(password, user.passwordHash);
   if (!valid) return res.status(401).json({ ok: false, error: 'invalid credentials' });
   saveDb(db);
-  const payload = issueToken(res, name);
-  return res.json({ ok: true, created: false, username: payload.username, state: user.state || defaultState() });
+  const session = issueToken(res, name);
+  return res.json({
+    ok: true,
+    created: false,
+    username: session.username,
+    token: session.token,
+    state: user.state || defaultState()
+  });
 });
 
 // Dedicated endpoint to create a new user.
@@ -144,15 +162,21 @@ app.post('/api/create', (req, res) => {
   const user = { username: name, passwordHash: hash, state: defaultState(), createdAt: Date.now(), updatedAt: Date.now() };
   db.users.push(user);
   saveDb(db);
-  const payload = issueToken(res, name);
-  return res.json({ ok: true, created: true, username: payload.username, state: user.state });
+  const session = issueToken(res, name);
+  return res.json({
+    ok: true,
+    created: true,
+    username: session.username,
+    token: session.token,
+    state: user.state
+  });
 });
 
 app.post('/api/logout', (req, res) => {
   res.clearCookie(TOKEN_NAME, {
     httpOnly: true,
-    sameSite: 'lax',
-    secure: !!process.env.NODE_ENV && process.env.NODE_ENV !== 'development',
+    sameSite: 'none',
+    secure: true,
     path: '/'
   });
   return res.json({ ok: true });

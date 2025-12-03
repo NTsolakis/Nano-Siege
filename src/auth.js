@@ -20,10 +20,16 @@ const API_BASE = (() => {
   return '';
 })();
 
+let authToken = null;
+
 async function apiRequest(path, body) {
+  const headers = { 'Content-Type': 'application/json' };
+  if (authToken) {
+    headers.Authorization = `Bearer ${authToken}`;
+  }
   const res = await fetch(API_BASE + path, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers,
     body: JSON.stringify(body || {}),
     credentials: 'include'
   });
@@ -41,7 +47,11 @@ async function apiRequest(path, body) {
 }
 
 async function apiGet(path) {
-  const res = await fetch(API_BASE + path, { credentials: 'include' });
+  const headers = {};
+  if (authToken) {
+    headers.Authorization = `Bearer ${authToken}`;
+  }
+  const res = await fetch(API_BASE + path, { credentials: 'include', headers });
   let data;
   try {
     data = await res.json();
@@ -56,11 +66,19 @@ async function apiGet(path) {
 }
 
 export async function loginUser(username, password) {
-  return apiRequest('/api/login', { username, password });
+  const data = await apiRequest('/api/login', { username, password });
+  if (data && typeof data.token === 'string' && data.token) {
+    authToken = data.token;
+  }
+  return data;
 }
 
 export async function createUser(username, password) {
-  return apiRequest('/api/create', { username, password });
+  const data = await apiRequest('/api/create', { username, password });
+  if (data && typeof data.token === 'string' && data.token) {
+    authToken = data.token;
+  }
+  return data;
 }
 
 export async function saveUserState(state) {
@@ -79,5 +97,7 @@ export async function submitLeaderboard(username, waves, perfectCombo=0, map=nul
 }
 
 export async function logoutUser() {
-  return apiRequest('/api/logout', {});
+  const out = await apiRequest('/api/logout', {});
+  authToken = null;
+  return out;
 }
