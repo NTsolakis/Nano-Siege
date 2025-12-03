@@ -1,5 +1,6 @@
 import { CANVAS_W, CANVAS_H } from './config.js';
 import { Game } from './game.js';
+import { initVersionLabel } from './version.js';
 
 const root = document.documentElement;
 const hud = document.querySelector('.hud');
@@ -76,6 +77,12 @@ canvas.height = CANVAS_H;
 
 const game = new Game(canvas);
 game.start();
+
+// Show build/version info in the main menu footer using the shared
+// metadata file deployed with the game.
+try{
+  initVersionLabel();
+}catch(e){}
 
 // Expose a tiny helper so the desktop (Electron) build can request a
 // proper "quit game?" confirmation from the main menu before closing

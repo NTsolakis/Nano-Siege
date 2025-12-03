@@ -372,6 +372,15 @@ canvas#game{display:block;max-width:100%;width:960px;height:auto;border:1px soli
 }
 .mainmenu-actions button{height:56px;font-size:15px;letter-spacing:.08em;text-transform:uppercase;font-weight:600;border-radius:999px;box-shadow:0 10px 30px rgba(0,0,0,.45);background:linear-gradient(120deg,rgba(0,186,255,.25),rgba(23,231,164,.18));border:1px solid rgba(0,186,255,.35);position:relative}
 .mainmenu-actions button:hover{box-shadow:0 10px 40px rgba(0,186,255,.45);border-color:var(--accent);color:#fff}
+.version-label{
+  margin-top:14px;
+  font-size:11px;
+  color:#8aa7c7;
+  letter-spacing:.16em;
+  text-transform:uppercase;
+  text-align:center;
+  opacity:.9;
+}
 .badge-uc{display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:3px 8px;margin-left:8px;border-radius:999px;background:rgba(255,138,154,0.18);border:1px solid rgba(255,83,112,0.35);color:#ffd6e0;font-size:11px;letter-spacing:.1em;text-transform:uppercase;box-shadow:0 6px 14px rgba(255,83,112,.25)}
 
 #mainsettings-overlay .mainmenu-panel,

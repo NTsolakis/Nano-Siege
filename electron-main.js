@@ -12,6 +12,8 @@ try {
   // best-effort; if this fails we fall back to default behavior
 }
 
+const wantsStartupFullscreen = process.argv.some((arg) => arg === '--fullscreen');
+
 function createWindow() {
   const win = new BrowserWindow({
     width: 1600,
@@ -31,6 +33,14 @@ function createWindow() {
 
   win.setMenuBarVisibility(false);
   win.loadFile(path.join(__dirname, 'index.html'));
+
+  if (wantsStartupFullscreen) {
+    try {
+      win.setFullScreen(true);
+    } catch (e) {
+      // Best-effort; user can still toggle fullscreen in-game.
+    }
+  }
 
   win.on('enter-full-screen', () => {
     try {

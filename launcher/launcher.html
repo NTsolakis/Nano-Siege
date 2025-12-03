@@ -14,13 +14,21 @@
     .title{font-size:26px;letter-spacing:0.12em;text-transform:uppercase;margin-bottom:4px;color:#8cf5ff;text-shadow:0 0 12px rgba(0,255,255,0.55)}
     .subtitle{font-size:13px;color:#9fb4ff;margin-bottom:16px}
     .status{font-size:14px;color:#e6f7ff;margin-bottom:4px}
-    .version{font-size:12px;color:#8fb7ff;margin-bottom:16px}
+    .version{font-size:12px;color:#8fb7ff;margin-bottom:8px}
+    .dl-wrap{margin:4px 0 10px 0;font-size:11px;color:#c5e2ff}
+    .dl-bar{position:relative;width:100%;height:6px;border-radius:999px;background:rgba(8,20,40,0.85);overflow:hidden;border:1px solid rgba(120,180,255,0.45);box-shadow:0 0 10px rgba(0,0,0,0.75) inset}
+    .dl-fill{position:absolute;inset:0;width:0%;background:linear-gradient(90deg,#12b5ff,#54ffe6);box-shadow:0 0 12px rgba(0,255,255,0.55)}
+    .dl-text{margin-top:4px;min-height:14px;color:#9fb7ff}
     .buttons{display:flex;justify-content:center;gap:10px;margin-top:8px}
     button{min-width:90px;padding:8px 18px;border-radius:999px;border:1px solid rgba(96,255,255,0.7);background:linear-gradient(135deg,#12b5ff,#54ffe6);color:#02131f;font-weight:600;font-size:14px;cursor:pointer;box-shadow:0 0 12px rgba(0,255,255,0.35);transition:transform 0.1s ease,box-shadow 0.1s ease,filter 0.1s ease,background 0.2s}
     button.secondary{background:rgba(4,10,24,0.9);color:#c7d7ff;border-color:rgba(142,189,255,0.8);box-shadow:none}
     button:disabled{opacity:0.6;cursor:default;box-shadow:none}
     button:not(:disabled):hover{transform:translateY(-1px);box-shadow:0 0 16px rgba(0,255,255,0.5);filter:brightness(1.05)}
     button.secondary:not(:disabled):hover{box-shadow:0 0 14px rgba(150,190,255,0.45)}
+    .fs-row{margin-top:8px;font-size:11px;color:#9fb7ff;display:flex;justify-content:center}
+    .fs-toggle{display:inline-flex;align-items:center;gap:6px;cursor:pointer}
+    .fs-toggle input{accent-color:#54ffe6}
+    .fs-label{user-select:none}
     .footer{margin-top:12px;font-size:11px;color:#6f88b5;opacity:0.9}
   </style>
 </head>
@@ -32,9 +40,19 @@
       <p class="subtitle">Reactor Defense Launcher</p>
       <div id="status-line" class="status">Starting launcher…</div>
       <div id="version-line" class="version"></div>
+      <div id="dl-wrap" class="dl-wrap" style="display:none">
+        <div class="dl-bar"><div id="dl-fill" class="dl-fill"></div></div>
+        <div id="dl-text" class="dl-text"></div>
+      </div>
       <div class="buttons">
         <button id="btn-play" disabled>Play</button>
         <button id="btn-exit" class="secondary">Exit</button>
+      </div>
+      <div class="fs-row">
+        <label class="fs-toggle">
+          <input type="checkbox" id="chk-fullscreen" />
+          <span class="fs-label">Launch in fullscreen</span>
+        </label>
       </div>
       <div class="footer">The launcher keeps Nano‑Siege up to date automatically.</div>
     </div>
@@ -45,6 +63,10 @@
     const versionEl = document.getElementById('version-line');
     const playBtn = document.getElementById('btn-play');
     const exitBtn = document.getElementById('btn-exit');
+    const dlWrap = document.getElementById('dl-wrap');
+    const dlFill = document.getElementById('dl-fill');
+    const dlText = document.getElementById('dl-text');
+    const fsCheckbox = document.getElementById('chk-fullscreen');
     const bgEl = document.querySelector('.bg');
     const http = require('http');
     const https = require('https');
@@ -61,6 +83,19 @@
 
     const DEFAULT_MANIFEST_URL = 'https://nano.nicksminecraft.net/launcher/manifest.json';
     const MANIFEST_URL = process.env.NANO_SIEGE_MANIFEST_URL || DEFAULT_MANIFEST_URL;
+
+    const DEFAULT_META_URL = 'https://nano.nicksminecraft.net/data/meta.json';
+    const META_URL = process.env.NANO_SIEGE_META_URL || (() => {
+      try {
+        const u = new URL(MANIFEST_URL);
+        u.pathname = '/data/meta.json';
+        u.search = '';
+        u.hash = '';
+        return u.toString();
+      } catch (e) {
+        return DEFAULT_META_URL;
+      }
+    })();
 
     // Use the same hosted background image as the main game,
     // derived from the manifest base URL so staging domains work.
@@ -141,10 +176,40 @@
       const token = computeRemoteToken(info, meta, hashInfo);
       return token || '';
     }
+    function summarizeVersions(localVersion, remoteVersion){
+      const local = localVersion ? String(localVersion) : '';
+      const remote = remoteVersion ? String(remoteVersion) : '';
+      if (local && remote && local !== remote) {
+        return local + ' \u2192 ' + remote;
+      }
+      return remote || local || '';
+    }
     const baseDir = path.join(os.homedir(), '.nano-siege');
     const binDir = path.join(baseDir, 'bin');
     const stateFile = path.join(baseDir, 'installed.json');
+    const settingsFile = path.join(baseDir, 'launcher-settings.json');
 
+    function readSettings(){
+      try{
+        const raw = fs.readFileSync(settingsFile, 'utf8');
+        const parsed = JSON.parse(raw);
+        return {
+          launchFullscreen: !!parsed.launchFullscreen
+        };
+      }catch(e){
+        return { launchFullscreen:false };
+      }
+    }
+
+    function writeSettings(next){
+      const safe = {
+        launchFullscreen: !!(next && next.launchFullscreen)
+      };
+      fs.mkdirSync(baseDir, { recursive:true });
+      fs.writeFileSync(settingsFile, JSON.stringify(safe, null, 2), 'utf8');
+    }
+
+    let settings = readSettings();
     let currentBinaryPath = null;
     let canPlay = false;
 
@@ -153,6 +218,32 @@
       versionEl.textContent = version ? ('Version ' + version) : '';
       canPlay = !!ready;
       playBtn.disabled = !canPlay;
+    }
+
+    function updateProgressUI(prog){
+      if(!dlWrap) return;
+      if(!prog){
+        dlWrap.style.display = 'none';
+        if(dlFill){ dlFill.style.width = '0%'; }
+        if(dlText){ dlText.textContent = ''; }
+        return;
+      }
+      dlWrap.style.display = 'block';
+      var pct = (typeof prog.percent === 'number') ? prog.percent : 0;
+      if(dlFill){
+        dlFill.style.width = Math.max(0, Math.min(100, pct)) + '%';
+      }
+      if(dlText){
+        var bytes = prog.downloaded || 0;
+        var total = prog.total || 0;
+        var mb = (bytes / (1024*1024)).toFixed(2);
+        var totalMb = total ? (total / (1024*1024)).toFixed(2) : '?';
+        var speedMb = (prog.speedBytesPerSec ? (prog.speedBytesPerSec / (1024*1024)) : 0).toFixed(2);
+        var pctLabel = total ? pct.toFixed(1) + '%' : '';
+        dlText.textContent = 'Downloading: ' + mb + '/' + totalMb + ' MB' +
+          (pctLabel ? ' (' + pctLabel + ')' : '') +
+          ' – ' + speedMb + ' MB/s';
+      }
     }
 
     function getHttpModule(url){
@@ -240,28 +331,74 @@
       }
     }
 
-    function downloadFile(url, dest){
+    async function fetchGlobalMeta(){
+      try{
+        const meta = await fetchJson(META_URL);
+        if (!meta || typeof meta !== 'object') return null;
+        return meta;
+      }catch(e){
+        console.error('Global meta fetch failed from', META_URL, e);
+        return null;
+      }
+    }
+
+    function downloadFile(url, dest, onProgress){
       return new Promise((resolve, reject) => {
         fs.mkdirSync(path.dirname(dest), { recursive: true });
         const file = fs.createWriteStream(dest);
+        const startedAt = Date.now();
         getHttpModule(url)
           .get(url, (res) => {
             if (res.statusCode && res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
               file.close(() => {
                 fs.unlink(dest, () => {
-                  resolve(downloadFile(res.headers.location, dest));
+                  resolve(downloadFile(res.headers.location, dest, onProgress));
                 });
               });
               return;
             }
             if (res.statusCode !== 200) {
               file.close(() => {
-                fs.unlink(dest, () => reject(new Error('HTTP ' + res.statusCode + ' for ' + url)));
-              });
+              fs.unlink(dest, () => reject(new Error('HTTP ' + res.statusCode + ' for ' + url)));
+            });
               return;
             }
+            const total = parseInt(res.headers['content-length'] || '0', 10) || 0;
+            let downloaded = 0;
+            res.on('data', (chunk) => {
+              downloaded += chunk.length;
+              if (typeof onProgress === 'function') {
+                const elapsedSec = Math.max(0.001, (Date.now() - startedAt) / 1000);
+                const speed = downloaded / elapsedSec;
+                const percent = total > 0 ? (downloaded / total) * 100 : 0;
+                try{
+                  onProgress({
+                    downloaded,
+                    total,
+                    percent,
+                    speedBytesPerSec: speed
+                  });
+                }catch(e){
+                  // Ignore UI update errors.
+                }
+              }
+            });
             res.pipe(file);
-            file.on('finish', () => file.close(() => resolve(dest)));
+            file.on('finish', () => {
+              if (typeof onProgress === 'function') {
+                try{
+                  onProgress({
+                    downloaded,
+                    total,
+                    percent: total > 0 ? 100 : (downloaded > 0 ? 100 : 0),
+                    speedBytesPerSec: 0
+                  });
+                }catch(e){
+                  // Ignore.
+                }
+              }
+              file.close(() => resolve(dest));
+            });
           })
           .on('error', (err) => {
             file.close(() => {
@@ -300,7 +437,11 @@
       if(!binaryPath) return;
       try{
         if(PLATFORM === 'linux'){
-          const child = spawn(binaryPath, ['--no-sandbox'], {
+          const args = ['--no-sandbox'];
+          if(settings && settings.launchFullscreen){
+            args.push('--fullscreen');
+          }
+          const child = spawn(binaryPath, args, {
             detached: true,
             stdio: 'ignore'
           });
@@ -309,7 +450,20 @@
           window.close();
           return;
         }
-        // Windows: let the OS handle the .exe via the shell.
+        if(PLATFORM === 'windows'){
+          const argsWin = [];
+          if(settings && settings.launchFullscreen){
+            argsWin.push('--fullscreen');
+          }
+          const childWin = spawn(binaryPath, argsWin, {
+            detached: true,
+            stdio: 'ignore'
+          });
+          try{ childWin.unref(); }catch(e){}
+          window.close();
+          return;
+        }
+        // Fallback: let the OS handle the .exe via the shell.
         const err = await shell.openPath(binaryPath);
         if (err) {
           console.error('Failed to launch game via shell.openPath:', err, 'path:', binaryPath);
@@ -348,6 +502,7 @@
 
         const current = readState();
         const hashInfo = await fetchRemoteSha(info);
+        const globalMeta = await fetchGlobalMeta();
 
         // Backfill SHA256 for old installs so they participate in hash-based updates.
         if (current && current.binaryPath && fs.existsSync(current.binaryPath) && !current.sha256) {
@@ -367,14 +522,24 @@
 
         let binaryPath = current && current.binaryPath;
         const displayVersion = computeDisplayVersion(info, meta, hashInfo);
-        const versionLabel = displayVersion ? (' ' + displayVersion) : '';
+        const remoteGameVersion = (globalMeta && globalMeta.gameVersion) || displayVersion || '';
+        const remoteLauncherVersion = (globalMeta && globalMeta.launcherVersion) || null;
+        const versionLabel = remoteGameVersion ? (' ' + remoteGameVersion) : (displayVersion ? (' ' + displayVersion) : '');
+
+        const localGameVersion = current
+          ? (current.gameVersion || current.displayVersion || (current.sha256 ? String(current.sha256).slice(0, 8) : current.buildToken))
+          : '';
+        const versionSummary = summarizeVersions(localGameVersion, remoteGameVersion);
 
         if (needsUpgrade || !keepPath) {
-          setStatus('Downloading Nano‑Siege' + versionLabel + '…', displayVersion, false);
+          updateProgressUI(null);
+          setStatus('Downloading Nano‑Siege' + versionLabel + '…', versionSummary || remoteGameVersion || displayVersion, false);
           fs.mkdirSync(binDir, { recursive: true });
           const filename = path.basename(new URL(info.url).pathname || 'nano-siege-latest');
           binaryPath = path.join(binDir, filename);
-          await downloadFile(info.url, binaryPath);
+          await downloadFile(info.url, binaryPath, (prog) => {
+            updateProgressUI(prog);
+          });
           if (PLATFORM === 'linux') {
             try { fs.chmodSync(binaryPath, 0o755); } catch (e) {}
           }
@@ -393,15 +558,20 @@
             sha256: sha256 ? String(sha256).toLowerCase() : null,
             binaryPath,
             metaUrl,
-            hashUrl: hashInfo && hashInfo.hashUrl
+            hashUrl: hashInfo && hashInfo.hashUrl,
+            displayVersion: displayVersion || null,
+            gameVersion: remoteGameVersion || displayVersion || null,
+            launcherVersion: remoteLauncherVersion || null
           });
-          setStatus('Finishing install…', displayVersion, false);
+          updateProgressUI(null);
+          setStatus('Finishing install…', versionSummary || remoteGameVersion || displayVersion, false);
         } else {
-          setStatus('Up to date — Nano‑Siege' + versionLabel + ' is installed.', displayVersion, true);
+          updateProgressUI(null);
+          setStatus('Up to date — Nano‑Siege' + versionLabel + ' is installed.', versionSummary || remoteGameVersion || displayVersion, true);
         }
 
         if (needsUpgrade || !keepPath) {
-          setStatus('Ready — Nano‑Siege' + versionLabel + ' installed. Click Play to start.', displayVersion, true);
+          setStatus('Ready — Nano‑Siege' + versionLabel + ' installed. Click Play to start.', versionSummary || remoteGameVersion || displayVersion, true);
         }
 
         currentBinaryPath = binaryPath;
@@ -412,6 +582,18 @@
     }
 
     runUpdateFlow();
+
+    if(fsCheckbox){
+      fsCheckbox.checked = !!(settings && settings.launchFullscreen);
+      fsCheckbox.addEventListener('change', () => {
+        settings.launchFullscreen = !!fsCheckbox.checked;
+        try{
+          writeSettings(settings);
+        }catch(e){
+          // Ignore persistence errors; preference is optional.
+        }
+      });
+    }
 
     playBtn.addEventListener('click', async () => {
       if(playBtn.disabled || !canPlay || !currentBinaryPath) return;
