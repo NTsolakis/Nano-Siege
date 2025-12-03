@@ -5,6 +5,7 @@ import { Enemy } from './enemy.js';
 import { createTower, PEDESTAL_SPRITE, REACTOR_SPRITE } from './tower.js';
 import { buildWave } from './waves.js';
 import { UIManager } from './ui.js';
+import { fetchPatchNotes } from './patchnotes.js';
 import { audio } from './audio.js';
 import { MAPS } from './maps.js';
 import { TOWER_TYPES, UPGRADE_COSTS } from './config.js';
@@ -328,6 +329,8 @@ export class Game {
     this.ui.on('closeHowTo', ()=> this.handleCloseHowTo());
     this.ui.on('mainBug', ()=> this.handleOpenBug());
     this.ui.on('closeBug', ()=> this.handleCloseBug());
+    this.ui.on('mainPatchNotes', ()=> this.handleOpenPatchNotes());
+    this.ui.on('closePatchNotes', ()=> this.handleClosePatchNotes());
     this.ui.on('openAssemblyCore', ()=> this.openAssemblyCore());
     this.ui.on('removePassive', (key)=> this.refundPassive(key));
     this.ui.on('leaderboardSelectMap', (key)=>{ if(key){ this.leaderboardMapKey = key; this.refreshLeaderboard(key); } });
@@ -2170,6 +2173,26 @@ export class Game {
     }
   }
   handleCloseBug(){
+    if(this.ui && this.ui.updateModalMask){
+      this.ui.updateModalMask();
+    }
+  }
+  async handleOpenPatchNotes(){
+    if(!this.ui) return;
+    try{
+      if(!this._patchNotesLoaded){
+        const data = await fetchPatchNotes();
+        if(data && this.ui.setPatchNotes){
+          this.ui.setPatchNotes(data);
+        }
+        this._patchNotesLoaded = true;
+      }
+    }catch(e){}
+    if(this.ui.updateModalMask){
+      this.ui.updateModalMask();
+    }
+  }
+  handleClosePatchNotes(){
     if(this.ui && this.ui.updateModalMask){
       this.ui.updateModalMask();
     }

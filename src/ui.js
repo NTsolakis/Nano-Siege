@@ -37,7 +37,7 @@ function detectRuntimeFlavor(){
 
 export class UIManager{
   constructor(){
-    this.listeners = { startWave: [], startGame: [], pause: [], resume: [], retry: [], restart: [], sandboxStart: [], sandboxReset: [], sandboxOpen: [], toMenu: [], toMissionSelect: [], selectTowerType: [], upgradeSlow: [], upgradeRate: [], upgradeRange: [], upgradeBurn: [], sellTower: [], sellConfirm: [], sellCancel: [], selectMap: [], toggleFast: [], closeUpg: [], toggleVolume: [], setVolume: [], shopBuy: [], shopReroll: [], shopContinue: [], shopBuyAbility: [], useBomb: [], useOverclock: [], useCryo: [], toggleDev: [], toggleDebug: [], toggleAutoSpeed: [], exitConfirm: [], exitCancel: [], exitToMenuImmediate: [], exitToDesktop: [], openShop: [], closeShop: [], devUnlockUlts: [], devUpgradeMax: [], mainNew: [], mainLoad: [], mainAssembly: [], loadSlot: [], openAssembly: [], closeAssembly: [], startMission: [], assemblySave: [], assemblyLoad: [], openAssemblyCore: [], menuBack: [], mainSettings: [], mainSettingsBack: [], loadBack: [], loginUser: [], openCreateUser: [], closeCreateUser: [], createUser: [], openLeaderboard: [], closeLeaderboard: [], leaderboardSignIn: [], logout: [], removePassive: [], leaderboardSelectMap: [], pauseLoginOpen: [], mainDownload: [], mainHowTo: [], closeHowTo: [], mainBug: [], closeBug: [], openUserProfile: [], closeUserProfile: [], leaderboardSearch: [] };
+    this.listeners = { startWave: [], startGame: [], pause: [], resume: [], retry: [], restart: [], sandboxStart: [], sandboxReset: [], sandboxOpen: [], toMenu: [], toMissionSelect: [], selectTowerType: [], upgradeSlow: [], upgradeRate: [], upgradeRange: [], upgradeBurn: [], sellTower: [], sellConfirm: [], sellCancel: [], selectMap: [], toggleFast: [], closeUpg: [], toggleVolume: [], setVolume: [], shopBuy: [], shopReroll: [], shopContinue: [], shopBuyAbility: [], useBomb: [], useOverclock: [], useCryo: [], toggleDev: [], toggleDebug: [], toggleAutoSpeed: [], exitConfirm: [], exitCancel: [], exitToMenuImmediate: [], exitToDesktop: [], openShop: [], closeShop: [], devUnlockUlts: [], devUpgradeMax: [], mainNew: [], mainLoad: [], mainAssembly: [], loadSlot: [], openAssembly: [], closeAssembly: [], startMission: [], assemblySave: [], assemblyLoad: [], openAssemblyCore: [], menuBack: [], mainSettings: [], mainSettingsBack: [], loadBack: [], loginUser: [], openCreateUser: [], closeCreateUser: [], createUser: [], openLeaderboard: [], closeLeaderboard: [], leaderboardSignIn: [], logout: [], removePassive: [], leaderboardSelectMap: [], pauseLoginOpen: [], mainDownload: [], mainHowTo: [], closeHowTo: [], mainBug: [], closeBug: [], mainPatchNotes: [], closePatchNotes: [], openUserProfile: [], closeUserProfile: [], leaderboardSearch: [] };
     const flavor = detectRuntimeFlavor();
     this.isDesktopRuntime = !!flavor.isDesktop;
     this.isLocalRuntime = !!flavor.isLocal;
@@ -191,6 +191,11 @@ export class UIManager{
     this.$btnMainSettings = document.getElementById('btn-main-settings');
     this.$btnMainHowTo = document.getElementById('btn-main-howto');
     this.$howToOverlay = document.getElementById('howto-overlay');
+    this.$btnMainPatchNotes = document.getElementById('btn-main-patchnotes');
+    this.$patchNotesOverlay = document.getElementById('patchnotes-overlay');
+    this.$patchVersionSelect = document.getElementById('patch-version-select');
+    this.$patchVersionSummary = document.getElementById('patch-version-summary');
+    this.$patchNotesList = document.getElementById('patchnotes-list');
     this.$btnMainBug = document.getElementById('btn-main-bug');
     this.$bugOverlay = document.getElementById('bug-overlay');
     this.$bugForm = document.getElementById('bug-form');
@@ -1134,6 +1139,23 @@ export class UIManager{
         if(this.showMainMenu) this.showMainMenu(true);
         this.updateModalMask();
         this.emit('closeHowTo');
+      });
+    }
+    const $btnPatchBack = document.getElementById('btn-patch-back');
+    if(this.$btnMainPatchNotes){
+      this.$btnMainPatchNotes.addEventListener('click', ()=>{
+        if(this.showMainMenu) this.showMainMenu(false);
+        if(this.$patchNotesOverlay) this.$patchNotesOverlay.classList.add('visible');
+        this.updateModalMask();
+        this.emit('mainPatchNotes');
+      });
+    }
+    if($btnPatchBack){
+      $btnPatchBack.addEventListener('click', ()=>{
+        if(this.$patchNotesOverlay) this.$patchNotesOverlay.classList.remove('visible');
+        if(this.showMainMenu) this.showMainMenu(true);
+        this.updateModalMask();
+        this.emit('closePatchNotes');
       });
     }
     const $btnBugBack = document.getElementById('btn-bug-back');
@@ -2261,7 +2283,8 @@ export class UIManager{
     const mainSettingsVisible = this.$mainSettings && this.$mainSettings.classList.contains('visible');
     const howtoVisible = this.$howToOverlay && this.$howToOverlay.classList.contains('visible');
     const bugVisible = this.$bugOverlay && this.$bugOverlay.classList.contains('visible');
-    const modalActive = !!(loadVisible || createVisible || boardVisible || profileVisible || mapSelVisible || modesVisible || assemblyVisible || mainSettingsVisible || howtoVisible || bugVisible);
+    const patchVisible = this.$patchNotesOverlay && this.$patchNotesOverlay.classList.contains('visible');
+    const modalActive = !!(loadVisible || createVisible || boardVisible || profileVisible || mapSelVisible || modesVisible || assemblyVisible || mainSettingsVisible || howtoVisible || bugVisible || patchVisible);
     this.$root.classList.toggle('modal-overlay', modalActive);
     const menuVisible = this.$mainMenu && this.$mainMenu.classList.contains('visible');
     document.body.classList.toggle('mainmenu-visible', modalActive || menuVisible);
@@ -2273,6 +2296,74 @@ export class UIManager{
   showUserProfile(show){
     if(this.$profileOverlay) this.$profileOverlay.classList.toggle('visible', !!show);
     this.updateModalMask();
+  }
+  setPatchNotes(data){
+    if(!data || !this.$patchVersionSelect || !this.$patchNotesList) return;
+    const meta = data.meta || null;
+    const versions = Array.isArray(data.versions) ? data.versions : [];
+    this._patchMeta = meta;
+    this._patchVersions = versions;
+
+    while(this.$patchVersionSelect.firstChild){
+      this.$patchVersionSelect.removeChild(this.$patchVersionSelect.firstChild);
+    }
+    let initial = null;
+    const currentGame = meta && (meta.gameVersion || meta.version);
+    for(const v of versions){
+      if(!v || !v.version) continue;
+      const opt = document.createElement('option');
+      opt.value = v.version;
+      opt.textContent = v.version;
+      this.$patchVersionSelect.appendChild(opt);
+      if(!initial) initial = v;
+      if(currentGame && v.version === currentGame){
+        initial = v;
+      }
+    }
+    if(!initial && versions.length){
+      initial = versions[0];
+    }
+    const applySelection = (entry)=>{
+      if(!entry) return;
+      if(this.$patchVersionSelect){
+        this.$patchVersionSelect.value = entry.version;
+      }
+      if(this.$patchVersionSummary){
+        const parts = [];
+        parts.push(`Game v${entry.version}`);
+        const launcherVersion = meta && meta.launcherVersion;
+        if(launcherVersion){
+          parts.push(`Launcher v${launcherVersion}`);
+        }
+        this.$patchVersionSummary.textContent = parts.join(' • ');
+      }
+      while(this.$patchNotesList.firstChild){
+        this.$patchNotesList.removeChild(this.$patchNotesList.firstChild);
+      }
+      const lines = Array.isArray(entry.notes) ? entry.notes : [];
+      for(const line of lines){
+        const li = document.createElement('li');
+        li.textContent = line;
+        this.$patchNotesList.appendChild(li);
+      }
+    };
+    this._applyPatchNotesSelection = applySelection;
+    if(initial){
+      applySelection(initial);
+    }else{
+      if(this.$patchVersionSummary) this.$patchVersionSummary.textContent = '';
+      while(this.$patchNotesList.firstChild){
+        this.$patchNotesList.removeChild(this.$patchNotesList.firstChild);
+      }
+    }
+    if(this.$patchVersionSelect){
+      this.$patchVersionSelect.onchange = ()=>{
+        if(!this._patchVersions || !this._applyPatchNotesSelection) return;
+        const v = this.$patchVersionSelect.value;
+        const entry = this._patchVersions.find((e)=> e && e.version === v);
+        if(entry) this._applyPatchNotesSelection(entry);
+      };
+    }
   }
   showMainSettings(show){
     if(this.$mainSettings) this.$mainSettings.classList.toggle('visible', !!show);

@@ -390,6 +390,89 @@ app.get('/api/user/:username', (req, res) => {
   return res.json({ ok: true, profile });
 });
 
+function readPublicMeta() {
+  try {
+    const metaPath = path.join(PUBLIC_DIR, 'data', 'meta.json');
+    const raw = fs.readFileSync(metaPath, 'utf8');
+    const meta = JSON.parse(raw);
+    if (!meta || typeof meta !== 'object') return null;
+    return meta;
+  } catch (e) {
+    return null;
+  }
+}
+
+function parseSemverTriplet(v) {
+  const parts = String(v || '').split('.');
+  const major = parseInt(parts[0], 10) || 0;
+  const minor = parseInt(parts[1], 10) || 0;
+  const patch = parseInt(parts[2], 10) || 0;
+  return { major, minor, patch };
+}
+
+function compareVersionsDesc(a, b) {
+  const va = parseSemverTriplet(a);
+  const vb = parseSemverTriplet(b);
+  if (va.major !== vb.major) return vb.major - va.major;
+  if (va.minor !== vb.minor) return vb.minor - va.minor;
+  return vb.patch - va.patch;
+}
+
+function readPatchNotesFromPublic() {
+  const dir = path.join(PUBLIC_DIR, 'data');
+  let entries;
+  try {
+    entries = fs.readdirSync(dir, { withFileTypes: true });
+  } catch (e) {
+    return [];
+  }
+  const out = [];
+  for (const ent of entries) {
+    try {
+      if (!ent || !ent.isFile || !ent.isFile()) continue;
+      const name = ent.name || '';
+      const m = /^patchnotes-(\d+\.\d+\.\d+)\.txt$/.exec(name);
+      if (!m) continue;
+      const version = m[1];
+      const fullPath = path.join(dir, name);
+      let raw;
+      try {
+        raw = fs.readFileSync(fullPath, 'utf8');
+      } catch (e) {
+        continue;
+      }
+      const lines = String(raw)
+        .split('\n')
+        .map((s) => s.trim())
+        .filter((s) => s.length > 0);
+      if (!lines.length) continue;
+      out.push({ version, notes: lines });
+    } catch (e) {
+      // Ignore malformed entries so a single bad file never breaks the API.
+    }
+  }
+  // Sort newest-first by semantic version triplet.
+  out.sort((a, b) => compareVersionsDesc(a.version, b.version));
+  return out;
+}
+
+// Public patch notes API used by the in-game "Patch Notes" screen.
+// Returns only game-facing notes; backend/launcher-only details are
+// intentionally omitted by the deploy script.
+app.get('/api/patchnotes', (req, res) => {
+  try {
+    const meta = readPublicMeta();
+    const versions = readPatchNotesFromPublic();
+    return res.json({
+      ok: true,
+      meta: meta || null,
+      versions
+    });
+  } catch (e) {
+    return res.status(500).json({ ok: false, error: 'patchnotes_unavailable' });
+  }
+});
+
 // Static game files
 app.use(express.static(PUBLIC_DIR));
 

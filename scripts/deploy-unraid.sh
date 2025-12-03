@@ -77,10 +77,8 @@ if [ -z "$last_tag" ]; then
   changed_backend=1
   changed_game=1
   changed_launcher=1
-  patch_notes=$(git log --pretty=format:"%s")
 else
   echo "Last deploy tag: $last_tag"
-  patch_notes=$(git log "$last_tag"..HEAD --pretty=format:"%s")
 
   changed_files=$(git diff --name-only "$last_tag"..HEAD || true)
   if [ -z "$changed_files" ]; then
@@ -117,8 +115,38 @@ else
   fi
 fi
 
-if [ -z "${patch_notes:-}" ]; then
-  patch_notes="No code changes since last deploy."
+# Build game-focused patch notes from commits that touched the
+# browser/desktop game client (front-end). Backend/launcher-only
+# changes are intentionally omitted from these notes so the in-game
+# patch screen stays player-focused.
+patch_notes=""
+if [ -z "$last_tag" ]; then
+  patch_notes=$(git log --pretty=format:"%s" -- \
+    src \
+    index.html \
+    styles.css \
+    sandbox-config.js \
+    electron-main.js \
+    electron-preload.js \
+    scripts/build-local-zip.sh \
+    2>/dev/null || true)
+else
+  patch_notes=$(git log "$last_tag"..HEAD --pretty=format:"%s" -- \
+    src \
+    index.html \
+    styles.css \
+    sandbox-config.js \
+    electron-main.js \
+    electron-preload.js \
+    scripts/build-local-zip.sh \
+    2>/dev/null || true)
+fi
+
+# If no game commits are found in this range, keep a single friendly
+# note so the in-game patch notes screen can still explain that the
+# update was backend/launcher-only.
+if [ -z "${patch_notes//[$'\t\r\n ']}" ]; then
+  patch_notes="No gameplay changes in this update."
 fi
 
 bump_needed=0

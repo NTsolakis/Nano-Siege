@@ -215,7 +215,7 @@
 
     function setStatus(text, version, ready){
       statusEl.textContent = text || '';
-      versionEl.textContent = version ? ('Version ' + version) : '';
+      versionEl.textContent = version ? ('Alpha ' + version) : '';
       canPlay = !!ready;
       playBtn.disabled = !canPlay;
     }

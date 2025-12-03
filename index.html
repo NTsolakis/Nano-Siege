@@ -388,6 +388,7 @@
             <button id="btn-main-leaderboard">Leaderboard</button>
             <button id="btn-main-settings">Settings</button>
             <button id="btn-main-howto">How to Play</button>
+            <button id="btn-main-patchnotes">Patch Notes</button>
             <button id="btn-main-bug">Bug Reports &amp; Suggestions</button>
             <button id="btn-main-loaduser">Sign In</button>
             <button id="btn-main-download">Download</button>
@@ -448,6 +449,29 @@
             </div>
             <p class="bug-footer">Reports are sent securely via Formspree.</p>
           </form>
+        </div>
+      </section>
+
+      <!-- Patch Notes -->
+      <section id="patchnotes-overlay" class="overlay mainmenu">
+        <div class="panel mainmenu-panel">
+          <h2>Patch Notes</h2>
+          <p class="tag">Recent changes to Nano‑Siege’s reactor defense protocols.</p>
+
+          <div class="patch-grid">
+            <div class="patch-versions">
+              <label for="patch-version-select">Version</label>
+              <select id="patch-version-select"></select>
+            </div>
+            <div class="patch-notes">
+              <div id="patch-version-summary" class="patch-version-summary"></div>
+              <ul id="patchnotes-list" class="patchnotes-list"></ul>
+            </div>
+          </div>
+
+          <div class="actions" style="margin-top:18px">
+            <button id="btn-patch-back">Back</button>
+          </div>
         </div>
       </section>
 
@@ -937,6 +961,12 @@
     <div id="signin-banner" class="signin-banner">
       <span class="label">Signed in as</span>
       <span id="signin-username" class="name">Guest</span>
+    </div>
+
+    <div id="launcher-banner" class="signin-banner launcher-banner" style="display:none">
+      <span class="label">Launcher update</span>
+      <span id="launcher-banner-text" class="name">New launcher available</span>
+      <button id="launcher-banner-download" type="button">Download</button>
     </div>
 
     <script>

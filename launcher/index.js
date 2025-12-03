@@ -491,7 +491,7 @@ function renderLauncherHtml() {
             .then(function(data){
               if(!data){ throw new Error('bad status'); }
               statusEl.textContent = data.statusText || '';
-              versionEl.textContent = data.version ? ('Version ' + data.version) : '';
+              versionEl.textContent = data.version ? ('Alpha ' + data.version) : '';
 
               // Mirror fullscreen preference from the Node side.
               if(fsCheckbox && data.settings && typeof data.settings.launchFullscreen === 'boolean'){
