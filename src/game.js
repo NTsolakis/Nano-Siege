@@ -171,6 +171,11 @@ export class Game {
     this.placing = true; // default in placement mode
     this.selectedTower = 'basic';
 
+    // If the player previously chose to stay signed in on this device,
+    // hydrate a lightweight auth snapshot so leaderboard saves and
+    // profile actions work immediately on next launch.
+    this._hydrateAuthFromStorage();
+
     canvas.addEventListener('mousemove', (e)=>{
       const rect = canvas.getBoundingClientRect();
       const scaleX = canvas.width / rect.width;
@@ -1374,6 +1379,7 @@ export class Game {
     if(!creds) return;
     const username = (creds.username||'').trim();
     const password = creds.password||'';
+    const staySignedIn = !!creds.staySignedIn;
     if(!username || !password){
       if(this.ui.setLoginStatus) this.ui.setLoginStatus('Username and password required', false);
       return;
@@ -1383,9 +1389,11 @@ export class Game {
       const res = await apiLoginUser(username, password);
       this.currentUser = { username: res.username || username };
       this.ui.setSignedInUser?.(this.currentUser.username);
+      // Persist or clear the auth preference based on the toggle.
+      this._writeAuthPref(this.currentUser.username, staySignedIn);
       // Remember latest profile state from the backend.
       this.pendingUserState = res.state || null;
-      // If we logged in from the main menu / Assembly, immediately
+      // If we logged in from the main menu / Assembly / leaderboard, immediately
       // reset into Assembly mode and apply the saved profile. If the
       // login originated from the in‑run pause menu, avoid resetting
       // the current Endless Cycle run; the profile will be applied the
@@ -1412,12 +1420,15 @@ export class Game {
       // Close login overlay back to original context
       if(this.ui.showLoadMenu) this.ui.showLoadMenu(false);
       if(this.ui.showCreateMenu) this.ui.showCreateMenu(false);
-      if(this.profileOrigin === 'assembly'){
+      const uiOrigin = this.profileOrigin || 'mainmenu';
+      if(uiOrigin === 'assembly'){
         if(this.ui.showAssembly) this.ui.showAssembly(true);
-      } else if(this.profileOrigin === 'mainmenu'){
+      } else if(uiOrigin === 'mainmenu'){
         if(this.ui.showMainMenu) this.ui.showMainMenu(true);
-      } else if(this.profileOrigin === 'pause'){
+      } else if(uiOrigin === 'pause'){
         if(this.ui.showPauseLogin) this.ui.showPauseLogin(false);
+      } else if(uiOrigin === 'leaderboard'){
+        this.openLeaderboard();
       }
       this.profileOrigin = null;
     }catch(err){
@@ -1479,6 +1490,7 @@ export class Game {
     }catch(e){
       // Even if the request fails, clear local state to force a fresh login.
     }
+    this._clearAuthPref();
     this.currentUser = null;
     this.fragments = 0;
     this.coreShards = 0;
@@ -1499,8 +1511,15 @@ export class Game {
     if(context?.source === 'login' && this.ui.setLoginStatus){
       this.ui.setLoginStatus('Signed out.', true);
     }
-    if(context?.source === 'leaderboard' && this.ui.setLeaderboardStatus){
-      this.ui.setLeaderboardStatus('Signed out.', true);
+    if(context?.source === 'leaderboard'){
+      if(this.ui.setLeaderboardStatus){
+        this.ui.setLeaderboardStatus('Signed out.', true);
+      }
+      // After signing out from the leaderboard, close it and return
+      // to the main menu so future leaderboard access goes back
+      // through the sign-in flow.
+      if(this.ui.showLeaderboard) this.ui.showLeaderboard(false);
+      if(this.ui.showMainMenu) this.ui.showMainMenu(true);
     }
     this.profileOrigin = null;
     this.profileMode = null;
@@ -1573,6 +1592,19 @@ export class Game {
     }
   }
   openLeaderboard(){
+    // Require a signed-in profile before viewing the leaderboard.
+    if(!this.currentUser){
+      this.profileOrigin = 'leaderboard';
+      if(this.ui.showMainMenu) this.ui.showMainMenu(false);
+      if(this.ui.showAssembly) this.ui.showAssembly(false);
+      if(this.ui.showCreateMenu) this.ui.showCreateMenu(false);
+      if(this.ui.clearLoginForm) this.ui.clearLoginForm();
+      if(this.ui.setLoadHeading){
+        this.ui.setLoadHeading('Sign In', 'Sign in to view the leaderboard.');
+      }
+      if(this.ui.showLoadMenu) this.ui.showLoadMenu(true);
+      return;
+    }
     this.leaderboardOrigin = 'mainmenu';
     if(this.ui.showMainMenu) this.ui.showMainMenu(false);
     if(this.ui.setLeaderboardLoading) this.ui.setLeaderboardLoading(true);
@@ -1607,6 +1639,12 @@ export class Game {
       if(this.ui && typeof this.ui.setLeaderboardStatus === 'function'){
         const msg = (e && e.message) ? e.message : 'Could not submit leaderboard entry.';
         this.ui.setLeaderboardStatus(msg, false);
+        // If the backend reports missing/invalid auth, treat the
+        // session as expired so the UI doesn't stay in a "signed in"
+        // state while scores silently fail to post.
+        if(msg === 'auth required' || msg === 'invalid token'){
+          this.handleLogout?.({ source:'auth' });
+        }
       }
     }
   }
@@ -1704,6 +1742,52 @@ export class Game {
       window.localStorage.setItem('nano_siege_auto_speed', on ? '1' : '0');
     }catch(e){
       // ignore
+    }
+  }
+
+  _readAuthPref(){
+    if(typeof window === 'undefined' || !window.localStorage) return null;
+    try{
+      const raw = window.localStorage.getItem('nano_siege_auth_v1');
+      if(!raw) return null;
+      const parsed = JSON.parse(raw);
+      if(!parsed || typeof parsed !== 'object') return null;
+      const name = (parsed.username || '').trim();
+      if(!name) return null;
+      return { username: name, stay: !!parsed.stay };
+    }catch(e){
+      return null;
+    }
+  }
+  _writeAuthPref(username, stay){
+    if(typeof window === 'undefined' || !window.localStorage) return;
+    try{
+      const name = (username || '').trim();
+      if(!name || !stay){
+        window.localStorage.removeItem('nano_siege_auth_v1');
+        return;
+      }
+      const payload = { username: name, stay: true };
+      window.localStorage.setItem('nano_siege_auth_v1', JSON.stringify(payload));
+    }catch(e){
+      // ignore
+    }
+  }
+  _clearAuthPref(){
+    if(typeof window === 'undefined' || !window.localStorage) return;
+    try{
+      window.localStorage.removeItem('nano_siege_auth_v1');
+    }catch(e){
+      // ignore
+    }
+  }
+
+  _hydrateAuthFromStorage(){
+    const pref = this._readAuthPref();
+    if(!pref || !pref.username) return;
+    this.currentUser = { username: pref.username };
+    if(this.ui && typeof this.ui.setSignedInUser === 'function'){
+      this.ui.setSignedInUser(pref.username);
     }
   }
 

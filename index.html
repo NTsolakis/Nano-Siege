@@ -280,6 +280,13 @@
                 </div>
                 <div id="pause-login-status" class="login-status"></div>
               </div>
+              <div class="dev-toggle" style="margin-top:8px">
+                <span class="dev-label">Stay signed in</span>
+                <label class="switch">
+                  <input type="checkbox" id="pause-login-stay-signedin" />
+                  <span class="slider"></span>
+                </label>
+              </div>
               <div class="actions" style="margin-top:10px">
                 <button id="btn-pause-login-submit">Sign In</button>
                 <button id="btn-pause-login-back">Back</button>
@@ -748,7 +755,7 @@
             </div>
             <!-- Desktop-only quick actions: wired in JS; hidden on hosted build -->
             <div class="actions" id="mainsettings-desktop-actions" style="margin-top:14px; display:none">
-              <button id="btn-main-fullscreen">Fullscreen</button>
+              <button id="btn-main-fullscreen">Switch to Fullscreen</button>
               <button id="btn-main-devsettings">Developer Settings</button>
             </div>
           </div>
@@ -802,6 +809,13 @@
             </div>
             <div id="login-status" class="login-status"></div>
           </div>
+          <div class="dev-toggle" style="margin-top:10px">
+            <span class="dev-label">Stay signed in</span>
+            <label class="switch">
+              <input type="checkbox" id="login-stay-signedin" />
+              <span class="slider"></span>
+            </label>
+          </div>
           <div class="actions" style="margin-top:18px">
             <button id="btn-login-submit">Sign In</button>
             <button id="btn-login-create">Create User</button>
@@ -853,7 +867,7 @@
             <div class="leaderboard-container">
               <ol id="leaderboard-list" class="leaderboard-list"></ol>
             </div>
-            <p class="leaderboard-warning" id="leaderboard-warning">Sign in to compete for a spot on the leaderboard.</p>
+            <p class="leaderboard-warning" id="leaderboard-warning">Leaderboard scores are recorded from signed‑in runs.</p>
             <p class="leaderboard-dev-warning" id="leaderboard-dev-warning">Developer Mode is on — leaderboard scores are disabled.</p>
             <div id="leaderboard-status" class="login-status" style="text-align:center"></div>
             <div class="lb-search-row">

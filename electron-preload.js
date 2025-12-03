@@ -14,6 +14,34 @@ try {
       } catch (e) {
         // Best-effort; renderer also has a window.close fallback.
       }
+    },
+    getFullscreen: async () => {
+      try {
+        return await ipcRenderer.invoke('nano-fullscreen-get');
+      } catch (e) {
+        return false;
+      }
+    },
+    toggleFullscreen: async () => {
+      try {
+        return await ipcRenderer.invoke('nano-fullscreen-toggle');
+      } catch (e) {
+        return false;
+      }
+    },
+    onFullscreenChanged: (handler) => {
+      try {
+        if (typeof handler !== 'function') return;
+        ipcRenderer.on('nano-fullscreen-changed', (_event, isFullscreen) => {
+          try {
+            handler(!!isFullscreen);
+          } catch (_) {
+            // Ignore handler errors to avoid breaking future events.
+          }
+        });
+      } catch (e) {
+        // Ignore; fullscreen events are optional.
+      }
     }
   });
 } catch (e) {

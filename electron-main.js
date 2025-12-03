@@ -32,10 +32,50 @@ function createWindow() {
   win.setMenuBarVisibility(false);
   win.loadFile(path.join(__dirname, 'index.html'));
 
+  win.on('enter-full-screen', () => {
+    try {
+      win.webContents.send('nano-fullscreen-changed', true);
+    } catch (e) {
+      // Ignore; fullscreen label updates are best-effort.
+    }
+  });
+
+  win.on('leave-full-screen', () => {
+    try {
+      win.webContents.send('nano-fullscreen-changed', false);
+    } catch (e) {
+      // Ignore; fullscreen label updates are best-effort.
+    }
+  });
+
   // Open external links (e.g. update/download URLs) in the system browser.
   win.webContents.setWindowOpenHandler(({ url }) => {
     shell.openExternal(url).catch(() => {});
     return { action: 'deny' };
+  });
+}
+
+if (ipcMain && typeof ipcMain.handle === 'function') {
+  ipcMain.handle('nano-fullscreen-get', () => {
+    try {
+      const win = BrowserWindow.getFocusedWindow();
+      if (!win) return false;
+      return !!win.isFullScreen();
+    } catch (e) {
+      return false;
+    }
+  });
+
+  ipcMain.handle('nano-fullscreen-toggle', () => {
+    try {
+      const win = BrowserWindow.getFocusedWindow();
+      if (!win) return false;
+      const next = !win.isFullScreen();
+      win.setFullScreen(next);
+      return next;
+    } catch (e) {
+      return false;
+    }
   });
 }
 
@@ -49,18 +89,20 @@ app.whenReady().then(() => {
   });
 });
 
-ipcMain.on('nano-quit', () => {
-  try {
-    app.quit();
-  } catch (e) {
-    // Fallback: try closing all windows if quit fails.
+if (ipcMain && typeof ipcMain.on === 'function') {
+  ipcMain.on('nano-quit', () => {
     try {
-      BrowserWindow.getAllWindows().forEach((w) => {
-        try { w.close(); } catch (_) {}
-      });
-    } catch (_) {}
-  }
-});
+      app.quit();
+    } catch (e) {
+      // Fallback: try closing all windows if quit fails.
+      try {
+        BrowserWindow.getAllWindows().forEach((w) => {
+          try { w.close(); } catch (_) {}
+        });
+      } catch (_) {}
+    }
+  });
+}
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {

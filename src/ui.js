@@ -268,6 +268,8 @@ export class UIManager{
     this.$loginUsername = document.getElementById('login-username');
     this.$loginPassword = document.getElementById('login-password');
     this.$loginStatus = document.getElementById('login-status');
+    this.$loginStaySignedIn = document.getElementById('login-stay-signedin');
+    this.$pauseLoginStaySignedIn = document.getElementById('pause-login-stay-signedin');
     // Create user elements
     this.$createUsername = document.getElementById('create-username');
     this.$createPassword = document.getElementById('create-password');
@@ -1216,7 +1218,8 @@ export class UIManager{
         }
         const payload = {
           username: this.$loginUsername ? (this.$loginUsername.value||'').trim() : '',
-          password: this.$loginPassword ? (this.$loginPassword.value||'') : ''
+          password: this.$loginPassword ? (this.$loginPassword.value||'') : '',
+          staySignedIn: this.$loginStaySignedIn ? !!this.$loginStaySignedIn.checked : false
         };
         this.emit('loginUser', payload);
       });
@@ -1239,7 +1242,8 @@ export class UIManager{
         }
         const payload = {
           username: this.$pauseLoginUsername ? (this.$pauseLoginUsername.value||'').trim() : '',
-          password: this.$pauseLoginPassword ? (this.$pauseLoginPassword.value||'') : ''
+          password: this.$pauseLoginPassword ? (this.$pauseLoginPassword.value||'') : '',
+          staySignedIn: this.$pauseLoginStaySignedIn ? !!this.$pauseLoginStaySignedIn.checked : false
         };
         this.emit('loginUser', payload);
       });
@@ -1354,15 +1358,38 @@ export class UIManager{
       });
     }
     if(isDesktopRuntime && this.$btnMainFullscreen){
+      let isDesktopFullscreen = false;
+      const applyFullscreenLabel = (isFullscreen)=>{
+        isDesktopFullscreen = !!isFullscreen;
+        this.$btnMainFullscreen.textContent = isDesktopFullscreen
+          ? 'Switch to Windowed'
+          : 'Switch to Fullscreen';
+      };
       const updateFsLabel = ()=>{
-        const isFs = !!(document.fullscreenElement || document.webkitFullscreenElement);
-        this.$btnMainFullscreen.textContent = isFs ? 'Windowed' : 'Fullscreen';
+        try{
+          if(typeof window !== 'undefined' && window.NANO_DESKTOP && typeof window.NANO_DESKTOP.getFullscreen === 'function'){
+            window.NANO_DESKTOP.getFullscreen().then((isFullscreen)=>{
+              applyFullscreenLabel(isFullscreen);
+            }).catch(()=>{});
+          }else{
+            const isFullscreen = !!(document.fullscreenElement || document.webkitFullscreenElement);
+            applyFullscreenLabel(isFullscreen);
+          }
+        }catch(e){}
       };
       const toggleFs = ()=>{
         try{
+          if(typeof window !== 'undefined' && window.NANO_DESKTOP && typeof window.NANO_DESKTOP.toggleFullscreen === 'function'){
+            window.NANO_DESKTOP.toggleFullscreen().then((isFullscreen)=>{
+              applyFullscreenLabel(isFullscreen);
+            }).catch(()=>{});
+            return;
+          }
+        }catch(e){}
+        try{
           const rootEl = document.documentElement;
-          const isFs = !!(document.fullscreenElement || document.webkitFullscreenElement);
-          if(isFs){
+          const isFullscreen = !!(document.fullscreenElement || document.webkitFullscreenElement);
+          if(isFullscreen){
             if(document.exitFullscreen){
               document.exitFullscreen().catch(()=>{});
             }else if(document.webkitExitFullscreen){
@@ -1379,8 +1406,18 @@ export class UIManager{
       };
       updateFsLabel();
       this.$btnMainFullscreen.addEventListener('click', toggleFs);
-      document.addEventListener('fullscreenchange', updateFsLabel);
-      document.addEventListener('webkitfullscreenchange', updateFsLabel);
+      if(typeof window !== 'undefined' && window.NANO_DESKTOP && typeof window.NANO_DESKTOP.onFullscreenChanged === 'function'){
+        try{
+          window.NANO_DESKTOP.onFullscreenChanged((isFullscreen)=>{
+            try{
+              applyFullscreenLabel(isFullscreen);
+            }catch(e){}
+          });
+        }catch(e){}
+      }else{
+        document.addEventListener('fullscreenchange', updateFsLabel);
+        document.addEventListener('webkitfullscreenchange', updateFsLabel);
+      }
     }
 
     // Automatic speed control toggle (main settings + in-game settings)
@@ -2035,6 +2072,8 @@ export class UIManager{
     if(this.$loginPassword) this.$loginPassword.value = '';
     if(this.$pauseLoginUsername) this.$pauseLoginUsername.value = '';
     if(this.$pauseLoginPassword) this.$pauseLoginPassword.value = '';
+    if(this.$loginStaySignedIn) this.$loginStaySignedIn.checked = false;
+    if(this.$pauseLoginStaySignedIn) this.$pauseLoginStaySignedIn.checked = false;
     this.setLoginStatus('');
   }
   setCreateStatus(message, ok=true){
@@ -2838,7 +2877,7 @@ export class UIManager{
       this.$leaderboardWarning.classList.add('signed-in');
       this.$leaderboardWarning.classList.remove('warn');
     } else {
-      this.$leaderboardWarning.textContent = 'Sign in to compete for a spot on the leaderboard.';
+      this.$leaderboardWarning.textContent = 'Leaderboard scores are recorded from signed-in runs.';
       this.$leaderboardWarning.classList.remove('signed-in');
       this.$leaderboardWarning.classList.add('warn');
     }
