@@ -4,6 +4,7 @@ const path = require('path');
 const bcrypt = require('bcryptjs');
 const cookieParser = require('cookie-parser');
 const jwt = require('jsonwebtoken');
+const crypto = require('crypto');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -70,6 +71,15 @@ app.use((req, res, next) => {
   next();
 });
 
+// Basic IP + User-Agent logging for lightweight diagnostics.
+app.use((req, res, next) => {
+  try {
+    const ua = req.headers && req.headers['user-agent'];
+    console.log(`[REQ] ${req.method} ${req.path} from ${req.ip} - ${ua || 'unknown'}`);
+  } catch (e) {}
+  next();
+});
+
 // Basic health check
 app.get('/api/health', (req, res) => {
   res.json({ ok: true });
@@ -114,25 +124,75 @@ function requireAuth(req, res, next) {
   }
 }
 
+function requireRole(role) {
+  return function(req, res, next) {
+    const db = loadDb();
+    const user = db.users.find(u => u.username === req.user.username);
+    if (!user || !user.roles || !user.roles.includes(role)) {
+      return res.status(403).json({ ok: false, error: 'forbidden' });
+    }
+    next();
+  };
+}
+
+// Admin helpers
+app.get('/api/admin/users', requireAuth, requireRole('admin'), (req, res) => {
+  const db = loadDb();
+  res.json({ ok: true, users: db.users });
+});
+
 // Login or create user.
 app.post('/api/login', (req, res) => {
   const { username, password } = req.body || {};
+  const ip = req.ip || (req.connection && req.connection.remoteAddress) || 'unknown';
+  const ua = (req.headers && req.headers['user-agent']) || 'unknown';
+
   if (!username || !password) {
     return res.status(400).json({ ok: false, error: 'username and password required' });
   }
   const name = String(username).trim();
   if (!name) return res.status(400).json({ ok: false, error: 'invalid username' });
 
+  const now = Date.now();
   const db = loadDb();
   let user = db.users.find(u => u.username === name);
+
+  // Auto-create user if they don't exist.
   if (!user) {
     const hash = bcrypt.hashSync(password, 10);
-    user = { username: name, passwordHash: hash, state: defaultState(), createdAt: Date.now(), updatedAt: Date.now() };
+    user = {
+      id: crypto.randomUUID(),
+      username: name,
+      passwordHash: hash,
+      roles: ['user'],
+      banned: false,
+      createdAt: now,
+      updatedAt: now,
+      lastLoginAt: null,
+      loginHistory: [],
+      state: defaultState(),
+      scoreHistory: []
+    };
     db.users.push(user);
   }
+
+  // Password check
   const valid = bcrypt.compareSync(password, user.passwordHash);
   if (!valid) return res.status(401).json({ ok: false, error: 'invalid credentials' });
+
+  // If banned, deny login
+  if (user.banned) {
+    return res.status(403).json({ ok: false, error: 'banned' });
+  }
+
+  // Record login event
+  user.lastLoginAt = now;
+  user.loginHistory = user.loginHistory || [];
+  user.loginHistory.push({ at: now, ip, ua });
+  user.updatedAt = now;
+
   saveDb(db);
+
   const session = issueToken(res, name);
   return res.json({
     ok: true,
@@ -159,7 +219,22 @@ app.post('/api/create', (req, res) => {
     return res.status(409).json({ ok: false, error: 'user already exists' });
   }
   const hash = bcrypt.hashSync(password, 10);
-  const user = { username: name, passwordHash: hash, state: defaultState(), createdAt: Date.now(), updatedAt: Date.now() };
+  const now = Date.now();
+  const ip = req.ip || (req.connection && req.connection.remoteAddress) || 'unknown';
+  const ua = (req.headers && req.headers['user-agent']) || 'unknown';
+  const user = {
+    id: crypto.randomUUID(),
+    username: name,
+    passwordHash: hash,
+    roles: ['user'],
+    banned: false,
+    createdAt: now,
+    updatedAt: now,
+    lastLoginAt: now,
+    loginHistory: [{ at: now, ip, ua }],
+    state: defaultState(),
+    scoreHistory: []
+  };
   db.users.push(user);
   saveDb(db);
   const session = issueToken(res, name);
@@ -168,7 +243,7 @@ app.post('/api/create', (req, res) => {
     created: true,
     username: session.username,
     token: session.token,
-    state: user.state
+    state: user.state || defaultState()
   });
 });
 
@@ -241,6 +316,20 @@ app.post('/api/leaderboard', requireAuth, (req, res) => {
   const pilot = (typeof character === 'string' && character.trim()) ? character.trim() : null;
   const db = loadDb();
   db.leaderboard = db.leaderboard || [];
+
+  // Add run to user's personal scoreHistory
+  const user = db.users.find(u => u.username === req.user.username);
+  if (user) {
+    user.scoreHistory = user.scoreHistory || [];
+    user.scoreHistory.push({
+      map: mapKey,
+      waves: Math.floor(waves),
+      perfectCombo: perfectVal,
+      character: pilot || null,
+      at: Date.now()
+    });
+  }
+
   let entry = db.leaderboard.find(e => e.username === req.user.username && (e.map || DEFAULT_MAP) === mapKey);
   if (entry) {
     if (waves > (entry.waves || 0)) {
@@ -262,6 +351,43 @@ app.post('/api/leaderboard', requireAuth, (req, res) => {
   }
   saveDb(db);
   return res.json({ ok: true });
+});
+
+// Public player profile lookup by username.
+app.get('/api/user/:username', (req, res) => {
+  const name = String(req.params && req.params.username || '').trim();
+  if (!name) {
+    return res.status(400).json({ ok: false, error: 'invalid username' });
+  }
+  const db = loadDb();
+  const user = db.users.find(u => u.username === name);
+  if (!user) {
+    return res.status(404).json({ ok: false, error: 'user not found' });
+  }
+
+  const safeScoreHistory = Array.isArray(user.scoreHistory) ? user.scoreHistory.map(entry => ({
+    map: entry.map || null,
+    waves: Number.isFinite(entry.waves) ? Math.floor(entry.waves) : 0,
+    perfectCombo: Number.isFinite(entry.perfectCombo) ? Math.max(0, Math.floor(entry.perfectCombo)) : 0,
+    character: entry.character || entry.pilot || null,
+    at: Number.isFinite(entry.at) ? entry.at : null
+  })) : [];
+
+  const profile = {
+    username: user.username,
+    createdAt: user.createdAt,
+    lastLoginAt: user.lastLoginAt || null,
+    roles: Array.isArray(user.roles) && user.roles.length ? user.roles : ['user'],
+    bestPerfectCombo: user.state && Number.isFinite(user.state.bestPerfectCombo)
+      ? user.state.bestPerfectCombo
+      : 0,
+    missionUnlockLevel: user.state && Number.isFinite(user.state.missionUnlockLevel)
+      ? user.state.missionUnlockLevel
+      : 1,
+    scoreHistory: safeScoreHistory
+  };
+
+  return res.json({ ok: true, profile });
 });
 
 // Static game files

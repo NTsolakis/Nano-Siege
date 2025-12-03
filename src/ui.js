@@ -37,7 +37,7 @@ function detectRuntimeFlavor(){
 
 export class UIManager{
   constructor(){
-    this.listeners = { startWave: [], startGame: [], pause: [], resume: [], retry: [], restart: [], sandboxStart: [], sandboxReset: [], sandboxOpen: [], toMenu: [], toMissionSelect: [], selectTowerType: [], upgradeSlow: [], upgradeRate: [], upgradeRange: [], upgradeBurn: [], sellTower: [], sellConfirm: [], sellCancel: [], selectMap: [], toggleFast: [], closeUpg: [], toggleVolume: [], setVolume: [], shopBuy: [], shopReroll: [], shopContinue: [], shopBuyAbility: [], useBomb: [], useOverclock: [], useCryo: [], toggleDev: [], toggleDebug: [], toggleAutoSpeed: [], exitConfirm: [], exitCancel: [], exitToMenuImmediate: [], exitToDesktop: [], openShop: [], closeShop: [], devUnlockUlts: [], devUpgradeMax: [], mainNew: [], mainLoad: [], mainAssembly: [], loadSlot: [], openAssembly: [], closeAssembly: [], startMission: [], assemblySave: [], assemblyLoad: [], openAssemblyCore: [], menuBack: [], mainSettings: [], mainSettingsBack: [], loadBack: [], loginUser: [], openCreateUser: [], closeCreateUser: [], createUser: [], openLeaderboard: [], closeLeaderboard: [], leaderboardSignIn: [], logout: [], removePassive: [], leaderboardSelectMap: [], pauseLoginOpen: [], mainDownload: [], mainHowTo: [], closeHowTo: [], mainBug: [], closeBug: [] };
+    this.listeners = { startWave: [], startGame: [], pause: [], resume: [], retry: [], restart: [], sandboxStart: [], sandboxReset: [], sandboxOpen: [], toMenu: [], toMissionSelect: [], selectTowerType: [], upgradeSlow: [], upgradeRate: [], upgradeRange: [], upgradeBurn: [], sellTower: [], sellConfirm: [], sellCancel: [], selectMap: [], toggleFast: [], closeUpg: [], toggleVolume: [], setVolume: [], shopBuy: [], shopReroll: [], shopContinue: [], shopBuyAbility: [], useBomb: [], useOverclock: [], useCryo: [], toggleDev: [], toggleDebug: [], toggleAutoSpeed: [], exitConfirm: [], exitCancel: [], exitToMenuImmediate: [], exitToDesktop: [], openShop: [], closeShop: [], devUnlockUlts: [], devUpgradeMax: [], mainNew: [], mainLoad: [], mainAssembly: [], loadSlot: [], openAssembly: [], closeAssembly: [], startMission: [], assemblySave: [], assemblyLoad: [], openAssemblyCore: [], menuBack: [], mainSettings: [], mainSettingsBack: [], loadBack: [], loginUser: [], openCreateUser: [], closeCreateUser: [], createUser: [], openLeaderboard: [], closeLeaderboard: [], leaderboardSignIn: [], logout: [], removePassive: [], leaderboardSelectMap: [], pauseLoginOpen: [], mainDownload: [], mainHowTo: [], closeHowTo: [], mainBug: [], closeBug: [], openUserProfile: [], closeUserProfile: [], leaderboardSearch: [] };
     const flavor = detectRuntimeFlavor();
     this.isDesktopRuntime = !!flavor.isDesktop;
     this.isLocalRuntime = !!flavor.isLocal;
@@ -151,6 +151,8 @@ export class UIManager{
     this.$leaderboardWarning = document.getElementById('leaderboard-warning');
     this.$leaderboardDevWarning = document.getElementById('leaderboard-dev-warning');
     this.$leaderboardLoading = document.getElementById('leaderboard-loading');
+    this.$lbSearchInput = document.getElementById('leaderboard-search-input');
+    this.$lbSearchBtn = document.getElementById('btn-leaderboard-search');
     // Desktop-only exit overlay (pause → Exit)
     this.$appExitOverlay = document.getElementById('app-exit-overlay');
     this.$btnAppExitCancel = document.getElementById('btn-app-exit-cancel');
@@ -193,6 +195,22 @@ export class UIManager{
     this.$bugOverlay = document.getElementById('bug-overlay');
     this.$bugForm = document.getElementById('bug-form');
     this.$bugStatus = document.getElementById('bug-status');
+    // Player profile overlay
+    this.$profileOverlay = document.getElementById('profile-overlay');
+    this.$profileUsername = document.getElementById('profile-username');
+    this.$profileJoined = document.getElementById('profile-joined');
+    this.$profileLastSeen = document.getElementById('profile-last-seen');
+    this.$profileRoles = document.getElementById('profile-roles');
+    this.$profileBestPerfect = document.getElementById('profile-best-perfect');
+    this.$profileMissionUnlock = document.getElementById('profile-mission-unlock');
+    this.$profileTotalRuns = document.getElementById('profile-total-runs');
+    this.$profileFavoriteCharacter = document.getElementById('profile-favorite-character');
+    this.$profileBestMaps = document.getElementById('profile-best-maps');
+    this.$profileRuns = document.getElementById('profile-runs');
+    this.$profileRunsEmpty = document.getElementById('profile-runs-empty');
+    this.$profileLoading = document.getElementById('profile-loading');
+    this.$profileError = document.getElementById('profile-error');
+    this.$btnProfileClose = document.getElementById('btn-profile-close');
     // Main settings controls
     this.$mainSettingsPrimary = document.getElementById('mainsettings-primary');
     this.$mainSettingsDesktopActions = document.getElementById('mainsettings-desktop-actions');
@@ -1261,6 +1279,21 @@ export class UIManager{
         }
       });
     }
+    if(this.$lbSearchBtn){
+      this.$lbSearchBtn.addEventListener('click', ()=>{
+        const term = this.$lbSearchInput ? (this.$lbSearchInput.value||'').trim() : '';
+        if(!term) return;
+        this.emit('leaderboardSearch', { username: term });
+      });
+    }
+    if(this.$lbSearchInput){
+      this.$lbSearchInput.addEventListener('keydown', (e)=>{
+        if(e.key === 'Enter'){
+          e.preventDefault();
+          if(this.$lbSearchBtn) this.$lbSearchBtn.click();
+        }
+      });
+    }
     if(this.$devOpenShop){ this.$devOpenShop.addEventListener('click', ()=> this.emit('openShop')); }
 
     // Dev toggles (main settings only)
@@ -1315,6 +1348,11 @@ export class UIManager{
       });
     }
 
+    if(this.$btnProfileClose){
+      this.$btnProfileClose.addEventListener('click', ()=>{
+        this.emit('closeUserProfile');
+      });
+    }
     if(isDesktopRuntime && this.$btnMainFullscreen){
       const updateFsLabel = ()=>{
         const isFs = !!(document.fullscreenElement || document.webkitFullscreenElement);
@@ -2177,19 +2215,24 @@ export class UIManager{
     const loadVisible = this.$loadMenu && this.$loadMenu.classList.contains('visible');
     const createVisible = this.$createMenu && this.$createMenu.classList.contains('visible');
     const boardVisible = this.$leaderboard && this.$leaderboard.classList.contains('visible');
+    const profileVisible = this.$profileOverlay && this.$profileOverlay.classList.contains('visible');
     const mapSelVisible = this.$mapOverlay && this.$mapOverlay.classList.contains('visible');
     const modesVisible = this.$modesOverlay && this.$modesOverlay.classList.contains('visible');
     const assemblyVisible = this.$assembly && this.$assembly.classList.contains('visible');
     const mainSettingsVisible = this.$mainSettings && this.$mainSettings.classList.contains('visible');
     const howtoVisible = this.$howToOverlay && this.$howToOverlay.classList.contains('visible');
     const bugVisible = this.$bugOverlay && this.$bugOverlay.classList.contains('visible');
-    const modalActive = !!(loadVisible || createVisible || boardVisible || mapSelVisible || modesVisible || assemblyVisible || mainSettingsVisible || howtoVisible || bugVisible);
+    const modalActive = !!(loadVisible || createVisible || boardVisible || profileVisible || mapSelVisible || modesVisible || assemblyVisible || mainSettingsVisible || howtoVisible || bugVisible);
     this.$root.classList.toggle('modal-overlay', modalActive);
     const menuVisible = this.$mainMenu && this.$mainMenu.classList.contains('visible');
     document.body.classList.toggle('mainmenu-visible', modalActive || menuVisible);
   }
   showLeaderboard(show){
     if(this.$leaderboard) this.$leaderboard.classList.toggle('visible', !!show);
+    this.updateModalMask();
+  }
+  showUserProfile(show){
+    if(this.$profileOverlay) this.$profileOverlay.classList.toggle('visible', !!show);
     this.updateModalMask();
   }
   showMainSettings(show){
@@ -2259,8 +2302,15 @@ export class UIManager{
       const nameWrap = document.createElement('div');
       nameWrap.className = 'rank-name';
       const name = document.createElement('span');
-      name.className = 'rank';
-      name.textContent = entry.username || 'Unknown Operative';
+      name.className = 'rank clickable';
+      const uname = entry.username || 'Unknown Operative';
+      name.textContent = uname;
+      name.dataset.username = uname;
+      name.addEventListener('click', ()=>{
+        if(uname && uname !== 'Unknown Operative'){
+          this.emit('openUserProfile', { username: uname });
+        }
+      });
       nameWrap.appendChild(name);
       const waves = document.createElement('span');
       waves.className = 'waves';
@@ -2279,6 +2329,146 @@ export class UIManager{
       li.appendChild(nameWrap);
       this.$leaderboardList.appendChild(li);
     });
+  }
+  setUserProfileLoading(on){
+    if(!this.$profileLoading) return;
+    this.$profileLoading.style.display = on ? 'block' : 'none';
+    if(on && this.$profileError){
+      this.$profileError.style.display = 'none';
+      this.$profileError.textContent = '';
+    }
+  }
+  setUserProfileError(message){
+    if(!this.$profileError) return;
+    this.$profileError.textContent = message || '';
+    this.$profileError.style.display = message ? 'block' : 'none';
+  }
+  renderUserProfile(profile){
+    if(this.$profileLoading) this.$profileLoading.style.display = 'none';
+    this.setUserProfileError('');
+    if(this.$profileBestMaps) this.$profileBestMaps.innerHTML = '';
+    if(this.$profileRuns) this.$profileRuns.innerHTML = '';
+    if(!profile){
+      if(this.$profileUsername) this.$profileUsername.textContent = '';
+      if(this.$profileJoined) this.$profileJoined.textContent = '';
+      if(this.$profileLastSeen) this.$profileLastSeen.textContent = '';
+      if(this.$profileRoles) this.$profileRoles.textContent = '';
+      if(this.$profileBestPerfect) this.$profileBestPerfect.textContent = '0';
+      if(this.$profileMissionUnlock) this.$profileMissionUnlock.textContent = '1';
+      if(this.$profileTotalRuns) this.$profileTotalRuns.textContent = '0';
+      if(this.$profileFavoriteCharacter) this.$profileFavoriteCharacter.textContent = '—';
+      if(this.$profileRunsEmpty) this.$profileRunsEmpty.style.display = 'block';
+      return;
+    }
+    const name = profile.username || 'Unknown Operative';
+    const joinedMs = typeof profile.createdAt === 'number' ? profile.createdAt : null;
+    const lastMs = typeof profile.lastLoginAt === 'number' ? profile.lastLoginAt : null;
+    const roles = Array.isArray(profile.roles) && profile.roles.length ? profile.roles : ['user'];
+    const bestPerfect = Number.isFinite(profile.bestPerfectCombo) ? profile.bestPerfectCombo|0 : 0;
+    const mission = Number.isFinite(profile.missionUnlockLevel) ? profile.missionUnlockLevel|0 : 1;
+    const rawRuns = Array.isArray(profile.scoreHistory) ? profile.scoreHistory.slice() : [];
+    const totalRuns = rawRuns.length;
+    const formatDate = (ms)=>{
+      if(!ms || !Number.isFinite(ms)) return '—';
+      try{
+        return new Date(ms).toLocaleDateString();
+      }catch(e){
+        return '—';
+      }
+    };
+    const formatDateTime = (ms)=>{
+      if(!ms || !Number.isFinite(ms)) return '';
+      try{
+        return new Date(ms).toLocaleString();
+      }catch(e){
+        return '';
+      }
+    };
+    if(this.$profileUsername) this.$profileUsername.textContent = name;
+    if(this.$profileJoined) this.$profileJoined.textContent = `Joined: ${formatDate(joinedMs)}`;
+    if(this.$profileLastSeen) this.$profileLastSeen.textContent = `Last Seen: ${formatDate(lastMs)}`;
+    if(this.$profileRoles) this.$profileRoles.textContent = `Roles: ${roles.join(', ')}`;
+    if(this.$profileBestPerfect) this.$profileBestPerfect.textContent = String(bestPerfect);
+    if(this.$profileMissionUnlock) this.$profileMissionUnlock.textContent = String(mission);
+    if(this.$profileTotalRuns) this.$profileTotalRuns.textContent = String(totalRuns);
+    // Favorite character by frequency
+    let favoriteCharLabel = '—';
+    if(rawRuns.length){
+      const counts = {};
+      for(const r of rawRuns){
+        const key = (r.character || r.pilot || '').trim().toLowerCase();
+        if(!key) continue;
+        counts[key] = (counts[key] || 0) + 1;
+      }
+      let bestKey = null;
+      let bestCount = 0;
+      for(const k in counts){
+        if(counts[k] > bestCount){
+          bestCount = counts[k];
+          bestKey = k;
+        }
+      }
+      if(bestKey){
+        const labelMap = { volt:'Volt', lumen:'Lumen', torque:'Torque' };
+        favoriteCharLabel = labelMap[bestKey] || bestKey;
+      }
+    }
+    if(this.$profileFavoriteCharacter) this.$profileFavoriteCharacter.textContent = favoriteCharLabel;
+    // Best waves by map
+    if(this.$profileBestMaps){
+      const byMap = new Map();
+      for(const r of rawRuns){
+        const key = (r.map || '').trim() || 'unknown';
+        const waves = Number.isFinite(r.waves) ? r.waves|0 : 0;
+        if(waves <= 0) continue;
+        const prev = byMap.get(key);
+        if(!prev || waves > prev.waves){
+          byMap.set(key, { map:key, waves });
+        }
+      }
+      const bestEntries = Array.from(byMap.values()).sort((a,b)=> (b.waves||0) - (a.waves||0)).slice(0,5);
+      if(!bestEntries.length){
+        const li = document.createElement('li');
+        li.textContent = 'No recorded runs yet.';
+        this.$profileBestMaps.appendChild(li);
+      }else{
+        bestEntries.forEach(e=>{
+          const li = document.createElement('li');
+          const mapDef = MAPS.find(m=> m.key === e.map);
+          const label = (mapDef && mapDef.name) || e.map || 'Unknown Map';
+          li.textContent = `${label} — ${e.waves} waves`;
+          this.$profileBestMaps.appendChild(li);
+        });
+      }
+    }
+    // Recent runs
+    if(this.$profileRuns){
+      const runs = rawRuns.slice().sort((a,b)=> (b.at||0) - (a.at||0)).slice(0,20);
+      if(this.$profileRunsEmpty){
+        this.$profileRunsEmpty.style.display = runs.length ? 'none' : 'block';
+      }
+      runs.forEach(r=>{
+        const li = document.createElement('li');
+        const mapDef = MAPS.find(m=> m.key === r.map);
+        const mapLabel = (mapDef && mapDef.name) || r.map || 'Unknown Map';
+        const waves = Number.isFinite(r.waves) ? r.waves|0 : 0;
+        const perfect = Number.isFinite(r.perfectCombo) ? r.perfectCombo|0 : 0;
+        const charKey = (r.character || r.pilot || '').trim().toLowerCase();
+        const labelMap = { volt:'Volt', lumen:'Lumen', torque:'Torque' };
+        const charLabel = charKey ? (labelMap[charKey] || charKey) : null;
+        const parts = [`${mapLabel} — ${waves} waves`, `PC ${perfect}`];
+        if(charLabel) parts.push(`Character: ${charLabel}`);
+        li.textContent = parts.join(' — ');
+        const when = formatDateTime(r.at);
+        if(when){
+          const small = document.createElement('small');
+          small.textContent = when;
+          li.appendChild(document.createElement('br'));
+          li.appendChild(small);
+        }
+        this.$profileRuns.appendChild(li);
+      });
+    }
   }
   setLeaderboardStatus(message, ok=true){
     if(!this.$leaderboardStatus) return;

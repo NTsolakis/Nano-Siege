@@ -65,6 +65,14 @@ async function apiGet(path) {
   return data;
 }
 
+export async function fetchUserProfile(username) {
+  const name = (username || '').trim();
+  if (!name) {
+    throw new Error('Username required');
+  }
+  return apiGet(`/api/user/${encodeURIComponent(name)}`);
+}
+
 export async function loginUser(username, password) {
   const data = await apiRequest('/api/login', { username, password });
   if (data && typeof data.token === 'string' && data.token) {

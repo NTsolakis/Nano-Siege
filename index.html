@@ -856,9 +856,64 @@
             <p class="leaderboard-warning" id="leaderboard-warning">Sign in to compete for a spot on the leaderboard.</p>
             <p class="leaderboard-dev-warning" id="leaderboard-dev-warning">Developer Mode is on — leaderboard scores are disabled.</p>
             <div id="leaderboard-status" class="login-status" style="text-align:center"></div>
+            <div class="lb-search-row">
+              <input type="text" id="leaderboard-search-input" placeholder="Search player..." autocomplete="off" />
+              <button id="btn-leaderboard-search">Search</button>
+            </div>
             <div class="actions" style="margin-top:18px">
               <button id="btn-leaderboard-signin">Sign In</button>
               <button id="btn-leaderboard-back">Back</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section id="profile-overlay" class="overlay mainmenu">
+        <div class="profile-layout">
+          <div class="panel mainmenu-panel">
+            <h2 id="profile-title">Player Profile</h2>
+            <p class="tag">View stats and recent runs for this player.</p>
+            <div id="profile-content">
+              <div id="profile-header" class="profile-header">
+                <div id="profile-username" class="profile-username">Player</div>
+                <div class="profile-meta">
+                  <span id="profile-joined"></span>
+                  <span id="profile-last-seen"></span>
+                  <span id="profile-roles"></span>
+                </div>
+              </div>
+              <div id="profile-summary" class="profile-summary">
+                <div class="profile-stat">
+                  <div class="label">Best Perfect Combo</div>
+                  <div class="value" id="profile-best-perfect">0</div>
+                </div>
+                <div class="profile-stat">
+                  <div class="label">Highest Mission</div>
+                  <div class="value" id="profile-mission-unlock">1</div>
+                </div>
+                <div class="profile-stat">
+                  <div class="label">Total Runs</div>
+                  <div class="value" id="profile-total-runs">0</div>
+                </div>
+                <div class="profile-stat">
+                  <div class="label">Favorite Character</div>
+                  <div class="value" id="profile-favorite-character">—</div>
+                </div>
+              </div>
+              <div class="profile-section">
+                <h3>Best Waves by Map</h3>
+                <ul id="profile-best-maps" class="profile-map-list"></ul>
+              </div>
+              <div class="profile-section">
+                <h3>Recent Runs</h3>
+                <div id="profile-runs-empty" class="profile-empty">No runs recorded yet.</div>
+                <ul id="profile-runs" class="profile-run-list"></ul>
+              </div>
+            </div>
+            <div id="profile-loading" class="profile-status">Loading profile…</div>
+            <div id="profile-error" class="profile-status error"></div>
+            <div class="actions" style="margin-top:18px">
+              <button id="btn-profile-close">Back</button>
             </div>
           </div>
         </div>

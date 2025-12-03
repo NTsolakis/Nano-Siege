@@ -11,7 +11,7 @@ import { TOWER_TYPES, UPGRADE_COSTS } from './config.js';
 import { defaultSandboxConfig, clampSandboxConfig } from '../sandbox-config.js';
 import { rollShopOffers, applyPerk, buffs, ABILITIES, PASSIVE_MAX_LEVEL, passiveCostFor, ULTIMATE_MAX_LEVEL, ultimateCostFor, PERKS } from './rogue.js';
 import { getMissionById, getMissionMap, buildMissionWave, getMissionTotalWaves } from './campaign.js';
-import { loginUser as apiLoginUser, saveUserState as apiSaveUserState, createUser as apiCreateUser, fetchLeaderboard as apiFetchLeaderboard, submitLeaderboard as apiSubmitLeaderboard, logoutUser as apiLogoutUser } from './auth.js';
+import { loginUser as apiLoginUser, saveUserState as apiSaveUserState, createUser as apiCreateUser, fetchLeaderboard as apiFetchLeaderboard, submitLeaderboard as apiSubmitLeaderboard, logoutUser as apiLogoutUser, fetchUserProfile as apiFetchUserProfile } from './auth.js';
 
 const SHOP_OFFER_COUNT = 6;
 
@@ -326,6 +326,14 @@ export class Game {
     this.ui.on('openAssemblyCore', ()=> this.openAssemblyCore());
     this.ui.on('removePassive', (key)=> this.refundPassive(key));
     this.ui.on('leaderboardSelectMap', (key)=>{ if(key){ this.leaderboardMapKey = key; this.refreshLeaderboard(key); } });
+    this.ui.on('openUserProfile', (payload)=> {
+      const uname = payload && payload.username;
+      if(uname) this.openUserProfile(uname);
+    });
+    this.ui.on('leaderboardSearch', (payload)=> {
+      const uname = payload && payload.username;
+      if(uname) this.openUserProfile(uname);
+    });
     this.ui.on('exitConfirm', ()=> this._handleExitConfirm(true));
     this.ui.on('exitCancel', ()=> this._handleExitConfirm(false));
     this.ui.on('exitToMenuImmediate', ()=> {
@@ -349,6 +357,9 @@ export class Game {
     this.ui.on('sandboxOpen', ()=> this.openSandboxFromRun());
     this.ui.on('sandboxStart', ()=> this.handleSandboxStart());
     this.ui.on('sandboxReset', ()=> this.resetSandboxConfig());
+    this.ui.on('closeUserProfile', ()=> {
+      if(this.ui.showUserProfile) this.ui.showUserProfile(false);
+    });
 
     this.ui.setWave(1);
     this.ui.setCredits(this.credits);
@@ -1597,6 +1608,29 @@ export class Game {
         const msg = (e && e.message) ? e.message : 'Could not submit leaderboard entry.';
         this.ui.setLeaderboardStatus(msg, false);
       }
+    }
+  }
+
+  async openUserProfile(username){
+    const name = (username||'').trim();
+    if(!name) return;
+    if(this.ui.showUserProfile) this.ui.showUserProfile(true);
+    if(this.ui.setUserProfileLoading) this.ui.setUserProfileLoading(true);
+    if(this.ui.setUserProfileError) this.ui.setUserProfileError('');
+    if(this.ui.renderUserProfile) this.ui.renderUserProfile(null);
+    try{
+      const res = await apiFetchUserProfile(name);
+      const profile = res && res.profile ? res.profile : null;
+      if(!profile){
+        throw new Error('Profile not found');
+      }
+      if(this.ui.renderUserProfile) this.ui.renderUserProfile(profile);
+    }catch(err){
+      if(this.ui.setUserProfileError){
+        this.ui.setUserProfileError(err && err.message ? err.message : 'Failed to load profile');
+      }
+    }finally{
+      if(this.ui.setUserProfileLoading) this.ui.setUserProfileLoading(false);
     }
   }
 
