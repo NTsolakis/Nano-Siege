@@ -452,7 +452,7 @@ function renderLauncherHtml() {
   <div class="bg"></div>
   <div class="overlay">
     <div class="card">
-      <h1 class="title">Nano-Siege</h1>
+      <h1 class="title">Nano-Siege Alpha</h1>
       <p class="subtitle">Reactor Defense Launcher</p>
       <div id="status-line" class="status">Checking for updates…</div>
       <div id="version-line" class="version"></div>

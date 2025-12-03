@@ -152,16 +152,14 @@ export async function initVersionLabel() {
     const channel = meta.channel ? String(meta.channel).toUpperCase() : '';
     const gameVersion = meta.gameVersion || meta.version || '';
     const launcherVersion = meta.launcherVersion || '';
-    const launcherMin = meta.launcherMinVersion || '';
 
     const parts = [];
     if (gameVersion) parts.push(`Game v${gameVersion}`);
     if (launcherVersion) {
-      if (launcherMin && launcherMin !== launcherVersion) {
-        parts.push(`Launcher v${launcherVersion} (min v${launcherMin})`);
-      } else {
-        parts.push(`Launcher v${launcherVersion}`);
-      }
+      // Only show the current launcher version on the main menu; the
+      // minimum supported version remains available in meta.json for
+      // future gating/logic but is not surfaced in the UI.
+      parts.push(`Launcher v${launcherVersion}`);
     }
     if (!parts.length) return;
 
