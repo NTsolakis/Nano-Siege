@@ -3,14 +3,24 @@ set -euo pipefail
 
 # Deploy Nano-Siege to Unraid with:
 # - backend + public sync
-# - automatic backend/game version bump
-# - automatic patch notes from git commits
-# - meta.json update in ./data
+# - independent backend/game/launcher versioning
+# - meta.json aggregation (no embedded patch notes)
 # - safe users.json migration in the persistent data share
 # - local offline zip build
 #
-# Usage (from repo root):
-#   npm run deploy:unraid
+# Game + launcher versions are produced by build scripts:
+#   - ./scripts/build-game.sh      -> data/game-version.json + patchnotes-*.txt
+#   - ./scripts/build-launcher.sh  -> launcher/launcher-version.json
+#
+# This deploy script:
+#   - Bumps backendVersion (patch) in data/meta.json
+#   - Reads gameVersion / launcherVersion from the build artifacts
+#   - Strips meta.patchNotes (server reads patchnotes-*.txt directly)
+#   - Syncs backend + public files into the Unraid share
+#   - Optionally restarts the nano-siege-backend Docker container
+#
+# Usage (from repo root on Unraid):
+#   ./scripts/deploy-unraid.sh
 # or:
 #   UNRAID_ROOT=/some/other/path ./scripts/deploy-unraid.sh
 
@@ -22,9 +32,8 @@ PUBLIC_DIR="${ROOT%/}/nano-siege"
 DATA_DIR="${ROOT%/}/nano-siege-data"
 
 META_SRC="data/meta.json"          # in the repo
-PATCH_PREFIX="data/patchnotes-"    # in the repo
 
-# ----- HELPER -----
+# ----- HELPERS -----
 
 require() {
   if ! command -v "$1" >/dev/null 2>&1; then
@@ -37,7 +46,33 @@ require jq
 require git
 require rsync
 
-if [ ! -f "$META_SRC" ]; then
+if ! command -v node >/dev/null 2>&1; then
+  echo "WARNING: node not found; falling back to meta.json only for game/launcher versions."
+fi
+
+parse_semver() {
+  local v="$1"
+  local major minor patch
+  IFS='.' read -r major minor patch <<< "$v"
+  major=${major:-0}
+  minor=${minor:-0}
+  patch=${patch:-0}
+  printf '%s %s %s\n' "$major" "$minor" "$patch"
+}
+
+read_json_version_with_node() {
+  local file="$1"
+  local prop="$2"
+  if [ ! -f "$file" ] || ! command -v node >/dev/null 2>&1; then
+    return 1
+  fi
+  node -e "try{const v=require('./${file}').${prop};if(v){console.log(String(v).trim());}}catch(e){}" 2>/dev/null || true
+}
+
+ensure_meta_defaults() {
+  if [ -f "$META_SRC" ]; then
+    return
+  fi
   echo "meta.json not found at $META_SRC, creating a default one..."
   cat > "$META_SRC" <<EOF
 {
@@ -46,11 +81,12 @@ if [ ! -f "$META_SRC" ]; then
   "gameVersion": "0.0.0",
   "launcherVersion": "0.0.0",
   "launcherMinVersion": "0.0.0",
-  "patchNotes": [],
   "message": "Welcome to Nano-Siege."
 }
 EOF
-fi
+}
+
+ensure_meta_defaults
 
 echo "Deploying Nano-Siege to Unraid"
 echo "  Backend target: ${BACKEND_DIR}"
@@ -58,203 +94,60 @@ echo "  Public target:  ${PUBLIC_DIR}"
 echo "  Data dir:       ${DATA_DIR} (users.json)"
 echo
 
-# ----- VERSION & PATCH NOTES -----
+# ----- VERSION AGGREGATION -----
 
-# Read current backend version from meta.json (fallback 0.0.0)
-current_version=$(jq -r '.backendVersion // "0.0.0"' "$META_SRC")
+# Current meta fields
+backend_current_version=$(jq -r '.backendVersion // "0.0.0"' "$META_SRC")
+channel=$(jq -r '.channel // "alpha"' "$META_SRC")
+launcher_min_version=$(jq -r '.launcherMinVersion // "0.0.0"' "$META_SRC")
+message=$(jq -r '.message // "Welcome to Nano-Siege."' "$META_SRC")
 
-# Find last deployment tag (deploy-vX.Y.Z) to compute patch notes
-# and detect which parts of the app changed.
-last_tag=$(git describe --tags --match "deploy-v*" --abbrev=0 2>/dev/null || echo "")
-changed_backend=0
-changed_game=0
-changed_launcher=0
-FORCE_LAUNCHER_BUMP="${FORCE_LAUNCHER_BUMP:-0}"
-dirty_any=0
-
-if [ -z "$last_tag" ]; then
-  echo "No previous deploy tag found. Treating this as an initial deploy."
-  # On the first deploy, treat everything as "changed" so we establish
-  # an initial version + patch notes snapshot.
-  changed_backend=1
-  changed_game=1
-  changed_launcher=1
-else
-  echo "Last deploy tag: $last_tag"
-
-  changed_files=$(git diff --name-only "$last_tag"..HEAD || true)
-  if [ -z "$changed_files" ]; then
-    echo "No files changed since ${last_tag}."
-  else
-    # Classify changed files into backend / game / launcher buckets.
-    while IFS= read -r f; do
-      # Ignore meta + patch notes files themselves; they are generated
-      # by this script and should not trigger version bumps.
-      case "$f" in
-        data/meta.json|data/patchnotes-*.txt)
-          continue
-          ;;
-      esac
-
-      case "$f" in
-        server/*|scripts/migrate-users.js)
-          changed_backend=1
-          ;;
-      esac
-
-      case "$f" in
-        src/*|index.html|styles.css|sandbox-config.js|electron-main.js|electron-preload.js|scripts/build-local-zip.sh|data/*)
-          changed_game=1
-          ;;
-      esac
-
-      case "$f" in
-        launcher/*)
-          changed_launcher=1
-          ;;
-      esac
-    done <<< "$changed_files"
-  fi
+# Game version from build artifact (preferred), falling back to meta.json.
+game_version=""
+game_version=$(read_json_version_with_node "data/game-version.json" "version" || true)
+if [ -z "${game_version}" ]; then
+  game_version=$(jq -r '.gameVersion // "0.0.0"' "$META_SRC")
 fi
 
-# Also treat uncommitted local changes as triggers for a version bump
-# so test deploys from a dirty working tree still advance the in-game
-# version/patch notes. We still strongly prefer the standard
-# commit → push → pull → deploy flow; this logic is a safety net so
-# the version label never appears "stuck" when you forget to commit.
-#
-# We intentionally ignore meta.json + patchnotes-*.txt here since they
-# are generated by this script and should not cause endless bumps.
-backend_status=$(git status --porcelain -- server scripts/migrate-users.js 2>/dev/null || true)
-if [ -n "$backend_status" ]; then
-  changed_backend=1
-  dirty_any=1
+# Launcher version from build artifact (preferred), falling back to meta.json.
+launcher_version=""
+launcher_version=$(read_json_version_with_node "launcher/launcher-version.json" "version" || true)
+if [ -z "${launcher_version}" ]; then
+  launcher_version=$(jq -r '.launcherVersion // "0.0.0"' "$META_SRC")
 fi
 
-game_status=$(git status --porcelain -- src index.html styles.css sandbox-config.js electron-main.js electron-preload.js scripts/build-local-zip.sh data 2>/dev/null || true)
-if [ -n "$game_status" ]; then
-  # Strip leading status codes and filter out generated data files.
-  game_paths=$(printf "%s\n" "$game_status" | awk '{print $2}' | grep -vE '^data/meta\.json$|^data/patchnotes-.*\.txt$' || true)
-  if [ -n "$game_paths" ]; then
-    changed_game=1
-    dirty_any=1
-  fi
-fi
+read -r b_major b_minor b_patch < <(parse_semver "${backend_current_version}")
+b_patch=$((b_patch + 1))
+backend_new_version="${b_major}.${b_minor}.${b_patch}"
 
-launcher_status=$(git status --porcelain -- launcher 2>/dev/null || true)
-if [ -n "$launcher_status" ]; then
-  changed_launcher=1
-  dirty_any=1
-fi
+echo "Backend version:  ${backend_current_version} -> ${backend_new_version}"
+echo "Game version:     ${game_version}"
+echo "Launcher version: ${launcher_version}"
+echo
 
-if [ "$dirty_any" -eq 1 ]; then
-  echo
-  echo "NOTE: Uncommitted local changes detected in this repo."
-  echo "      It's recommended to commit & push before deploy so patch notes stay accurate."
-fi
-
-# Build game-focused patch notes from commits that touched the
-# browser/desktop game client (front-end). Backend/launcher-only
-# changes are intentionally omitted from these notes so the in-game
-# patch screen stays player-focused.
-patch_notes=""
-if [ -z "$last_tag" ]; then
-  patch_notes=$(git log --pretty=format:"%s" -- \
-    src \
-    index.html \
-    styles.css \
-    sandbox-config.js \
-    electron-main.js \
-    electron-preload.js \
-    scripts/build-local-zip.sh \
-    2>/dev/null || true)
-else
-  patch_notes=$(git log "$last_tag"..HEAD --pretty=format:"%s" -- \
-    src \
-    index.html \
-    styles.css \
-    sandbox-config.js \
-    electron-main.js \
-    electron-preload.js \
-    scripts/build-local-zip.sh \
-    2>/dev/null || true)
-fi
-
-# Filter out generic auto-commit messages so in-game patch notes stay
-# useful; if nothing player-facing remains we fall back to a friendly
-# summary below.
-if [ -n "${patch_notes//[$'\t\r\n ']}" ]; then
-  patch_notes=$(printf "%s\n" "$patch_notes" | sed '/^[[:space:]]*$/d' | sed '/^Incremental desktop\/launcher update$/d' | sed '/^Describe the change$/d')
-fi
-
-# If no game commits are found in this range, keep a single friendly
-# note so the in-game patch notes screen can still explain that the
-# update was backend/launcher-only.
-if [ -z "${patch_notes//[$'\t\r\n ']}" ]; then
-  patch_notes="No gameplay changes in this update."
-fi
-
-# If we detected uncommitted local changes, prepend a short note so the
-# in-game patch screen makes it clear this build may include work that
-# isn't yet reflected in the git history.
-if [ "$dirty_any" -eq 1 ]; then
-  patch_notes="Local uncommitted changes deployed for testing.\n${patch_notes}"
-fi
-
-bump_needed=0
-if [ "$changed_backend" -eq 1 ] || [ "$changed_game" -eq 1 ] || [ "$changed_launcher" -eq 1 ]; then
-  bump_needed=1
-fi
-
-if [ "$bump_needed" -eq 1 ]; then
-  IFS='.' read -r major minor patch <<< "$current_version" || {
-    echo "WARNING: could not parse backendVersion '$current_version', defaulting to 0.0.0"
-    major=0 minor=0 patch=0
-  }
-
-  patch=$((patch + 1))
-  new_version="${major}.${minor}.${patch}"
-
-  echo "Current backendVersion: $current_version"
-  echo "New backendVersion:     $new_version"
-  echo
-
-  # Save patch notes to versioned file in repo data/
-  patch_file="${PATCH_PREFIX}${new_version}.txt"
-  echo "Writing patch notes to ${patch_file}"
-  printf "%s\n" "$patch_notes" > "$patch_file"
-
-  # Update meta.json in repo: backendVersion, gameVersion, patchNotes
-  # Launcher version bumps are *explicitly* controlled via the
-  # FORCE_LAUNCHER_BUMP flag so that normal game/backend deploys don't
-  # accidentally advertise new desktop builds. The full desktop
-  # build-and-deploy script sets this flag when releasing a new
-  # launcher build.
-  launcher_bump_flag=0
-  if [ "${FORCE_LAUNCHER_BUMP}" = "1" ]; then
-    launcher_bump_flag=1
-  fi
-  echo "Updating $META_SRC with new version and patch notes..."
-  tmpfile=$(mktemp)
-  jq \
-    --arg v "$new_version" \
-    --arg notes "$patch_notes" \
-    --argjson launcherBump "$launcher_bump_flag" \
-    '.backendVersion = $v
-     | .gameVersion = $v
-     | .launcherVersion = (if $launcherBump == 1 then $v else .launcherVersion end)
-     | .patchNotes = ($notes | split("\n"))' \
-    "$META_SRC" > "$tmpfile"
-  mv "$tmpfile" "$META_SRC"
-
-  echo
-else
-  echo "No backend/game/launcher changes since last deploy; keeping backendVersion/gameVersion at ${current_version} and skipping new patch notes."
-fi
+echo "Updating $META_SRC with aggregated versions..."
+tmpfile=$(mktemp)
+jq \
+  --arg backend "$backend_new_version" \
+  --arg game "$game_version" \
+  --arg launcher "$launcher_version" \
+  --arg launcherMin "$launcher_min_version" \
+  --arg channel "$channel" \
+  --arg message "$message" \
+  '.
+   | .backendVersion = $backend
+   | .gameVersion = (if $game != "" then $game else .gameVersion end)
+   | .launcherVersion = (if $launcher != "" then $launcher else .launcherVersion end)
+   | .launcherMinVersion = (if $launcherMin != "" then $launcherMin else .launcherMinVersion end)
+   | .channel = $channel
+   | .message = $message
+   | del(.patchNotes)' \
+  "$META_SRC" > "$tmpfile"
+mv "$tmpfile" "$META_SRC"
 
 # ----- SYNC TO UNRAID -----
 
-# Ensure target directories exist.
+echo
 echo "Ensuring target directories exist..."
 mkdir -p "${BACKEND_DIR}" "${PUBLIC_DIR}" "${PUBLIC_DIR}/downloads" "${DATA_DIR}"
 
@@ -299,16 +192,29 @@ echo "Building local zip..."
 ZIP_TARGET="${PUBLIC_DIR%/}/nano-siege-local.zip"
 bash "$(dirname "$0")/build-local-zip.sh" "${ZIP_TARGET}" || echo "Local zip build skipped."
 
-if [ "${bump_needed}" -eq 1 ]; then
-  echo
-  echo "Tagging git with deploy-v${new_version}..."
-  git tag "deploy-v${new_version}" || echo "WARNING: could not create tag (maybe it exists already)"
+echo
+echo "Tagging git with deploy-v${backend_new_version}..."
+if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+  git tag "deploy-v${backend_new_version}" || echo "WARNING: could not create tag (maybe it exists already)"
   git push --tags || echo "WARNING: could not push tags (not fatal)"
-
-  echo
-  echo "Deploy complete. Backend/Game version is now ${new_version}"
-  echo "Patch notes recorded in ${patch_file}"
 else
-  echo
-  echo "Deploy complete. No backend/game/launcher changes detected; version remains ${current_version}."
+  echo "Not in a git work tree; skipping tag creation."
 fi
+
+echo
+if command -v docker >/dev/null 2>&1; then
+  if docker ps --format '{{.Names}}' | grep -q '^nano-siege-backend$'; then
+    echo "Restarting nano-siege-backend container..."
+    docker restart nano-siege-backend || echo "WARNING: failed to restart nano-siege-backend container."
+  else
+    echo "Docker is available but nano-siege-backend container not found; skipping restart."
+  fi
+else
+  echo "Docker CLI not found; skipping backend container restart."
+fi
+
+echo
+echo "Deploy complete."
+echo "  Backend version:  ${backend_new_version}"
+echo "  Game version:     ${game_version}"
+echo "  Launcher version: ${launcher_version}"

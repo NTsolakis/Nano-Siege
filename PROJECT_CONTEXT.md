@@ -99,9 +99,16 @@ This is the **canonical four‑step flow** and should be followed for all server
      ./scripts/deploy-unraid.sh
      ```
    - This script:
+     - Aggregates versions into `data/meta.json`:
+       - `backendVersion` (bumped each deploy)
+       - `gameVersion` (from `data/game-version.json`, built on your dev machine)
+       - `launcherVersion` (from `launcher/launcher-version.json`, built on your dev machine)
+     - Leaves patch notes in separate `data/patchnotes-*.txt` files (consumed by `/api/patchnotes`)
      - Syncs backend files → `/mnt/user/www/nano-siege-backend`
      - Syncs public game files → `/mnt/user/www/nano-siege`
+     - Syncs desktop builds from `dist/` → `/mnt/user/www/nano-siege/downloads`
      - Builds/updates `nano-siege-local.zip` for local offline play
+     - Tries to restart the `nano-siege-backend` Docker container (best-effort)
    - The `nano-siege-backend` docker container serves:
      - API from `/app` (code in `nano-siege-backend`)
      - Static public files from `/app/public` (code in `nano-siege`)

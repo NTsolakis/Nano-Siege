@@ -37,18 +37,13 @@ echo "Cleaning dist/ directory (old artifacts)..."
 rm -rf dist/*
 
 echo
-echo "Building Linux AppImage..."
-npm run build:linux
+echo "Building desktop game (version + patch notes + binaries)..."
+bash ./scripts/build-game.sh
 
 echo
-echo "Building Windows portable exe (requires Wine)..."
-npm run build:win
+echo "Building Electron launchers (independent launcher version)..."
+bash ./scripts/build-launcher.sh
 
 echo
-echo "Building Electron launchers..."
-npm run build:launcher:electron:linux
-npm run build:launcher:electron:win
-
-echo
-echo "Build complete. Desktop artifacts in dist/:"
+echo "Desktop build complete. Artifacts in dist/:"
 ls -1 dist

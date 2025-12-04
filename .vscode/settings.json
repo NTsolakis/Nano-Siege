@@ -1,8 +1,10 @@
 {
   // Status bar buttons provided by the "Commands" extension.
-  // These run the three main flows:
+  // These run the main flows:
   // - Browser dev server
   // - Desktop Electron app
+  // - Build + deploy game (AppImage + EXE)
+  // - Build + deploy launcher
   // - Full Unraid deploy
   "commands.commands": {
     "Web Dev": {
@@ -21,6 +23,24 @@
         "alignment": "left",
         "text": "🖥 Desktop",
         "tooltip": "Run Electron app"
+      }
+    },
+    "Build+Deploy Game": {
+      "command": "workbench.action.tasks.runTask",
+      "args": "Game: Build + Deploy",
+      "statusBar": {
+        "alignment": "left",
+        "text": "🎮 Game+Deploy",
+        "tooltip": "Build + deploy game (AppImage + EXE, bumps game version + patch notes + backend version)"
+      }
+    },
+    "Build+Deploy Launcher": {
+      "command": "workbench.action.tasks.runTask",
+      "args": "Launcher: Build + Deploy",
+      "statusBar": {
+        "alignment": "left",
+        "text": "🚀 Launcher+Deploy",
+        "tooltip": "Build + deploy launcher (bumps launcher version + backend version)"
       }
     },
     "Deploy Unraid": {

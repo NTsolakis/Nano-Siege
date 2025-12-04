@@ -28,9 +28,26 @@ echo "Unraid host:        ${UNRAID_USER}@${UNRAID_HOST}"
 echo "Unraid repo dir:    ${UNRAID_REPO_DIR}"
 echo "Unraid downloads:   ${UNRAID_DOWNLOADS_DIR}"
 
+BUILD_KIND="${BUILD_KIND:-all}"
+
 echo
-echo "Step 1/5: Building desktop game + launchers..."
-npm run build:desktop:release
+echo "Step 1/5: Building artifacts (${BUILD_KIND})..."
+
+case "${BUILD_KIND}" in
+  game)
+    echo "Building game only (AppImage + EXE)..."
+    bash ./scripts/build-game.sh
+    ;;
+  launcher)
+    echo "Building launcher only (Electron launchers)..."
+    bash ./scripts/build-launcher.sh
+    ;;
+  all|*)
+    echo "Building game + launcher..."
+    bash ./scripts/build-game.sh
+    bash ./scripts/build-launcher.sh
+    ;;
+esac
 
 echo
 echo "Step 2/5: Committing and pushing to Git..."
@@ -130,7 +147,7 @@ REPO_DIR="${UNRAID_REPO_DIR}"
 cd "\$REPO_DIR"
 BRANCH="\$(git rev-parse --abbrev-ref HEAD)"
 git pull origin "\$BRANCH" || true
-FORCE_LAUNCHER_BUMP=1 ./scripts/deploy-unraid.sh
+./scripts/deploy-unraid.sh
 EOF
 
 echo

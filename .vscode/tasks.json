@@ -16,6 +16,28 @@
       "problemMatcher": []
     },
     {
+      "label": "Game: Build + Deploy",
+      "type": "shell",
+      "command": "bash",
+      "args": [
+        "-lc",
+        "BUILD_KIND=game ./scripts/build-and-deploy-unraid.sh"
+      ],
+      "group": "none",
+      "problemMatcher": []
+    },
+    {
+      "label": "Launcher: Build + Deploy",
+      "type": "shell",
+      "command": "bash",
+      "args": [
+        "-lc",
+        "BUILD_KIND=launcher ./scripts/build-and-deploy-unraid.sh"
+      ],
+      "group": "none",
+      "problemMatcher": []
+    },
+    {
       "label": "Deploy: Unraid full",
       "type": "npm",
       "script": "deploy:unraid:full",

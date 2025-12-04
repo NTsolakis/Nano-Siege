@@ -219,12 +219,29 @@
     }
 
     let settings = readSettings();
+    let launcherVersion = null;
+
+    try{
+      const lv = require('./launcher-version.json');
+      if(lv && typeof lv.version === 'string' && lv.version.trim()){
+        launcherVersion = lv.version.trim();
+      }
+    }catch(e){
+      launcherVersion = null;
+    }
     let currentBinaryPath = null;
     let canPlay = false;
 
     function setStatus(text, version, ready){
       statusEl.textContent = text || '';
-      versionEl.textContent = version ? ('Alpha ' + version) : '';
+      const parts = [];
+      if(version){
+        parts.push('Alpha ' + version);
+      }
+      if(launcherVersion){
+        parts.push('Launcher v' + launcherVersion);
+      }
+      versionEl.textContent = parts.join(' • ');
       canPlay = !!ready;
       playBtn.disabled = !canPlay;
     }
