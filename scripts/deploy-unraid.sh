@@ -149,6 +149,13 @@ else
     2>/dev/null || true)
 fi
 
+# Filter out generic auto-commit messages so in-game patch notes stay
+# useful; if nothing player-facing remains we fall back to a friendly
+# summary below.
+if [ -n "${patch_notes//[$'\t\r\n ']}" ]; then
+  patch_notes=$(printf "%s\n" "$patch_notes" | sed '/^[[:space:]]*$/d' | sed '/^Incremental desktop\/launcher update$/d' | sed '/^Describe the change$/d')
+fi
+
 # If no game commits are found in this range, keep a single friendly
 # note so the in-game patch notes screen can still explain that the
 # update was backend/launcher-only.
