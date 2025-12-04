@@ -109,7 +109,7 @@ else
       esac
 
       case "$f" in
-        launcher/*|scripts/build-desktop-release.sh|scripts/build-and-deploy-unraid.sh)
+        launcher/*)
           changed_launcher=1
           ;;
       esac
@@ -141,7 +141,7 @@ if [ -n "$game_status" ]; then
   fi
 fi
 
-launcher_status=$(git status --porcelain -- launcher scripts/build-desktop-release.sh scripts/build-and-deploy-unraid.sh 2>/dev/null || true)
+launcher_status=$(git status --porcelain -- launcher 2>/dev/null || true)
 if [ -n "$launcher_status" ]; then
   changed_launcher=1
   dirty_any=1
