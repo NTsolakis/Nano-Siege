@@ -21,9 +21,19 @@ html,body{
    * needing background-attachment:fixed (which can cause scroll
    * issues on some devices). */
   min-height:100vh;
-  background:#020713 url('data/loading-bg.gif') center center/cover no-repeat;
+  background:#020713;
   font-family:Inter,system-ui,Segoe UI,Roboto,Helvetica,Arial,sans-serif;
   color:var(--text);
+}
+
+.page-bg-video{
+  position:fixed;
+  inset:0;
+  width:100%;
+  height:100%;
+  object-fit:cover;
+  pointer-events:none;
+  z-index:0;
 }
 
 #scale-root{
@@ -160,7 +170,18 @@ button:disabled{opacity:.55;cursor:not-allowed;filter:grayscale(40%)}
 .sandbox-btn{margin-top:6px;padding:4px 10px;font-size:11px;letter-spacing:.14em;text-transform:uppercase;border-radius:999px}
 
 /* Wave status pill */
-.wave-status{display:inline-flex;flex-direction:column;align-items:flex-start;gap:4px;padding:6px 10px;border-radius:12px;background:var(--panel);border:1px solid rgba(255,255,255,.08);color:var(--muted);font-size:12px}
+.wave-status{
+  display:inline-flex;
+  flex-direction:column;
+  align-items:flex-start;
+  gap:4px;
+  padding:6px 10px;
+  border-radius:12px;
+  background:rgba(0,0,0,.88);
+  border:1px solid rgba(255,255,255,.16);
+  color:var(--muted);
+  font-size:12px;
+}
 .wave-status.inactive{opacity:.55}
 .wave-status.inactive .ws-label::before{animation:none;opacity:.5}
 /* pulsing dot sits before the label */
@@ -258,6 +279,22 @@ canvas#game{display:block;max-width:100%;width:960px;height:auto;border:1px soli
 .overlay .tag{margin:0 0 16px;color:var(--muted)}
 .overlay .actions{display:flex;flex-wrap:wrap;gap:10px;justify-content:center;margin:8px 0 8px}
 .overlay .hint{margin:8px 0 0;color:var(--muted);font-size:12px;opacity:.8}
+
+/* Pause menu: slightly wider card and richer intro text so it feels
+ * like a proper in-run menu rather than a tiny modal. */
+#pause-overlay .panel.small{
+  max-width:640px;
+  padding:28px 38px;
+}
+#pause-overlay .tag{
+  margin-bottom:14px;
+  font-size:12px;
+  letter-spacing:.18em;
+  text-transform:uppercase;
+}
+#pause-overlay .pause-actions{
+  margin-top:6px;
+}
 
 /* Ensure the exit-confirm overlay appears above fullscreen main menu
  * and gameplay, so the confirmation dialog is always visible no matter
@@ -469,6 +506,13 @@ canvas#game{display:block;max-width:100%;width:960px;height:auto;border:1px soli
   content:\"\";position:absolute;inset:8px;border-radius:inherit;border:1px solid rgba(255,255,255,.05);opacity:.7;pointer-events:none;
 }
 
+/* Player profile: give the panel a wider, more prominent layout so it feels
+ * like its own fullscreen page rather than a small modal. */
+#profile-overlay .mainmenu-panel{
+  max-width:920px;
+  padding:40px 52px;
+}
+
 /* How To Play layout */
 #howto-overlay .mainmenu-panel{
   max-width:960px;
@@ -603,6 +647,46 @@ canvas#game{display:block;max-width:100%;width:960px;height:auto;border:1px soli
 .rank-name .rank{font-weight:600;color:#e9fbff;text-transform:uppercase;letter-spacing:.2em}
 .rank-name .rank.clickable{cursor:pointer;text-decoration:underline;text-decoration-style:dotted;text-decoration-color:rgba(0,186,255,.7)}
 .rank-name .waves{font-size:12px;color:#8aa7c7;letter-spacing:.15em;text-transform:uppercase}
+/* Shared character chips (Volt / Lumen / Torque) used in leaderboard + profile */
+.character-chip{
+  display:inline-flex;
+  align-items:center;
+  gap:6px;
+  padding:2px 8px;
+  border-radius:999px;
+  border:1px solid rgba(255,255,255,.14);
+  background:rgba(4,10,18,.9);
+  font-size:11px;
+  letter-spacing:.16em;
+  text-transform:uppercase;
+  color:#e9fbff;
+}
+.character-chip-icon{
+  width:18px;
+  height:18px;
+  border-radius:50%;
+  background-size:cover;
+  background-position:center;
+  background-repeat:no-repeat;
+  box-shadow:0 0 8px rgba(0,0,0,.6);
+}
+.character-chip-label{white-space:nowrap}
+.character-chip[data-character="volt"]{
+  color:#bbf7d0;
+  border-color:rgba(34,197,94,.7);
+  box-shadow:0 0 14px rgba(34,197,94,.55);
+}
+.character-chip[data-character="lumen"]{
+  color:#e0f2fe;
+  border-color:rgba(56,189,248,.8);
+  box-shadow:0 0 14px rgba(56,189,248,.6);
+}
+.character-chip[data-character="torque"]{
+  color:#ffedd5;
+  border-color:rgba(249,115,22,.9);
+  box-shadow:0 0 14px rgba(249,115,22,.65);
+}
+.rank-name .character-chip{margin-top:2px;align-self:flex-start}
 .leaderboard-warning{padding:10px 14px;border-radius:14px;border:1px solid rgba(0,186,255,.25);background:rgba(0,186,255,.08);text-align:center;font-size:12px;letter-spacing:.2em;text-transform:uppercase}
 .leaderboard-warning.warn{border-color:rgba(255,212,124,.4);background:rgba(255,212,124,.12);color:#ffd47c;box-shadow:0 0 15px rgba(255,212,124,.35)}
 .leaderboard-warning.signed-in{border-color:rgba(23,231,164,.35);background:rgba(23,231,164,.1);color:#a8ffdc}
@@ -611,10 +695,14 @@ canvas#game{display:block;max-width:100%;width:960px;height:auto;border:1px soli
 .mainmenu-panel .actions{flex-wrap:wrap;gap:12px}
 .mainmenu-panel .actions button{flex:1 1 120px}
 
-.lb-search-row{display:flex;gap:8px;margin-top:10px}
-.lb-search-row input{flex:1 1 auto;min-width:0;padding:6px 12px;border-radius:999px;border:1px solid rgba(148,163,184,.8);background:rgba(11,18,30,.96);color:#e9fbff;font-size:13px}
-.lb-search-row input::placeholder{color:#64748b}
-.lb-search-row button{flex:0 0 auto}
+.lb-search-row,
+.profile-search-row{display:flex;gap:8px;margin-top:10px}
+.lb-search-row input,
+.profile-search-row input{flex:1 1 auto;min-width:0;padding:6px 12px;border-radius:999px;border:1px solid rgba(148,163,184,.8);background:rgba(11,18,30,.96);color:#e9fbff;font-size:13px}
+.lb-search-row input::placeholder,
+.profile-search-row input::placeholder{color:#64748b}
+.lb-search-row button,
+.profile-search-row button{flex:0 0 auto}
 
 @keyframes neonPulse{
   0%,100%{text-shadow:0 0 20px rgba(0,186,255,.6),0 0 60px rgba(23,231,164,.35);filter:drop-shadow(0 0 10px rgba(23,231,164,.35))}
@@ -625,11 +713,11 @@ canvas#game{display:block;max-width:100%;width:960px;height:auto;border:1px soli
 @keyframes gridPulse{0%,100%{opacity:.12}50%{opacity:.22}}
 
 /* Assembly War overlay */
-#assembly-overlay{position:fixed;inset:0;min-height:100vh;padding:40px 16px 72px;align-items:flex-start;background:radial-gradient(130% 130% at 80% 0%,#031426 0%,#050b13 45%,#010306 100%);overflow-y:auto;z-index:850}
+#assembly-overlay{position:fixed;inset:0;min-height:100vh;padding:48px 16px;align-items:center;background:radial-gradient(130% 130% at 80% 0%,#031426 0%,#050b13 45%,#010306 100%);overflow-y:auto;z-index:850}
 #assembly-overlay::before{content:\"\";position:absolute;inset:-20%;background:conic-gradient(from 90deg,#0ff5c933,#00baff33,#0062ff22,#8f63ff22,#0ff5c933);filter:blur(70px);opacity:.75;animation:menuFlow 24s linear infinite reverse}
 #assembly-overlay::after{content:\"\";position:absolute;inset:0;background-image:linear-gradient(rgba(255,255,255,.03) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.03) 1px,transparent 1px);background-size:140px 140px;opacity:.12;mix-blend-mode:screen;animation:gridPulse 8s ease-in-out infinite reverse}
 #assembly-overlay > *{position:relative;z-index:1}
-#assembly-overlay .panel{max-width:1120px;width:100%;padding:48px;border-radius:28px;background:rgba(5,11,18,.92);box-shadow:0 25px 120px rgba(0,0,0,.8),0 0 45px rgba(0,186,255,.3),inset 0 0 0 1px rgba(255,255,255,.05);max-height:calc(100vh - 160px);overflow:auto}
+#assembly-overlay .panel{max-width:1120px;width:100%;padding:48px;border-radius:28px;background:rgba(5,11,18,.92);box-shadow:0 25px 120px rgba(0,0,0,.8),0 0 45px rgba(0,186,255,.3),inset 0 0 0 1px rgba(255,255,255,.05)}
 #assembly-overlay h3{font-size:clamp(32px,3vw,56px);text-transform:uppercase;letter-spacing:.35em;margin-bottom:6px;color:#a7f5ff;text-shadow:0 0 20px rgba(0,186,255,.4)}
 #assembly-overlay .tag{font-size:16px;color:#8aa7c7;margin-bottom:28px;letter-spacing:.15em;text-transform:uppercase}
 #assembly-overlay .mission-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:18px;width:100%}
@@ -823,8 +911,8 @@ canvas#game{display:block;max-width:100%;width:960px;height:auto;border:1px soli
 .leaderboard-container{max-height:calc(100vh - 460px);min-height:280px;overflow-y:auto;width:100%;padding-right:6px;box-sizing:border-box;scrollbar-gutter:stable both-edges}
 .leaderboard-container .leaderboard-list{margin-top:12px;}
 
-#profile-overlay{align-items:flex-start;justify-content:center}
-#profile-overlay .profile-layout{width:min(900px,100%);margin:12px auto 8px}
+#profile-overlay{align-items:center;justify-content:center}
+#profile-overlay .profile-layout{width:min(1000px,100%);margin:0 auto}
 .profile-header{display:flex;flex-direction:column;gap:4px;margin-bottom:12px;text-align:left}
 .profile-username{font-size:20px;letter-spacing:.2em;text-transform:uppercase;color:#e9fbff}
 .profile-meta{display:flex;flex-wrap:wrap;gap:10px;font-size:12px;color:#8aa7c7;letter-spacing:.15em;text-transform:uppercase}
@@ -832,12 +920,15 @@ canvas#game{display:block;max-width:100%;width:960px;height:auto;border:1px soli
 .profile-stat{padding:10px 12px;border-radius:12px;background:rgba(0,0,0,.4);border:1px solid rgba(0,186,255,.16);text-align:left}
 .profile-stat .label{font-size:11px;color:#8aa7c7;letter-spacing:.16em;text-transform:uppercase;margin-bottom:4px}
 .profile-stat .value{font-size:15px;color:#e9fbff}
+.profile-stat .value .character-chip{margin-top:0}
 .profile-section{margin-top:8px;text-align:left}
 .profile-section h3{margin:0 0 6px;font-size:13px;text-transform:uppercase;letter-spacing:.2em;color:#94a3b8}
 .profile-map-list,
 .profile-run-list{list-style:none;margin:0;padding:0;max-height:220px;overflow-y:auto}
 .profile-map-list li,
 .profile-run-list li{font-size:13px;color:#e9fbff;padding:6px 8px;border-radius:8px;background:rgba(0,0,0,.35);border:1px solid rgba(255,255,255,.06);margin-bottom:4px}
+.profile-run-list li .run-main{margin-bottom:4px}
+.profile-run-list li .character-chip{margin-bottom:2px}
 .profile-run-list li small{display:block;font-size:11px;color:#8aa7c7}
 .profile-empty{font-size:12px;color:#8aa7c7;margin:4px 0 0}
 .profile-status{text-align:center;font-size:13px;color:#8aa7c7;margin-top:10px;display:none}
@@ -923,6 +1014,20 @@ canvas#game{display:block;max-width:100%;width:960px;height:auto;border:1px soli
   box-shadow:0 8px 18px rgba(0,0,0,.45);
   backdrop-filter:blur(18px);
   align-items:end;
+  position:relative;
+}
+.hud::before{
+  content:"";
+  position:absolute;
+  left:0;
+  right:0;
+  top:0;
+  bottom:0;
+  background:url('data/Toolbar-Bg.png') repeat-x center bottom;
+  background-size:auto 100%;
+  opacity:1;
+  pointer-events:none;
+  z-index:-1;
 }
 .hud-title-floating{
   position:absolute;
@@ -1453,12 +1558,26 @@ canvas#game{display:block;max-width:100%;width:960px;height:auto;border:1px soli
   grid-template-columns:var(--side-panel-width) minmax(300px,1fr) var(--side-panel-width);
   gap:10px;
   padding:14px 0 16px;
-  /* Space backdrop behind the central game column and side panels,
-   * constrained to the stage area so the global loading GIF remains
-   * visible in the outer margins. */
-  background:#020308 url('data/Space-Background.png') center bottom/cover no-repeat;
+  position:relative;
+  overflow:hidden;
+  /* Base color fallback; the live video layer inside .stage-wrap
+   * provides the animated space backdrop. */
+  background:#020308;
   align-items:stretch;
   margin-top:0;
+}
+.stage-bg-video{
+  position:absolute;
+  inset:0;
+  width:100%;
+  height:100%;
+  object-fit:cover;
+  pointer-events:none;
+  z-index:0;
+}
+.stage-wrap > *:not(.stage-bg-video){
+  position:relative;
+  z-index:1;
 }
 .wave-panel,.passive-panel{
   width:100%;
@@ -1476,8 +1595,25 @@ canvas#game{display:block;max-width:100%;width:960px;height:auto;border:1px soli
   overflow-y:auto;
   overflow-x:hidden;
 }
+.wave-panel{
+  position:relative;
+  /* Use the custom wave-panel artwork underneath a subtle gradient so
+   * all text and metrics remain readable. */
+  background:
+    linear-gradient(180deg,rgba(255,255,255,.02),rgba(0,0,0,.45)),
+    url('data/Wavepanel-Bg.png') center top/cover no-repeat;
+}
 .passive-panel{
   position:relative;
+  /* Custom nano-tech upgrade panel art behind the slots, with a subtle
+   * dark gradient to keep labels readable. The art is scaled to span
+   * the full panel width so it fits cleanly horizontally. */
+  background-image:
+    linear-gradient(180deg,rgba(255,255,255,.02),rgba(0,0,0,.45)),
+    url('data/Nanotechpanel-Bg.png');
+  background-position:center top, center top;
+  background-repeat:no-repeat, no-repeat;
+  background-size:auto, 100% 100%;
 }
 .pp-lines{
   flex:1 1 auto;
@@ -1497,10 +1633,10 @@ canvas#game{display:block;max-width:100%;width:960px;height:auto;border:1px soli
   gap:7px;
 }
 .wave-panel-top{display:flex;justify-content:space-between;align-items:center;gap:8px}
-/* Center the wave-status pill at the top of the wave panel */
+/* Center the wave label + status pill at the top of the wave panel */
 .wave-panel-top{
   flex-direction:column;
-  align-items:flex-start;
+  align-items:center;
 }
 .wave-panel-top #wave-status{
   align-self:center;
@@ -1513,11 +1649,31 @@ canvas#game{display:block;max-width:100%;width:960px;height:auto;border:1px soli
   letter-spacing:.2em;
   text-transform:uppercase;
   color:#f0fbff;
+  text-align:center;
+  width:100%;
 }
 .wave-metrics{display:flex;flex-direction:column;gap:6px}
-.wave-metric{display:flex;justify-content:space-between;padding:6px 8px;border-radius:10px;background:rgba(0,0,0,.35);border:1px solid rgba(255,255,255,.05);font-size:12px}
+.wave-metric{
+  display:flex;
+  justify-content:space-between;
+  padding:6px 8px;
+  border-radius:10px;
+  background:rgba(0,0,0,.65);
+  border:1px solid rgba(255,255,255,.08);
+  font-size:12px;
+}
 .wave-metric .value{color:#e5f6ff;font-weight:600}
-.banner-feed{flex:1;border:1px solid rgba(255,255,255,.05);border-radius:12px;padding:10px;background:rgba(0,0,0,.35);overflow:auto;display:flex;flex-direction:column;gap:8px}
+.banner-feed{
+  flex:1;
+  border:1px solid rgba(255,255,255,.08);
+  border-radius:12px;
+  padding:10px;
+  background:rgba(0,0,0,.7);
+  overflow:auto;
+  display:flex;
+  flex-direction:column;
+  gap:8px;
+}
 .banner-entry{border-radius:10px;border:1px solid rgba(255,255,255,.08);padding:8px 10px;font-size:12px}
 .banner-entry .be-title{font-weight:600;color:#fff}
 .banner-entry .be-sub{color:var(--muted)}

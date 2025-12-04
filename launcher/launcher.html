@@ -97,23 +97,32 @@
       }
     })();
 
-    // Use the same hosted background image as the main game,
+    // Use the same hosted background video as the main game,
     // derived from the manifest base URL so staging domains work.
     const LAUNCHER_BG_URL = (() => {
       try {
-        const u = new URL('../data/loading-bg.gif', MANIFEST_URL);
+        const u = new URL('../data/loading-bg.mp4', MANIFEST_URL);
         return u.toString();
       } catch (e) {
-        return 'https://nano.nicksminecraft.net/data/loading-bg.gif';
+        return 'https://nano.nicksminecraft.net/data/loading-bg.mp4';
       }
     })();
 
     if (bgEl && LAUNCHER_BG_URL) {
       try {
-        bgEl.style.backgroundImage = `url('${LAUNCHER_BG_URL}')`;
-        bgEl.style.backgroundPosition = 'center center';
-        bgEl.style.backgroundSize = 'cover';
-        bgEl.style.backgroundRepeat = 'no-repeat';
+        const vid = document.createElement('video');
+        vid.autoplay = true;
+        vid.muted = true;
+        vid.loop = true;
+        vid.playsInline = true;
+        vid.src = LAUNCHER_BG_URL;
+        vid.style.position = 'absolute';
+        vid.style.inset = '0';
+        vid.style.width = '100%';
+        vid.style.height = '100%';
+        vid.style.objectFit = 'cover';
+        vid.style.pointerEvents = 'none';
+        bgEl.appendChild(vid);
       } catch (e) {
         // best-effort; background is cosmetic
       }

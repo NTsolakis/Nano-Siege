@@ -87,7 +87,8 @@ export class Game {
     // visits Assembly War.
     this.pendingUserState = null;
     this.profileMode = null;      // 'load' | 'save' | null
-    this.profileOrigin = null;    // 'mainmenu' | 'assembly' | null
+    this.profileOrigin = null;    // 'mainmenu' | 'assembly' | 'pause' | 'leaderboard' | 'profile'
+    this.profileViewOrigin = null; // where the profile overlay was opened from: 'leaderboard' | 'mainmenu' | null
     this.missionUnlockLevel = 1;  // highest Assembly mission unlocked (1-6)
 
     this.credits = GAME_RULES.startingCredits;
@@ -303,6 +304,7 @@ export class Game {
     // Main menu flow
     this.ui.on('mainNew', ()=> this.handleMainNew());
     this.ui.on('mainLoad', ()=> this.handleMainLoad());
+    this.ui.on('mainUserProfile', ()=> this.handleMainUserProfile());
     this.ui.on('loadSlot', (slot)=> this.handleLoadSlot(slot));
     this.ui.on('loadBack', ()=> this.handleLoadBack());
     this.ui.on('menuBack', ()=> this.handleMenuBack());
@@ -320,7 +322,10 @@ export class Game {
     this.ui.on('openCreateUser', ()=> this.openCreateUser());
     this.ui.on('closeCreateUser', ()=> this.closeCreateUser());
     this.ui.on('createUser', (creds)=> this.handleCreateUser(creds));
-    this.ui.on('openLeaderboard', ()=> this.openLeaderboard());
+    this.ui.on('openLeaderboard', (payload)=> {
+      const origin = payload && payload.origin;
+      this.openLeaderboard(origin);
+    });
     this.ui.on('closeLeaderboard', ()=> this.closeLeaderboard());
     this.ui.on('leaderboardSignIn', ()=> this.handleLeaderboardSignIn());
     this.ui.on('logout', (payload)=> this.handleLogout(payload));
@@ -336,11 +341,26 @@ export class Game {
     this.ui.on('leaderboardSelectMap', (key)=>{ if(key){ this.leaderboardMapKey = key; this.refreshLeaderboard(key); } });
     this.ui.on('openUserProfile', (payload)=> {
       const uname = payload && payload.username;
-      if(uname) this.openUserProfile(uname);
+      if(!uname) return;
+      const origin = payload && payload.origin;
+      if(origin === 'leaderboard'){
+        this.profileViewOrigin = 'leaderboard';
+      } else if(origin === 'profile'){
+        if(!this.profileViewOrigin){
+          this.profileViewOrigin = 'profile';
+        }
+      } else if(origin === 'mainmenu'){
+        this.profileViewOrigin = 'mainmenu';
+      } else if(!this.profileViewOrigin){
+        this.profileViewOrigin = 'mainmenu';
+      }
+      this.openUserProfile(uname);
     });
     this.ui.on('leaderboardSearch', (payload)=> {
       const uname = payload && payload.username;
-      if(uname) this.openUserProfile(uname);
+      if(!uname) return;
+      this.profileViewOrigin = 'leaderboard';
+      this.openUserProfile(uname);
     });
     this.ui.on('exitConfirm', ()=> this._handleExitConfirm(true));
     this.ui.on('exitCancel', ()=> this._handleExitConfirm(false));
@@ -367,6 +387,15 @@ export class Game {
     this.ui.on('sandboxReset', ()=> this.resetSandboxConfig());
     this.ui.on('closeUserProfile', ()=> {
       if(this.ui.showUserProfile) this.ui.showUserProfile(false);
+      if(this.profileViewOrigin === 'leaderboard' && this.ui.showLeaderboard){
+        this.ui.showLeaderboard(true);
+      } else if(this.profileViewOrigin === 'profile' && this.ui.showProfileMenu){
+        this.ui.showProfileMenu(true);
+      } else if(this.ui.showMainMenu){
+        this.ui.showMainMenu(true);
+      }
+      this.profileViewOrigin = null;
+      if(this.ui.updateModalMask) this.ui.updateModalMask();
     });
 
     this.ui.setWave(1);
@@ -1432,6 +1461,8 @@ export class Game {
         if(this.ui.showPauseLogin) this.ui.showPauseLogin(false);
       } else if(uiOrigin === 'leaderboard'){
         this.openLeaderboard();
+      } else if(uiOrigin === 'profile'){
+        this.handleMainUserProfile();
       }
       this.profileOrigin = null;
     }catch(err){
@@ -1480,6 +1511,8 @@ export class Game {
         if(this.ui.showMainMenu) this.ui.showMainMenu(true);
       } else if(this.profileOrigin === 'pause'){
         if(this.ui.showPauseLogin) this.ui.showPauseLogin(false);
+      } else if(this.profileOrigin === 'profile'){
+        this.handleMainUserProfile();
       }
       this.profileOrigin = null;
     }catch(err){
@@ -1526,6 +1559,7 @@ export class Game {
     }
     this.profileOrigin = null;
     this.profileMode = null;
+    this.profileViewOrigin = null;
   }
 
   async _prewarmMainMenu(){
@@ -1594,11 +1628,19 @@ export class Game {
       if(this.ui.setLeaderboardLoading) this.ui.setLeaderboardLoading(false);
     }
   }
-  openLeaderboard(){
+  openLeaderboard(origin){
+    // Remember where the leaderboard was opened from so the Back button
+    // can return to the correct parent menu (Play, main menu, etc.).
+    if(origin){
+      this.leaderboardOrigin = origin;
+    } else if(!this.leaderboardOrigin){
+      this.leaderboardOrigin = 'mainmenu';
+    }
     // Require a signed-in profile before viewing the leaderboard.
     if(!this.currentUser){
       this.profileOrigin = 'leaderboard';
       if(this.ui.showMainMenu) this.ui.showMainMenu(false);
+      if(this.ui.showPlayMenu) this.ui.showPlayMenu(false);
       if(this.ui.showAssembly) this.ui.showAssembly(false);
       if(this.ui.showCreateMenu) this.ui.showCreateMenu(false);
       if(this.ui.clearLoginForm) this.ui.clearLoginForm();
@@ -1608,8 +1650,8 @@ export class Game {
       if(this.ui.showLoadMenu) this.ui.showLoadMenu(true);
       return;
     }
-    this.leaderboardOrigin = 'mainmenu';
     if(this.ui.showMainMenu) this.ui.showMainMenu(false);
+    if(this.ui.showPlayMenu) this.ui.showPlayMenu(false);
     if(this.ui.setLeaderboardLoading) this.ui.setLeaderboardLoading(true);
     if(this.ui.showLeaderboard) this.ui.showLeaderboard(true);
     // Default leaderboard map follows current selected map
@@ -1620,7 +1662,9 @@ export class Game {
   }
   closeLeaderboard(){
     if(this.ui.showLeaderboard) this.ui.showLeaderboard(false);
-    if(this.leaderboardOrigin === 'mainmenu' && this.ui.showMainMenu){
+    if(this.leaderboardOrigin === 'play' && this.ui.showPlayMenu){
+      this.ui.showPlayMenu(true);
+    } else if(this.ui.showMainMenu){
       this.ui.showMainMenu(true);
     }
     this.leaderboardOrigin = null;
@@ -1655,6 +1699,9 @@ export class Game {
   async openUserProfile(username){
     const name = (username||'').trim();
     if(!name) return;
+    // Treat the profile as its own fullscreen view layered in the
+    // main‑menu shell rather than a small panel over the leaderboard.
+    if(this.ui.showLeaderboard) this.ui.showLeaderboard(false);
     if(this.ui.showUserProfile) this.ui.showUserProfile(true);
     if(this.ui.setUserProfileLoading) this.ui.setUserProfileLoading(true);
     if(this.ui.setUserProfileError) this.ui.setUserProfileError('');
@@ -1975,7 +2022,7 @@ export class Game {
     this.state = 'menu';
   }
   handleMainAssembly(){
-    // From fullscreen main menu straight into Assembly mission select.
+    // From fullscreen main menu → Assembly War mission select.
     // If we have a pending profile from a pause‑menu login, apply it
     // now so mission unlocks and meta‑progress are reflected here.
     if(this.pendingUserState){
@@ -1983,9 +2030,11 @@ export class Game {
       this.applyUserState(this.pendingUserState);
       this.pendingUserState = null;
     }
+    if(this.ui.showGameModes) this.ui.showGameModes(false);
     if(this.ui.showMainMenu) this.ui.showMainMenu(false);
     if(this.ui.showLoadMenu) this.ui.showLoadMenu(false);
     if(this.ui.showAssembly) this.ui.showAssembly(true);
+    if(this.ui.updateModalMask) this.ui.updateModalMask();
     this.state = 'menu';
   }
   handleMainSandbox(){
@@ -2064,13 +2113,51 @@ export class Game {
   }
   handleLoadBack(){
     if(this.ui.showLoadMenu) this.ui.showLoadMenu(false);
-    if(this.profileOrigin === 'assembly'){
+    const origin = this.profileOrigin || 'mainmenu';
+    if(origin === 'assembly'){
       if(this.ui.showAssembly) this.ui.showAssembly(true);
+    } else if(origin === 'leaderboard'){
+      if(this.leaderboardOrigin === 'play' && this.ui.showPlayMenu){
+        this.ui.showPlayMenu(true);
+      } else if(this.ui.showMainMenu){
+        this.ui.showMainMenu(true);
+      }
+    } else if(origin === 'profile'){
+      if(this.ui.showProfileMenu) this.ui.showProfileMenu(true);
     } else {
       if(this.ui.showMainMenu) this.ui.showMainMenu(true);
     }
+    if(this.ui.updateModalMask) this.ui.updateModalMask();
     this.profileMode = null;
     this.profileOrigin = null;
+  }
+
+  handleMainUserProfile(){
+    // From fullscreen main menu → current user's profile. If no user is
+    // signed in yet, route through the Sign In overlay first and then
+    // open the profile once login completes.
+    if(!this.currentUser){
+      this.profileOrigin = 'profile';
+      this.profileViewOrigin = 'profile';
+      if(this.ui.showProfileMenu) this.ui.showProfileMenu(false);
+      if(this.ui.showMainMenu) this.ui.showMainMenu(false);
+      if(this.ui.showAssembly) this.ui.showAssembly(false);
+      if(this.ui.showCreateMenu) this.ui.showCreateMenu(false);
+      if(this.ui.clearLoginForm) this.ui.clearLoginForm();
+      if(this.ui.setLoadHeading){
+        this.ui.setLoadHeading('Sign In', 'Sign in to view your player profile.');
+      }
+      if(this.ui.showLoadMenu) this.ui.showLoadMenu(true);
+      return;
+    }
+    // Already signed in: hide main menu and show the profile directly.
+    if(!this.profileViewOrigin){
+      this.profileViewOrigin = 'profile';
+    }
+    if(this.ui.showProfileMenu) this.ui.showProfileMenu(false);
+    if(this.ui.showMainMenu) this.ui.showMainMenu(false);
+    if(this.ui.showLeaderboard) this.ui.showLeaderboard(false);
+    this.openUserProfile(this.currentUser.username);
   }
 
   // --- Assembly War mission flow ---
@@ -2150,7 +2237,12 @@ export class Game {
   }
   handleCloseAssembly(){
     if(this.ui.showAssembly) this.ui.showAssembly(false);
-    if(this.ui.showMainMenu) this.ui.showMainMenu(true);
+    if(this.ui.showGameModes){
+      this.ui.showGameModes(true);
+    } else if(this.ui.showMainMenu){
+      this.ui.showMainMenu(true);
+    }
+    if(this.ui.updateModalMask) this.ui.updateModalMask();
     this.resetAbilityUnlocks();
     this.state = 'menu';
   }
@@ -2253,6 +2345,28 @@ export class Game {
         // Mission already complete; ignore extra start requests.
         return;
       }
+    }
+    // At the start of each wave, reset ability cooldowns so the player
+    // always opens waves with tools ready instead of idling between
+    // waves waiting for timers to finish.
+    if(this.abilities){
+      const ab = this.abilities;
+      this.placingBomb = false;
+      if(ab.bomb){ ab.bomb.cd = 0; }
+      if(ab.overclock){
+        // Clear any lingering overclock state and cooldown.
+        if(ab.overclock.active || ab.overclock._applied){
+          this.clearOverclock();
+        }
+        ab.overclock.cd = 0;
+        ab.overclock.durLeft = 0;
+      }
+      if(ab.cryo){
+        ab.cryo.cd = 0;
+        ab.cryo.active = false;
+        ab.cryo.timeLeft = 0;
+      }
+      if(this.updateAbilityUI) this.updateAbilityUI();
     }
     // Character dialogue: first wave always, later waves random with spacing.
     this._maybeShowPilotLine(waveNumber, isAssembly);

@@ -406,10 +406,10 @@ function showGuiPrompt(version) {
 // console window.
 const LAUNCHER_BG_URL = (() => {
   try {
-    const u = new URL('../data/loading-bg.gif', MANIFEST_URL);
+    const u = new URL('../data/loading-bg.mp4', MANIFEST_URL);
     return u.toString();
   } catch (e) {
-    return 'https://nano.nicksminecraft.net/data/loading-bg.gif';
+    return 'https://nano.nicksminecraft.net/data/loading-bg.mp4';
   }
 })();
 
@@ -424,7 +424,8 @@ function renderLauncherHtml() {
     *{box-sizing:border-box;margin:0;padding:0}
     html,body{height:100%;width:100%;background:#050611;color:#e6f7ff;font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica,Arial,sans-serif;overflow:hidden}
     body{display:flex;align-items:center;justify-content:center}
-    .bg{position:fixed;inset:0;background:url('${LAUNCHER_BG_URL}') center center/cover no-repeat;background-color:#050611;filter:brightness(0.45);z-index:0}
+    .bg{position:fixed;inset:0;background-color:#050611;filter:brightness(0.45);z-index:0;overflow:hidden}
+    .bg video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;pointer-events:none}
     .overlay{position:relative;z-index:1;display:flex;align-items:center;justify-content:center;width:100%;height:100%;padding:16px}
     .card{min-width:320px;max-width:520px;background:rgba(8,10,26,0.92);border-radius:14px;border:1px solid rgba(96,255,255,0.5);box-shadow:0 0 40px rgba(0,0,0,0.85);padding:22px 26px;text-align:center}
     .title{font-size:28px;letter-spacing:0.12em;text-transform:uppercase;margin-bottom:6px;color:#8cf5ff;text-shadow:0 0 12px rgba(0,255,255,0.55)}
@@ -449,7 +450,7 @@ function renderLauncherHtml() {
   </style>
 </head>
 <body>
-  <div class="bg"></div>
+    <div class="bg"><video src="${LAUNCHER_BG_URL}" autoplay muted loop playsinline></video></div>
   <div class="overlay">
     <div class="card">
       <h1 class="title">Nano-Siege Alpha</h1>

@@ -1,5 +1,4 @@
 const IMAGE_ASSETS = [
-  'data/loading-bg.gif',
   'data/board-bg.png',
   'data/reactor-core.png',
   'data/tower-cannon.png',

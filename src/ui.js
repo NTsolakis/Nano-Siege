@@ -37,7 +37,7 @@ function detectRuntimeFlavor(){
 
 export class UIManager{
   constructor(){
-    this.listeners = { startWave: [], startGame: [], pause: [], resume: [], retry: [], restart: [], sandboxStart: [], sandboxReset: [], sandboxOpen: [], toMenu: [], toMissionSelect: [], selectTowerType: [], upgradeSlow: [], upgradeRate: [], upgradeRange: [], upgradeBurn: [], sellTower: [], sellConfirm: [], sellCancel: [], selectMap: [], toggleFast: [], closeUpg: [], toggleVolume: [], setVolume: [], shopBuy: [], shopReroll: [], shopContinue: [], shopBuyAbility: [], useBomb: [], useOverclock: [], useCryo: [], toggleDev: [], toggleDebug: [], toggleAutoSpeed: [], exitConfirm: [], exitCancel: [], exitToMenuImmediate: [], exitToDesktop: [], openShop: [], closeShop: [], devUnlockUlts: [], devUpgradeMax: [], mainNew: [], mainLoad: [], mainAssembly: [], loadSlot: [], openAssembly: [], closeAssembly: [], startMission: [], assemblySave: [], assemblyLoad: [], openAssemblyCore: [], menuBack: [], mainSettings: [], mainSettingsBack: [], loadBack: [], loginUser: [], openCreateUser: [], closeCreateUser: [], createUser: [], openLeaderboard: [], closeLeaderboard: [], leaderboardSignIn: [], logout: [], removePassive: [], leaderboardSelectMap: [], pauseLoginOpen: [], mainDownload: [], mainHowTo: [], closeHowTo: [], mainBug: [], closeBug: [], mainPatchNotes: [], closePatchNotes: [], openUserProfile: [], closeUserProfile: [], leaderboardSearch: [] };
+    this.listeners = { startWave: [], startGame: [], pause: [], resume: [], retry: [], restart: [], sandboxStart: [], sandboxReset: [], sandboxOpen: [], toMenu: [], toMissionSelect: [], selectTowerType: [], upgradeSlow: [], upgradeRate: [], upgradeRange: [], upgradeBurn: [], sellTower: [], sellConfirm: [], sellCancel: [], selectMap: [], toggleFast: [], closeUpg: [], toggleVolume: [], setVolume: [], shopBuy: [], shopReroll: [], shopContinue: [], shopBuyAbility: [], useBomb: [], useOverclock: [], useCryo: [], toggleDev: [], toggleDebug: [], toggleAutoSpeed: [], exitConfirm: [], exitCancel: [], exitToMenuImmediate: [], exitToDesktop: [], openShop: [], closeShop: [], devUnlockUlts: [], devUpgradeMax: [], mainNew: [], mainLoad: [], mainAssembly: [], loadSlot: [], openAssembly: [], closeAssembly: [], startMission: [], assemblySave: [], assemblyLoad: [], openAssemblyCore: [], menuBack: [], mainSettings: [], mainSettingsBack: [], loadBack: [], loginUser: [], openCreateUser: [], closeCreateUser: [], createUser: [], openLeaderboard: [], closeLeaderboard: [], leaderboardSignIn: [], logout: [], removePassive: [], leaderboardSelectMap: [], pauseLoginOpen: [], mainDownload: [], mainHowTo: [], closeHowTo: [], mainBug: [], closeBug: [], mainPatchNotes: [], closePatchNotes: [], openUserProfile: [], closeUserProfile: [], leaderboardSearch: [], mainUserProfile: [] };
     const flavor = detectRuntimeFlavor();
     this.isDesktopRuntime = !!flavor.isDesktop;
     this.isLocalRuntime = !!flavor.isLocal;
@@ -95,7 +95,7 @@ export class UIManager{
     // Overlays
     this.$menu = null;
     this.$pauseOverlay = document.getElementById('pause-overlay');
-    this.$pauseActions = this.$pauseOverlay ? this.$pauseOverlay.querySelector('.actions') : null;
+    this.$pauseActions = this.$pauseOverlay ? this.$pauseOverlay.querySelector('.pause-actions') : null;
     this.$btnSettings = document.getElementById('btn-settings');
     this.$settingsPanel = document.getElementById('settings-panel');
     this.$btnPauseLogin = document.getElementById('btn-pause-login');
@@ -105,6 +105,11 @@ export class UIManager{
     this.$pauseLoginStatus = document.getElementById('pause-login-status');
     this.$pauseLoginSubmit = document.getElementById('btn-pause-login-submit');
     this.$pauseLoginBack = document.getElementById('btn-pause-login-back');
+    this.$pauseBugPanel = document.getElementById('pause-bug-panel');
+    this.$pauseBugForm = document.getElementById('bug-form-pause');
+    this.$pauseBugStatus = document.getElementById('bug-status-pause');
+    this.$btnPauseBug = document.getElementById('btn-pause-bug');
+    this.$btnPauseBugBack = document.getElementById('btn-pause-bug-back');
     this.$pauseRestart = document.getElementById('btn-pause-restart');
     this.$btnSettingsBack = document.getElementById('btn-settings-back');
     this.$gameover = document.getElementById('gameover-overlay');
@@ -162,9 +167,6 @@ export class UIManager{
     this.$modeLoading = document.getElementById('mode-loading-overlay');
     this.$modeLoadingTitle = document.getElementById('mode-loading-title');
     this.$modeLoadingSub = document.getElementById('mode-loading-sub');
-    if(this.$mainMenu && this.$mainMenu.classList.contains('visible')){
-      document.body.classList.add('mainmenu-visible');
-    }
     // Leaderboard map carousel
     this.lbMaps = MAPS;
     this.lbMapIdx = 0;
@@ -183,6 +185,9 @@ export class UIManager{
     this.$modesOverlay = document.getElementById('gamemodes-overlay');
     this.$btnMainModes = document.getElementById('btn-main-modes');
     this.$btnMainDownload = document.getElementById('btn-main-download');
+    this.$playMenuOverlay = document.getElementById('playmenu-overlay');
+    this.$profileMenuOverlay = document.getElementById('profilemenu-overlay');
+    this.$databaseOverlay = document.getElementById('database-overlay');
     this.$btnModesBack = document.getElementById('btn-modes-back');
     this.$btnMainEndless = document.getElementById('btn-main-endless');
     this.$btnMainLeaderboard = document.getElementById('btn-main-leaderboard');
@@ -190,16 +195,20 @@ export class UIManager{
     this.$btnMainSandbox = document.getElementById('btn-main-sandbox');
     this.$btnMainSettings = document.getElementById('btn-main-settings');
     this.$btnMainHowTo = document.getElementById('btn-main-howto');
+    this.$btnMainPlay = document.getElementById('btn-main-play');
+    this.$btnMainProfile = document.getElementById('btn-main-profile');
+    this.$btnMainDatabase = document.getElementById('btn-main-database');
     this.$howToOverlay = document.getElementById('howto-overlay');
     this.$btnMainPatchNotes = document.getElementById('btn-main-patchnotes');
     this.$patchNotesOverlay = document.getElementById('patchnotes-overlay');
     this.$patchVersionSelect = document.getElementById('patch-version-select');
     this.$patchVersionSummary = document.getElementById('patch-version-summary');
     this.$patchNotesList = document.getElementById('patchnotes-list');
-    this.$btnMainBug = document.getElementById('btn-main-bug');
+    this.$btnMainBug = document.getElementById('btn-play-bug');
     this.$bugOverlay = document.getElementById('bug-overlay');
     this.$bugForm = document.getElementById('bug-form');
     this.$bugStatus = document.getElementById('bug-status');
+    this._bugOrigin = 'mainmenu';
     // Player profile overlay
     this.$profileOverlay = document.getElementById('profile-overlay');
     this.$profileUsername = document.getElementById('profile-username');
@@ -216,6 +225,13 @@ export class UIManager{
     this.$profileLoading = document.getElementById('profile-loading');
     this.$profileError = document.getElementById('profile-error');
     this.$btnProfileClose = document.getElementById('btn-profile-close');
+    this.$profileSearchInput = document.getElementById('profile-search-input');
+    this.$btnProfileSearch = document.getElementById('btn-profile-search');
+    this.$btnDbHowTo = document.getElementById('btn-db-howto');
+    this.$btnDbTowers = document.getElementById('btn-db-towers');
+    this.$btnDbStatus = document.getElementById('btn-db-status');
+    this.$btnDbCharacters = document.getElementById('btn-db-characters');
+    this.$btnDbPatch = document.getElementById('btn-db-patchnotes');
     // Main settings controls
     this.$mainSettingsPrimary = document.getElementById('mainsettings-primary');
     this.$mainSettingsDesktopActions = document.getElementById('mainsettings-desktop-actions');
@@ -442,11 +458,14 @@ export class UIManager{
     // Player portrait tooltip (uses dynamic character data)
     attachTip(this.$hpCharIcon, 'character', { preferBelow:true });
 
-    // Make the combat stats card draggable within the canvas area only.
+    // Make the combat stats card draggable within the full stage
+    // (wave panel + board + passive panel) instead of only the board
+    // column so it behaves consistently on ultrawide layouts and can
+    // be parked over the side panels if desired.
     if(this.$combatStats){
       const shell = document.getElementById('canvas-shell');
+      const stage = document.querySelector('.stage-wrap');
       const card = this.$combatStats;
-      const canvas = document.getElementById('game');
       let drag = null;
       const onPointerDown = (e)=>{
         const isTouch = e.pointerType === 'touch';
@@ -455,7 +474,7 @@ export class UIManager{
         if(e.target && (e.target.closest('#combat-stats-toggle') || e.target.closest('button'))){
           return;
         }
-        if(!shell || !canvas) return;
+        if(!shell || !stage) return;
         const rect = card.getBoundingClientRect();
         const shellRect = shell.getBoundingClientRect();
         drag = {
@@ -470,17 +489,18 @@ export class UIManager{
         e.preventDefault();
       };
       const onPointerMove = (e)=>{
-        if(!drag || e.pointerId !== drag.pointerId || !shell || !canvas) return;
-        const canvasRect = canvas.getBoundingClientRect();
+        if(!drag || e.pointerId !== drag.pointerId || !shell || !stage) return;
+        const shellRect = shell.getBoundingClientRect();
+        const stageRect = stage.getBoundingClientRect();
         const cardRect = card.getBoundingClientRect();
         // Desired viewport position for the card's top-left based on pointer + offset.
         let vLeft = e.clientX - drag.offsetX;
         let vTop = e.clientY - drag.offsetY;
         const margin = 4;
-        const minLeft = canvasRect.left + margin;
-        const maxLeft = canvasRect.right - cardRect.width - margin;
-        const minTop = canvasRect.top + margin;
-        const maxTop = canvasRect.bottom - cardRect.height - margin;
+        const minLeft = stageRect.left + margin;
+        const maxLeft = stageRect.right - cardRect.width - margin;
+        const minTop = stageRect.top + margin;
+        const maxTop = stageRect.bottom - cardRect.height - margin;
         vLeft = Math.max(minLeft, Math.min(maxLeft, vLeft));
         vTop = Math.max(minTop, Math.min(maxTop, vTop));
         // Convert back to shell-relative coordinates.
@@ -527,14 +547,14 @@ export class UIManager{
         setMinimized(minimized);
       });
     }
-    // Make the tower upgrade panel draggable, clamped to the game board
-    // so it never covers HUD controls or drifts off-screen. Behaviour
-    // mirrors the combat stats card: left‑button drag, pointer capture,
-    // and clamping to the canvas, but clicks on buttons still work.
+    // Make the tower upgrade panel draggable within the full stage
+    // (wave + board + passive panels) instead of only the board
+    // column. This matches the combat stats card so both can sit
+    // wherever is most comfortable for the player.
     if(this.$upg){
       const panel = this.$upg;
       const shell = document.getElementById('canvas-shell');
-      const canvas = document.getElementById('game');
+      const stage = document.querySelector('.stage-wrap');
       let drag = null;
       const onPointerDownUpg = (e)=>{
         const isTouch = e.pointerType === 'touch';
@@ -545,7 +565,7 @@ export class UIManager{
         if(target && (target.closest('button') || target.closest('a') || target.closest('input') || target.closest('textarea') || target.closest('select'))){
           return;
         }
-        if(!shell || !canvas) return;
+        if(!shell || !stage) return;
         const rect = panel.getBoundingClientRect();
         const shellRect = shell.getBoundingClientRect();
         drag = {
@@ -564,17 +584,18 @@ export class UIManager{
         e.preventDefault();
       };
       const onPointerMoveUpg = (e)=>{
-        if(!drag || e.pointerId !== drag.pointerId || !shell || !canvas) return;
-        const canvasRect = canvas.getBoundingClientRect();
+        if(!drag || e.pointerId !== drag.pointerId || !shell || !stage) return;
+        const shellRect = shell.getBoundingClientRect();
+        const stageRect = stage.getBoundingClientRect();
         const panelRect = panel.getBoundingClientRect();
         // Desired viewport position for the panel's top-left based on pointer + offset.
         let vLeft = e.clientX - drag.offsetX;
         let vTop = e.clientY - drag.offsetY;
         const margin = 4;
-        const minLeft = canvasRect.left + margin;
-        const maxLeft = canvasRect.right - panelRect.width - margin;
-        const minTop = canvasRect.top + margin;
-        const maxTop = canvasRect.bottom - panelRect.height - margin;
+        const minLeft = stageRect.left + margin;
+        const maxLeft = stageRect.right - panelRect.width - margin;
+        const minTop = stageRect.top + margin;
+        const maxTop = stageRect.bottom - panelRect.height - margin;
         vLeft = Math.max(minLeft, Math.min(maxLeft, vLeft));
         vTop = Math.max(minTop, Math.min(maxTop, vTop));
         // Convert back to shell-relative coordinates.
@@ -888,7 +909,7 @@ export class UIManager{
     if(this.$abilOverclock){ this.$abilOverclock.disabled = true; this.$abilOverclock.classList.add('locked'); this.$abilOverclock.textContent = 'Overclock (Locked)'; }
     if(this.$abilCryo){ this.$abilCryo.disabled = true; this.$abilCryo.classList.add('locked'); this.$abilCryo.textContent = 'Cryo (Locked)'; }
 
-    this.listeners = { startWave: [], startGame: [], pause: [], resume: [], retry: [], restart: [], sandboxStart: [], sandboxReset: [], toMenu: [], toMissionSelect: [], selectTowerType: [], upgradeSlow: [], upgradeRate: [], upgradeRange: [], upgradeBurn: [], sellTower: [], sellConfirm: [], sellCancel: [], selectMap: [], toggleFast: [], closeUpg: [], toggleVolume: [], setVolume: [], shopBuy: [], shopReroll: [], shopContinue: [], shopBuyAbility: [], useBomb: [], useOverclock: [], useCryo: [], toggleDev: [], toggleDebug: [], toggleAutoSpeed: [], exitConfirm: [], exitCancel: [], exitToMenuImmediate: [], exitToDesktop: [], openShop: [], closeShop: [], devUnlockUlts: [], devUpgradeMax: [], mainNew: [], mainLoad: [], mainAssembly: [], loadSlot: [], openAssembly: [], closeAssembly: [], startMission: [], assemblySave: [], assemblyLoad: [], openAssemblyCore: [], menuBack: [], mainSettings: [], mainSettingsBack: [], loadBack: [], loginUser: [], openCreateUser: [], closeCreateUser: [], createUser: [], openLeaderboard: [], closeLeaderboard: [], leaderboardSignIn: [], logout: [], removePassive: [], leaderboardSelectMap: [], pauseLoginOpen: [], mainDownload: [] };
+    this.listeners = { startWave: [], startGame: [], pause: [], resume: [], retry: [], restart: [], sandboxStart: [], sandboxReset: [], toMenu: [], toMissionSelect: [], selectTowerType: [], upgradeSlow: [], upgradeRate: [], upgradeRange: [], upgradeBurn: [], sellTower: [], sellConfirm: [], sellCancel: [], selectMap: [], toggleFast: [], closeUpg: [], toggleVolume: [], setVolume: [], shopBuy: [], shopReroll: [], shopContinue: [], shopBuyAbility: [], useBomb: [], useOverclock: [], useCryo: [], toggleDev: [], toggleDebug: [], toggleAutoSpeed: [], exitConfirm: [], exitCancel: [], exitToMenuImmediate: [], exitToDesktop: [], openShop: [], closeShop: [], devUnlockUlts: [], devUpgradeMax: [], mainNew: [], mainLoad: [], mainAssembly: [], loadSlot: [], openAssembly: [], closeAssembly: [], startMission: [], assemblySave: [], assemblyLoad: [], openAssemblyCore: [], menuBack: [], mainSettings: [], mainSettingsBack: [], loadBack: [], loginUser: [], openCreateUser: [], closeCreateUser: [], createUser: [], openLeaderboard: [], closeLeaderboard: [], leaderboardSignIn: [], logout: [], removePassive: [], leaderboardSelectMap: [], pauseLoginOpen: [], mainDownload: [], mainHowTo: [], closeHowTo: [], mainBug: [], closeBug: [], mainPatchNotes: [], closePatchNotes: [], openUserProfile: [], closeUserProfile: [], leaderboardSearch: [], mainUserProfile: [] };
     // Track dev mode state for UI behavior (e.g., enabling shop buttons and credit label)
     this.devMode = false;
     this.setFragments(0);
@@ -1002,10 +1023,105 @@ export class UIManager{
         });
       }
     }
-    if(this.$btnMainModes){
-      this.$btnMainModes.addEventListener('click', ()=>{
+    // Main menu → submenus
+    if(this.$btnMainPlay){
+      this.$btnMainPlay.addEventListener('click', ()=>{
         if(this.showMainMenu) this.showMainMenu(false);
+        if(this.showPlayMenu) this.showPlayMenu(true);
+      });
+    }
+    if(this.$btnMainProfile){
+      this.$btnMainProfile.addEventListener('click', ()=>{
+        if(this.showMainMenu) this.showMainMenu(false);
+        if(this.showProfileMenu) this.showProfileMenu(true);
+      });
+    }
+    if(this.$btnMainDatabase){
+      this.$btnMainDatabase.addEventListener('click', ()=>{
+        if(this.showMainMenu) this.showMainMenu(false);
+        if(this.showDatabase) this.showDatabase(true);
+      });
+    }
+    // Profile submenu buttons
+    const $btnProfileUser = document.getElementById('btn-profile-userprofile');
+    const $btnProfileSignOut = document.getElementById('btn-profile-signout');
+    const $btnProfileBack = document.getElementById('btn-profile-back');
+    if($btnProfileUser){
+      $btnProfileUser.addEventListener('click', ()=>{
+        // Open the current user's profile (or route through sign-in).
+        this.emit('mainUserProfile');
+      });
+    }
+    if($btnProfileSignOut){
+      $btnProfileSignOut.addEventListener('click', ()=>{
+        this.emit('logout', { source:'mainmenu' });
+        if(this.showProfileMenu) this.showProfileMenu(false);
+        if(this.showMainMenu) this.showMainMenu(true);
+      });
+    }
+    if($btnProfileBack){
+      $btnProfileBack.addEventListener('click', ()=>{
+        if(this.showProfileMenu) this.showProfileMenu(false);
+        if(this.showMainMenu) this.showMainMenu(true);
+      });
+    }
+    // Play submenu buttons
+    const $btnPlayModes = document.getElementById('btn-play-modes');
+    const $btnPlayLeaderboard = document.getElementById('btn-play-leaderboard');
+    const $btnPlayBack = document.getElementById('btn-play-back');
+    if($btnPlayModes){
+      $btnPlayModes.addEventListener('click', ()=>{
+        if(this.showPlayMenu) this.showPlayMenu(false);
         if(this.showGameModes) this.showGameModes(true);
+      });
+    }
+    if($btnPlayLeaderboard){
+      $btnPlayLeaderboard.addEventListener('click', ()=>{
+        if(this.showPlayMenu) this.showPlayMenu(false);
+        this.emit('openLeaderboard', { origin:'play' });
+      });
+    }
+    if($btnPlayBack){
+      $btnPlayBack.addEventListener('click', ()=>{
+        if(this.showPlayMenu) this.showPlayMenu(false);
+        if(this.showMainMenu) this.showMainMenu(true);
+      });
+    }
+    // Database submenu buttons
+    const $btnDbBack = document.getElementById('btn-db-back');
+    if(this.$btnDbHowTo){
+      this.$btnDbHowTo.addEventListener('click', ()=>{
+        if(this.showDatabase) this.showDatabase(false);
+        if(this.$howToOverlay) this.$howToOverlay.classList.add('visible');
+        this.updateModalMask();
+        this.emit('mainHowTo');
+      });
+    }
+    if(this.$btnDbPatch){
+      this.$btnDbPatch.addEventListener('click', ()=>{
+        if(this.showDatabase) this.showDatabase(false);
+        if(this.$patchNotesOverlay) this.$patchNotesOverlay.classList.add('visible');
+        this.updateModalMask();
+        this.emit('mainPatchNotes');
+      });
+    }
+    // For now, tower/status/character codex buttons route to How To Play
+    // until dedicated overlays are implemented.
+    const codexButtons = [this.$btnDbTowers, this.$btnDbStatus, this.$btnDbCharacters];
+    codexButtons.forEach((btn)=>{
+      if(!btn) return;
+      btn.addEventListener('click', ()=>{
+        if(this.showDatabase) this.showDatabase(false);
+        if(this.$howToOverlay) this.$howToOverlay.classList.add('visible');
+        this.updateModalMask();
+        this.emit('mainHowTo');
+      });
+    });
+    if($btnDbBack){
+      $btnDbBack.addEventListener('click', ()=>{
+        if(this.showDatabase) this.showDatabase(false);
+        if(this.showMainMenu) this.showMainMenu(true);
+        this.updateModalMask();
       });
     }
     if(this.$btnMainEndless){
@@ -1032,7 +1148,11 @@ export class UIManager{
     if(this.$btnModesBack){
       this.$btnModesBack.addEventListener('click', ()=>{
         if(this.showGameModes) this.showGameModes(false);
-        if(this.showMainMenu) this.showMainMenu(true);
+        if(this.showPlayMenu){
+          this.showPlayMenu(true);
+        }else if(this.showMainMenu){
+          this.showMainMenu(true);
+        }
       });
     }
     if(this.$btnMainLeaderboard){ this.$btnMainLeaderboard.addEventListener('click', ()=> this.emit('openLeaderboard')); }
@@ -1073,6 +1193,11 @@ export class UIManager{
         this.$pauseMenu.addEventListener('click', ()=> this.emit('toMenu'));
       }
     }
+    if(this.$btnPauseBug){
+      this.$btnPauseBug.addEventListener('click', ()=>{
+        if(this.showPauseBug) this.showPauseBug(true);
+      });
+    }
     if(this.$btnPauseLogin){
       this.$btnPauseLogin.addEventListener('click', ()=>{
         if(this.showPauseLogin) this.showPauseLogin(true);
@@ -1111,8 +1236,12 @@ export class UIManager{
     // Sandbox overlay buttons
     if(this.$sandboxBack){
       this.$sandboxBack.addEventListener('click', ()=>{
-        if(this.$sandbox) this.$sandbox.classList.remove('visible');
-        if(this.showMainMenu) this.showMainMenu(true);
+        if(this.showSandbox) this.showSandbox(false);
+        if(this.showGameModes){
+          this.showGameModes(true);
+        }else if(this.showMainMenu){
+          this.showMainMenu(true);
+        }
       });
     }
     if(this.$sandboxReset){ this.$sandboxReset.addEventListener('click', ()=> this.emit('sandboxReset')); }
@@ -1124,9 +1253,9 @@ export class UIManager{
     const $btnHowToBack = document.getElementById('btn-howto-back');
     if(this.$btnMainHowTo){
       this.$btnMainHowTo.addEventListener('click', ()=>{
-        // Hide the main menu while the How To Play overlay is active so
+        // Hide the database menu while the How To Play overlay is active so
         // panels do not visually stack.
-        if(this.showMainMenu) this.showMainMenu(false);
+        if(this.showDatabase) this.showDatabase(false);
         if(this.$howToOverlay) this.$howToOverlay.classList.add('visible');
         this.updateModalMask();
         this.emit('mainHowTo');
@@ -1135,8 +1264,13 @@ export class UIManager{
     if($btnHowToBack){
       $btnHowToBack.addEventListener('click', ()=>{
         if(this.$howToOverlay) this.$howToOverlay.classList.remove('visible');
-        // Return to the main menu entry point.
-        if(this.showMainMenu) this.showMainMenu(true);
+        // Return to Database if it was the entry point; otherwise fall
+        // back to the main menu.
+        if(this.showDatabase){
+          this.showDatabase(true);
+        }else if(this.showMainMenu){
+          this.showMainMenu(true);
+        }
         this.updateModalMask();
         this.emit('closeHowTo');
       });
@@ -1144,7 +1278,7 @@ export class UIManager{
     const $btnPatchBack = document.getElementById('btn-patch-back');
     if(this.$btnMainPatchNotes){
       this.$btnMainPatchNotes.addEventListener('click', ()=>{
-        if(this.showMainMenu) this.showMainMenu(false);
+        if(this.showDatabase) this.showDatabase(false);
         if(this.$patchNotesOverlay) this.$patchNotesOverlay.classList.add('visible');
         this.updateModalMask();
         this.emit('mainPatchNotes');
@@ -1153,15 +1287,21 @@ export class UIManager{
     if($btnPatchBack){
       $btnPatchBack.addEventListener('click', ()=>{
         if(this.$patchNotesOverlay) this.$patchNotesOverlay.classList.remove('visible');
-        if(this.showMainMenu) this.showMainMenu(true);
+        if(this.showDatabase){
+          this.showDatabase(true);
+        }else if(this.showMainMenu){
+          this.showMainMenu(true);
+        }
         this.updateModalMask();
         this.emit('closePatchNotes');
       });
     }
+    // Bug Reports overlay: reachable from the Play submenu.
     const $btnBugBack = document.getElementById('btn-bug-back');
     if(this.$btnMainBug){
       this.$btnMainBug.addEventListener('click', ()=>{
-        if(this.showMainMenu) this.showMainMenu(false);
+        this._bugOrigin = 'play';
+        if(this.showPlayMenu) this.showPlayMenu(false);
         if(this.$bugOverlay) this.$bugOverlay.classList.add('visible');
         this.updateModalMask();
         this.emit('mainBug');
@@ -1170,7 +1310,12 @@ export class UIManager{
     if($btnBugBack){
       $btnBugBack.addEventListener('click', ()=>{
         if(this.$bugOverlay) this.$bugOverlay.classList.remove('visible');
-        if(this.showMainMenu) this.showMainMenu(true);
+        if(this._bugOrigin === 'play' && this.showPlayMenu){
+          this.showPlayMenu(true);
+        }else if(this.showMainMenu){
+          this.showMainMenu(true);
+        }
+        this._bugOrigin = 'mainmenu';
         this.updateModalMask();
         this.emit('closeBug');
       });
@@ -1206,6 +1351,39 @@ export class UIManager{
           if(this.$bugStatus){
             this.$bugStatus.textContent = 'Network error while sending report.';
             this.$bugStatus.style.color = COLORS.danger || '#ff5370';
+          }
+        }
+      });
+    }
+    if(this.$pauseBugForm){
+      this.$pauseBugForm.addEventListener('submit', async (ev)=>{
+        ev.preventDefault();
+        if(this.$pauseBugStatus){
+          this.$pauseBugStatus.textContent = 'Sending report…';
+          this.$pauseBugStatus.style.color = COLORS.accent || '#17e7a4';
+        }
+        try{
+          const action = this.$pauseBugForm.getAttribute('action') || 'https://formspree.io/f/xjknrlka';
+          const fd = new FormData(this.$pauseBugForm);
+          const res = await fetch(action, {
+            method:'POST',
+            body: fd,
+            headers:{ 'Accept':'application/json' }
+          });
+          if(res.ok){
+            if(this.$pauseBugStatus){
+              this.$pauseBugStatus.textContent = 'Thank you — your report has been submitted.';
+              this.$pauseBugStatus.style.color = COLORS.accent || '#17e7a4';
+            }
+            this.$pauseBugForm.reset();
+          } else if(this.$pauseBugStatus){
+            this.$pauseBugStatus.textContent = 'Submission failed. Please try again in a moment.';
+            this.$pauseBugStatus.style.color = COLORS.danger || '#ff5370';
+          }
+        }catch(e){
+          if(this.$pauseBugStatus){
+            this.$pauseBugStatus.textContent = 'Network error while sending report.';
+            this.$pauseBugStatus.style.color = COLORS.danger || '#ff5370';
           }
         }
       });
@@ -1283,6 +1461,11 @@ export class UIManager{
         if(this.showPauseLogin) this.showPauseLogin(false);
       });
     }
+    if(this.$btnPauseBugBack){
+      this.$btnPauseBugBack.addEventListener('click', ()=>{
+        if(this.showPauseBug) this.showPauseBug(false);
+      });
+    }
     if(this.$loginCreate){ this.$loginCreate.addEventListener('click', ()=> this.emit('openCreateUser')); }
     if(this.$createSubmit){
       this.$createSubmit.addEventListener('click', ()=>{
@@ -1309,7 +1492,7 @@ export class UIManager{
       this.$lbSearchBtn.addEventListener('click', ()=>{
         const term = this.$lbSearchInput ? (this.$lbSearchInput.value||'').trim() : '';
         if(!term) return;
-        this.emit('leaderboardSearch', { username: term });
+        this.emit('openUserProfile', { username: term, origin:'leaderboard' });
       });
     }
     if(this.$lbSearchInput){
@@ -1378,6 +1561,22 @@ export class UIManager{
       this.$btnProfileClose.addEventListener('click', ()=>{
         this.emit('closeUserProfile');
       });
+    }
+    if(this.$btnProfileSearch){
+      const doProfileSearch = ()=>{
+        const term = this.$profileSearchInput ? (this.$profileSearchInput.value||'').trim() : '';
+        if(!term) return;
+        this.emit('openUserProfile', { username: term, origin:'profile' });
+      };
+      this.$btnProfileSearch.addEventListener('click', doProfileSearch);
+      if(this.$profileSearchInput){
+        this.$profileSearchInput.addEventListener('keydown', (e)=>{
+          if(e.key === 'Enter'){
+            e.preventDefault();
+            doProfileSearch();
+          }
+        });
+      }
     }
     if(isDesktopRuntime && this.$btnMainFullscreen){
       let isDesktopFullscreen = false;
@@ -1571,6 +1770,11 @@ export class UIManager{
       next.addEventListener('click', ()=> stepLb(1));
       renderLb();
     }
+
+    // Ensure the initial overlay state (typically the main menu) correctly
+    // applies the global mainmenu-visible body class so the gameboard stays
+    // hidden behind fullscreen menus until gameplay begins.
+    this.updateModalMask();
   }
 
   on(event, fn){
@@ -2259,7 +2463,7 @@ export class UIManager{
       ? !!(this.$mainMenu && this.$mainMenu.classList.contains('visible'))
       : !!show;
     if(this.$mainMenu) this.$mainMenu.classList.toggle('visible', isVisible);
-    document.body.classList.toggle('mainmenu-visible', isVisible);
+    this.updateModalMask();
   }
   showLoadMenu(show){
     if(this.$loadMenu) this.$loadMenu.classList.toggle('visible', !!show);
@@ -2277,6 +2481,9 @@ export class UIManager{
     const createVisible = this.$createMenu && this.$createMenu.classList.contains('visible');
     const boardVisible = this.$leaderboard && this.$leaderboard.classList.contains('visible');
     const profileVisible = this.$profileOverlay && this.$profileOverlay.classList.contains('visible');
+    const playMenuVisible = this.$playMenuOverlay && this.$playMenuOverlay.classList.contains('visible');
+    const profileMenuVisible = this.$profileMenuOverlay && this.$profileMenuOverlay.classList.contains('visible');
+    const databaseVisible = this.$databaseOverlay && this.$databaseOverlay.classList.contains('visible');
     const mapSelVisible = this.$mapOverlay && this.$mapOverlay.classList.contains('visible');
     const modesVisible = this.$modesOverlay && this.$modesOverlay.classList.contains('visible');
     const assemblyVisible = this.$assembly && this.$assembly.classList.contains('visible');
@@ -2284,10 +2491,33 @@ export class UIManager{
     const howtoVisible = this.$howToOverlay && this.$howToOverlay.classList.contains('visible');
     const bugVisible = this.$bugOverlay && this.$bugOverlay.classList.contains('visible');
     const patchVisible = this.$patchNotesOverlay && this.$patchNotesOverlay.classList.contains('visible');
-    const modalActive = !!(loadVisible || createVisible || boardVisible || profileVisible || mapSelVisible || modesVisible || assemblyVisible || mainSettingsVisible || howtoVisible || bugVisible || patchVisible);
+    const sandboxVisible = this.$sandbox && this.$sandbox.classList.contains('visible');
+    const modalActive = !!(loadVisible || createVisible || boardVisible || profileVisible || playMenuVisible || profileMenuVisible || databaseVisible || mapSelVisible || modesVisible || assemblyVisible || mainSettingsVisible || howtoVisible || bugVisible || patchVisible || sandboxVisible);
     this.$root.classList.toggle('modal-overlay', modalActive);
-    const menuVisible = this.$mainMenu && this.$mainMenu.classList.contains('visible');
-    document.body.classList.toggle('mainmenu-visible', modalActive || menuVisible);
+    const primaryMenuVisible = this.$mainMenu && this.$mainMenu.classList.contains('visible');
+    // Treat all fullscreen main-menu flows (main menu, game modes, map select,
+    // auth, leaderboard, settings, sandbox lab, etc.) as "menu mode" so the
+    // in-game board/HUD are fully hidden behind the global background. The
+    // Assembly overlay lives inside the game container and should not trigger
+    // this global fade.
+    const fullscreenMenuVisible = !!(
+      primaryMenuVisible ||
+      loadVisible ||
+      createVisible ||
+      boardVisible ||
+      profileVisible ||
+      playMenuVisible ||
+      profileMenuVisible ||
+      databaseVisible ||
+      mapSelVisible ||
+      modesVisible ||
+      mainSettingsVisible ||
+      howtoVisible ||
+      bugVisible ||
+      patchVisible ||
+      sandboxVisible
+    );
+    document.body.classList.toggle('mainmenu-visible', fullscreenMenuVisible);
   }
   showLeaderboard(show){
     if(this.$leaderboard) this.$leaderboard.classList.toggle('visible', !!show);
@@ -2382,11 +2612,24 @@ export class UIManager{
     if(this.$modesOverlay) this.$modesOverlay.classList.toggle('visible', !!show);
     this.updateModalMask();
   }
+  showPlayMenu(show){
+    if(this.$playMenuOverlay) this.$playMenuOverlay.classList.toggle('visible', !!show);
+    this.updateModalMask();
+  }
+  showProfileMenu(show){
+    if(this.$profileMenuOverlay) this.$profileMenuOverlay.classList.toggle('visible', !!show);
+    this.updateModalMask();
+  }
+  showDatabase(show){
+    if(this.$databaseOverlay) this.$databaseOverlay.classList.toggle('visible', !!show);
+    this.updateModalMask();
+  }
   showPause(show){
     this.show(this.$pauseOverlay, show);
     if(show){
       this.showSettings(false);
       if(this.showPauseLogin) this.showPauseLogin(false);
+      if(this.showPauseBug) this.showPauseBug(false);
     }
   }
   showSettings(show){
@@ -2395,6 +2638,9 @@ export class UIManager{
     if(show && this.$pauseLoginPanel){
       this.$pauseLoginPanel.style.display = 'none';
     }
+    if(show && this.$pauseBugPanel){
+      this.$pauseBugPanel.style.display = 'none';
+    }
     if(this.$pauseActions) this.$pauseActions.style.display = show? 'none' : 'flex';
   }
   showPauseLogin(show){
@@ -2402,6 +2648,9 @@ export class UIManager{
     this.$pauseLoginPanel.style.display = show ? 'block' : 'none';
     if(show && this.$settingsPanel){
       this.$settingsPanel.style.display = 'none';
+    }
+    if(show && this.$pauseBugPanel){
+      this.$pauseBugPanel.style.display = 'none';
     }
     if(this.$pauseActions) this.$pauseActions.style.display = show ? 'none' : 'flex';
     if(show && this.$pauseLoginUsername){
@@ -2412,7 +2661,66 @@ export class UIManager{
   showSell(show, text){ if(this.$sellText && typeof text==='string') this.$sellText.textContent = text; this.show(this.$sellOverlay, show); }
   showSell(show, text){ if(this.$sellText && typeof text==='string') this.$sellText.textContent = text; this.show(this.$sellOverlay, show); }
   showShop(show){ this.show(this.$shop, show); }
-  showSandbox(show){ this.show(this.$sandbox, show); }
+  showSandbox(show){
+    this.show(this.$sandbox, show);
+    this.updateModalMask();
+  }
+  showPauseBug(show){
+    if(!this.$pauseBugPanel) return;
+    this.$pauseBugPanel.style.display = show ? 'block' : 'none';
+    if(show){
+      if(this.$settingsPanel) this.$settingsPanel.style.display = 'none';
+      if(this.$pauseLoginPanel) this.$pauseLoginPanel.style.display = 'none';
+    }
+    if(this.$pauseActions) this.$pauseActions.style.display = show ? 'none' : 'flex';
+  }
+  _getCharacterMeta(key){
+    const k = (key || '').trim().toLowerCase();
+    if(!k) return null;
+    const map = {
+      volt: { key:'volt', label:'Volt' },
+      lumen: { key:'lumen', label:'Lumen' },
+      torque: { key:'torque', label:'Torque' }
+    };
+    return map[k] || null;
+  }
+  _createCharacterChip(key, opts={}){
+    if(typeof document === 'undefined') return null;
+    const meta = this._getCharacterMeta(key);
+    if(!meta) return null;
+    const chip = document.createElement('span');
+    chip.className = 'character-chip';
+    chip.dataset.character = meta.key;
+    const icon = document.createElement('span');
+    icon.className = 'character-chip-icon';
+    icon.setAttribute('aria-hidden', 'true');
+    // Use the same processed/cropped character portraits as the map
+    // select + HUD so the teal background in the raw PNGs is punched
+    // out and the icons sit cleanly on any overlay.
+    try{
+      if(this._drawProcessedSpriteInto){
+        let url = null;
+        if(meta.key === 'volt') url = 'data/Volt.png';
+        else if(meta.key === 'torque') url = 'data/Torque.png';
+        else if(meta.key === 'lumen') url = 'data/Lumen.png';
+        if(url){
+          this._drawProcessedSpriteInto(url, icon, {
+            size: 32,
+            targetSize: 26,
+            replaceChildren: true,
+            cropPad: 2,
+            pixelated: true
+          });
+        }
+      }
+    }catch(e){}
+    const label = document.createElement('span');
+    label.className = 'character-chip-label';
+    label.textContent = typeof opts.label === 'string' && opts.label ? opts.label : meta.label;
+    chip.appendChild(icon);
+    chip.appendChild(label);
+    return chip;
+  }
   setLeaderboard(entries=[]){
     if(!this.$leaderboardList) return;
     this.$leaderboardList.innerHTML = '';
@@ -2438,24 +2746,26 @@ export class UIManager{
       name.dataset.username = uname;
       name.addEventListener('click', ()=>{
         if(uname && uname !== 'Unknown Operative'){
-          this.emit('openUserProfile', { username: uname });
+          this.emit('openUserProfile', { username: uname, origin:'leaderboard' });
         }
       });
       nameWrap.appendChild(name);
       const waves = document.createElement('span');
       waves.className = 'waves';
       const perfect = Math.max(0, entry.perfectCombo || 0);
-      const parts = [`${entry.waves ?? 0} waves`];
-      parts.push(`Perfect Combo ${perfect}`);
-      // Optional: show which pilot was used for this run.
+      const infoParts = [`${entry.waves ?? 0} waves`, `Perfect Combo ${perfect}`];
+      waves.textContent = infoParts.join(' • ');
+      nameWrap.appendChild(waves);
+      // Optional: show which pilot was used for this run as a colored
+      // chip with icon so character identity is immediately visible.
       const pilotKey = entry.character || entry.pilot || null;
       if(pilotKey){
-        const labelMap = { volt:'Volt', lumen:'Lumen', torque:'Torque' };
-        const label = labelMap[pilotKey] || pilotKey;
-        parts.push(`Pilot ${label}`);
+        const chip = this._createCharacterChip(pilotKey);
+        if(chip){
+          chip.classList.add('rank-character-chip');
+          nameWrap.appendChild(chip);
+        }
       }
-      waves.textContent = parts.join(' • ');
-      nameWrap.appendChild(waves);
       li.appendChild(nameWrap);
       this.$leaderboardList.appendChild(li);
     });
@@ -2522,6 +2832,7 @@ export class UIManager{
     if(this.$profileMissionUnlock) this.$profileMissionUnlock.textContent = String(mission);
     if(this.$profileTotalRuns) this.$profileTotalRuns.textContent = String(totalRuns);
     // Favorite character by frequency
+    let favoriteCharKey = null;
     let favoriteCharLabel = '—';
     if(rawRuns.length){
       const counts = {};
@@ -2539,11 +2850,25 @@ export class UIManager{
         }
       }
       if(bestKey){
-        const labelMap = { volt:'Volt', lumen:'Lumen', torque:'Torque' };
-        favoriteCharLabel = labelMap[bestKey] || bestKey;
+        favoriteCharKey = bestKey;
+        const meta = this._getCharacterMeta(bestKey);
+        favoriteCharLabel = (meta && meta.label) || bestKey;
       }
     }
-    if(this.$profileFavoriteCharacter) this.$profileFavoriteCharacter.textContent = favoriteCharLabel;
+    if(this.$profileFavoriteCharacter){
+      this.$profileFavoriteCharacter.textContent = '';
+      if(favoriteCharKey){
+        const chip = this._createCharacterChip(favoriteCharKey);
+        if(chip){
+          chip.classList.add('profile-character-chip');
+          this.$profileFavoriteCharacter.appendChild(chip);
+        } else {
+          this.$profileFavoriteCharacter.textContent = favoriteCharLabel;
+        }
+      } else {
+        this.$profileFavoriteCharacter.textContent = '—';
+      }
+    }
     // Best waves by map
     if(this.$profileBestMaps){
       const byMap = new Map();
@@ -2584,11 +2909,25 @@ export class UIManager{
         const waves = Number.isFinite(r.waves) ? r.waves|0 : 0;
         const perfect = Number.isFinite(r.perfectCombo) ? r.perfectCombo|0 : 0;
         const charKey = (r.character || r.pilot || '').trim().toLowerCase();
-        const labelMap = { volt:'Volt', lumen:'Lumen', torque:'Torque' };
-        const charLabel = charKey ? (labelMap[charKey] || charKey) : null;
-        const parts = [`${mapLabel} — ${waves} waves`, `PC ${perfect}`];
-        if(charLabel) parts.push(`Character: ${charLabel}`);
-        li.textContent = parts.join(' — ');
+        const meta = this._getCharacterMeta(charKey);
+        const charLabel = meta ? meta.label : (charKey || null);
+        const main = document.createElement('div');
+        main.className = 'run-main';
+        const mainParts = [`${mapLabel} — ${waves} waves`, `PC ${perfect}`];
+        main.textContent = mainParts.join(' — ');
+        li.appendChild(main);
+        if(charLabel){
+          const chip = this._createCharacterChip(charKey);
+          if(chip){
+            chip.classList.add('profile-run-character-chip');
+            li.appendChild(chip);
+          } else {
+            const spanChar = document.createElement('span');
+            spanChar.className = 'run-character-fallback';
+            spanChar.textContent = `Character: ${charLabel}`;
+            li.appendChild(spanChar);
+          }
+        }
         const when = formatDateTime(r.at);
         if(when){
           const small = document.createElement('small');

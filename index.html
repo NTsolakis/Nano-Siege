@@ -8,6 +8,9 @@
     <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
+    <video id="page-bg-video" class="page-bg-video" autoplay muted loop playsinline>
+      <source src="data/loading-bg.mp4" type="video/mp4" />
+    </video>
     <div id="loading-overlay" class="loading-overlay">
       <div class="loading-panel">
         <div class="loading-title">Nano‑Siege</div>
@@ -115,6 +118,9 @@
       </header>
 
       <main class="stage-wrap">
+        <video id="space-bg-video" class="stage-bg-video" autoplay muted loop playsinline>
+          <source src="data/Space_Background.mp4" type="video/mp4" />
+        </video>
         <aside class="wave-panel">
           <div class="wave-panel-top">
             <span id="stat-wave">Wave: 1</span>
@@ -240,12 +246,14 @@
         <section id="pause-overlay" class="overlay">
           <div class="panel small">
             <h3>Paused</h3>
-            <div class="actions">
+            <p class="tag">Take a breather, adjust settings, or report a bug.</p>
+            <div class="actions pause-actions">
               <button id="btn-resume">Resume</button>
               <button id="btn-pause-restart">Restart</button>
               <button id="btn-pause-menu">Main Menu</button>
               <button id="btn-settings">Settings</button>
               <button id="btn-pause-login">Sign In</button>
+              <button id="btn-pause-bug">Report Bugs</button>
             </div>
             <!-- Settings sub-menu (hidden by default) -->
             <div id="settings-panel" style="display:none; margin-top:10px">
@@ -265,6 +273,39 @@
               <div class="actions" style="margin-top:10px">
                 <button id="btn-settings-back">Back</button>
               </div>
+            </div>
+            <!-- In-game Bug Report panel -->
+            <div id="pause-bug-panel" style="display:none; margin-top:10px">
+              <h4>Bug Reports &amp; Suggestions</h4>
+              <form id="bug-form-pause" class="bug-form" action="https://formspree.io/f/xjknrlka" method="POST">
+                <label for="bug-type-pause">Category</label>
+                <select id="bug-type-pause" name="type" required>
+                  <option value="Bug">Bug</option>
+                  <option value="Suggestion">Suggestion</option>
+                  <option value="Balance Issue">Balance Issue</option>
+                  <option value="UI Problem">UI Problem</option>
+                  <option value="Graphics / Animation">Graphics / Animation</option>
+                  <option value="Performance">Performance</option>
+                  <option value="Other">Other</option>
+                </select>
+
+                <label for="bug-message-pause">Message</label>
+                <textarea id="bug-message-pause" name="message" rows="4" placeholder="Describe what happened, or what you'd like added." required></textarea>
+
+                <label for="bug-email-pause">Your Email (optional)</label>
+                <input id="bug-email-pause" type="email" name="email" placeholder="you@example.com" />
+
+                <!-- Sends confirmation to dev inbox -->
+                <input type="hidden" name="_replyto" value="NickCTsolakis@gmail.com">
+                <input type="hidden" name="_subject" value="Nano-Siege Report (In-Run)">
+
+                <div id="bug-status-pause" class="bug-status"></div>
+
+                <div class="actions" style="margin-top:12px">
+                  <button type="button" id="btn-pause-bug-back">Back</button>
+                  <button type="submit">Submit Report</button>
+                </div>
+              </form>
             </div>
             <!-- In-game Sign In panel (compact) -->
             <div id="pause-login-panel" style="display:none; margin-top:10px">
@@ -292,7 +333,6 @@
                 <button id="btn-pause-login-back">Back</button>
               </div>
             </div>
-            <p class="hint">P or Esc to toggle</p>
           </div>
         </section>
 
@@ -380,24 +420,69 @@
         <div class="panel mainmenu-panel">
           <div class="mainmenu-logo-wrap">
             <div class="mainmenu-orbit"></div>
-          <h1 class="mainmenu-logo">Nano‑Siege</h1>
-          <p class="mainmenu-sub">Neon Reactor Defense Protocol</p>
-        </div>
+            <h1 class="mainmenu-logo">Nano‑Siege</h1>
+            <p class="mainmenu-sub">Neon Reactor Defense Protocol</p>
+          </div>
           <div class="mainmenu-actions">
-            <button id="btn-main-modes">Game Modes</button>
-            <button id="btn-main-leaderboard">Leaderboard</button>
-            <button id="btn-main-settings">Settings</button>
-            <button id="btn-main-howto">How to Play</button>
-            <button id="btn-main-patchnotes">Patch Notes</button>
-            <button id="btn-main-bug">Bug Reports &amp; Suggestions</button>
-            <button id="btn-main-loaduser">Sign In</button>
-            <button id="btn-main-download">Download</button>
+            <button id="btn-main-play">Play</button>
+            <button id="btn-main-profile">Profile</button>
+            <button id="btn-main-database">Database</button>
+            <button id="btn-main-download">Exit</button>
           </div>
           <p id="version-label" class="version-label"></p>
         </div>
-    </section>
+      </section>
 
-      <!-- Game Mode select (under main menu) -->
+      <!-- Play submenu (under main menu) -->
+      <section id="playmenu-overlay" class="overlay mainmenu">
+        <div class="panel mainmenu-panel">
+          <div class="mainmenu-logo-wrap" style="margin-bottom:24px">
+            <h2 class="mainmenu-sub" style="margin:0; letter-spacing:.35em; text-transform:uppercase">Play</h2>
+          </div>
+          <p class="tag" style="text-align:center;margin-bottom:18px">Choose what you want to do.</p>
+          <div class="mainmenu-actions">
+            <button id="btn-play-modes">Game Modes</button>
+            <button id="btn-play-leaderboard">Leaderboard</button>
+            <button id="btn-play-bug">Bug Reports &amp; Suggestions</button>
+            <button id="btn-play-back">Back</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- Profile submenu (under main menu) -->
+      <section id="profilemenu-overlay" class="overlay mainmenu">
+        <div class="panel mainmenu-panel">
+          <div class="mainmenu-logo-wrap" style="margin-bottom:24px">
+            <h2 class="mainmenu-sub" style="margin:0; letter-spacing:.35em; text-transform:uppercase">Profile</h2>
+          </div>
+          <p class="tag" style="text-align:center;margin-bottom:18px">Manage your Reactor profile and identity.</p>
+          <div class="mainmenu-actions">
+            <button id="btn-profile-userprofile">User Profile</button>
+            <button id="btn-profile-signout">Sign Out</button>
+            <button id="btn-profile-back">Back</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- Database / Codex submenu -->
+      <section id="database-overlay" class="overlay mainmenu">
+        <div class="panel mainmenu-panel">
+          <div class="mainmenu-logo-wrap" style="margin-bottom:24px">
+            <h2 class="mainmenu-sub" style="margin:0; letter-spacing:.35em; text-transform:uppercase">Database Terminal</h2>
+          </div>
+          <p class="tag" style="text-align:center;margin-bottom:18px">Lore, mechanics, and shipboard records.</p>
+          <div class="mainmenu-actions">
+            <button id="btn-db-howto">How to Play</button>
+            <button id="btn-db-towers">Tower Types</button>
+            <button id="btn-db-status">Status Effects</button>
+            <button id="btn-db-characters">Characters &amp; Backstories</button>
+            <button id="btn-db-patchnotes">Patch Notes</button>
+            <button id="btn-db-back">Back</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- Game Mode select (under Play → Game Modes) -->
       <section id="gamemodes-overlay" class="overlay mainmenu">
         <div class="panel mainmenu-panel">
           <div class="mainmenu-logo-wrap" style="margin-bottom:24px">
@@ -912,20 +997,24 @@
           <div class="panel mainmenu-panel">
             <h2 id="profile-title">Player Profile</h2>
             <p class="tag">View stats and recent runs for this player.</p>
-            <div id="profile-content">
-              <div id="profile-header" class="profile-header">
-                <div id="profile-username" class="profile-username">Player</div>
-                <div class="profile-meta">
-                  <span id="profile-joined"></span>
-                  <span id="profile-last-seen"></span>
-                  <span id="profile-roles"></span>
-                </div>
+          <div id="profile-content">
+            <div id="profile-header" class="profile-header">
+              <div id="profile-username" class="profile-username">Player</div>
+              <div class="profile-meta">
+                <span id="profile-joined"></span>
+                <span id="profile-last-seen"></span>
+                <span id="profile-roles"></span>
               </div>
-              <div id="profile-summary" class="profile-summary">
-                <div class="profile-stat">
-                  <div class="label">Best Perfect Combo</div>
-                  <div class="value" id="profile-best-perfect">0</div>
-                </div>
+            </div>
+            <div class="profile-search-row">
+              <input type="text" id="profile-search-input" placeholder="Search player..." autocomplete="off" />
+              <button id="btn-profile-search">Search Users</button>
+            </div>
+            <div id="profile-summary" class="profile-summary">
+              <div class="profile-stat">
+                <div class="label">Best Perfect Combo</div>
+                <div class="value" id="profile-best-perfect">0</div>
+              </div>
                 <div class="profile-stat">
                   <div class="label">Highest Mission</div>
                   <div class="value" id="profile-mission-unlock">1</div>
