@@ -153,12 +153,6 @@ if [ "$dirty_any" -eq 1 ]; then
   echo "      It's recommended to commit & push before deploy so patch notes stay accurate."
 fi
 
-# Allow manually forcing a launcher bump even if no launcher source
-# files changed in git (e.g. rebuilt binaries only).
-if [ "${FORCE_LAUNCHER_BUMP}" = "1" ]; then
-  changed_launcher=1
-fi
-
 # Build game-focused patch notes from commits that touched the
 # browser/desktop game client (front-end). Backend/launcher-only
 # changes are intentionally omitted from these notes so the in-game
@@ -231,15 +225,24 @@ if [ "$bump_needed" -eq 1 ]; then
   printf "%s\n" "$patch_notes" > "$patch_file"
 
   # Update meta.json in repo: backendVersion, gameVersion, patchNotes
+  # Launcher version bumps are *explicitly* controlled via the
+  # FORCE_LAUNCHER_BUMP flag so that normal game/backend deploys don't
+  # accidentally advertise new desktop builds. The full desktop
+  # build-and-deploy script sets this flag when releasing a new
+  # launcher build.
+  launcher_bump_flag=0
+  if [ "${FORCE_LAUNCHER_BUMP}" = "1" ]; then
+    launcher_bump_flag=1
+  fi
   echo "Updating $META_SRC with new version and patch notes..."
   tmpfile=$(mktemp)
   jq \
     --arg v "$new_version" \
     --arg notes "$patch_notes" \
-    --argjson launcherChanged "$changed_launcher" \
+    --argjson launcherBump "$launcher_bump_flag" \
     '.backendVersion = $v
      | .gameVersion = $v
-     | .launcherVersion = (if $launcherChanged == 1 then $v else .launcherVersion end)
+     | .launcherVersion = (if $launcherBump == 1 then $v else .launcherVersion end)
      | .patchNotes = ($notes | split("\n"))' \
     "$META_SRC" > "$tmpfile"
   mv "$tmpfile" "$META_SRC"

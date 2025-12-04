@@ -130,7 +130,7 @@ REPO_DIR="${UNRAID_REPO_DIR}"
 cd "\$REPO_DIR"
 BRANCH="\$(git rev-parse --abbrev-ref HEAD)"
 git pull origin "\$BRANCH" || true
-./scripts/deploy-unraid.sh
+FORCE_LAUNCHER_BUMP=1 ./scripts/deploy-unraid.sh
 EOF
 
 echo
