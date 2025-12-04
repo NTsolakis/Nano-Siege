@@ -1,10 +1,34 @@
-// Lightweight helper to display version info from the shared
-// metadata file that is deployed alongside the game assets.
+// Lightweight helper to display version info from a shared metadata
+// file. On the hosted build we use the local data/meta.json that is
+// deployed with the game; on desktop/file builds we prefer the live
+// server meta so launcher/game versions and update banners always
+// reflect what's actually available.
+
+function computeMetaUrl() {
+  try {
+    if (typeof window !== 'undefined') {
+      const loc = window.location || {};
+      const protocol = String(loc.protocol || '').toLowerCase();
+      const isFile = protocol === 'file:';
+      const ua = (typeof navigator !== 'undefined' && navigator.userAgent) ? navigator.userAgent : '';
+      const isElectron = ua.includes('Electron');
+      // Desktop/Electron and local file builds: use the live server
+      // metadata so the launcher banner and version label track the
+      // latest available builds instead of the baked-in bundle.
+      if (isFile || isElectron) {
+        return 'https://nano.nicksminecraft.net/data/meta.json';
+      }
+    }
+  } catch (e) {}
+  // Hosted browser build: same-origin metadata file.
+  return 'data/meta.json';
+}
 
 async function fetchMeta() {
   try {
     if (typeof fetch === 'undefined') return null;
-    const res = await fetch('data/meta.json', { cache: 'no-store' });
+    const url = computeMetaUrl();
+    const res = await fetch(url, { cache: 'no-store' });
     if (!res || !res.ok) return null;
     const meta = await res.json();
     if (!meta || typeof meta !== 'object') return null;
