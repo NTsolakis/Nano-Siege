@@ -1575,7 +1575,7 @@ canvas#game{display:block;max-width:100%;width:960px;height:auto;border:1px soli
   pointer-events:none;
   z-index:0;
 }
-.stage-wrap > *:not(.stage-bg-video){
+.stage-wrap > *:not(.stage-bg-video):not(.overlay){
   position:relative;
   z-index:1;
 }
