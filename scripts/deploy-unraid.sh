@@ -46,10 +46,6 @@ require jq
 require git
 require rsync
 
-if ! command -v node >/dev/null 2>&1; then
-  echo "WARNING: node not found; falling back to meta.json only for game/launcher versions."
-fi
-
 parse_semver() {
   local v="$1"
   local major minor patch
@@ -58,15 +54,6 @@ parse_semver() {
   minor=${minor:-0}
   patch=${patch:-0}
   printf '%s %s %s\n' "$major" "$minor" "$patch"
-}
-
-read_json_version_with_node() {
-  local file="$1"
-  local prop="$2"
-  if [ ! -f "$file" ] || ! command -v node >/dev/null 2>&1; then
-    return 1
-  fi
-  node -e "try{const v=require('./${file}').${prop};if(v){console.log(String(v).trim());}}catch(e){}" 2>/dev/null || true
 }
 
 ensure_meta_defaults() {
@@ -104,14 +91,18 @@ message=$(jq -r '.message // "Welcome to Nano-Siege."' "$META_SRC")
 
 # Game version from build artifact (preferred), falling back to meta.json.
 game_version=""
-game_version=$(read_json_version_with_node "data/game-version.json" "version" || true)
+if [ -f "data/game-version.json" ]; then
+  game_version=$(jq -r '.version // ""' "data/game-version.json")
+fi
 if [ -z "${game_version}" ]; then
   game_version=$(jq -r '.gameVersion // "0.0.0"' "$META_SRC")
 fi
 
 # Launcher version from build artifact (preferred), falling back to meta.json.
 launcher_version=""
-launcher_version=$(read_json_version_with_node "launcher/launcher-version.json" "version" || true)
+if [ -f "launcher/launcher-version.json" ]; then
+  launcher_version=$(jq -r '.version // ""' "launcher/launcher-version.json")
+fi
 if [ -z "${launcher_version}" ]; then
   launcher_version=$(jq -r '.launcherVersion // "0.0.0"' "$META_SRC")
 fi
