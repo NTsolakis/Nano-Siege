@@ -30,6 +30,7 @@
     .fs-toggle input{accent-color:#54ffe6}
     .fs-label{user-select:none}
     .footer{margin-top:12px;font-size:11px;color:#6f88b5;opacity:0.9}
+    .launcher-version{position:fixed;right:10px;bottom:8px;font-size:11px;color:#6f88b5;opacity:0.9;pointer-events:none}
   </style>
 </head>
 <body>
@@ -55,6 +56,7 @@
         </label>
       </div>
       <div class="footer">The launcher keeps Nano‑Siege up to date automatically.</div>
+      <div id="launcher-ver" class="launcher-version"></div>
     </div>
   </div>
 
@@ -221,6 +223,8 @@
     let settings = readSettings();
     let launcherVersion = null;
 
+    const launcherVersionEl = document.getElementById('launcher-ver');
+
     try{
       const lv = require('./launcher-version.json');
       if(lv && typeof lv.version === 'string' && lv.version.trim()){
@@ -234,14 +238,14 @@
 
     function setStatus(text, version, ready){
       statusEl.textContent = text || '';
-      const parts = [];
       if(version){
-        parts.push('Alpha ' + version);
+        versionEl.textContent = 'Alpha ' + version;
+      }else{
+        versionEl.textContent = '';
       }
-      if(launcherVersion){
-        parts.push('Launcher v' + launcherVersion);
+      if(launcherVersionEl){
+        launcherVersionEl.textContent = launcherVersion ? ('Launcher v' + launcherVersion) : '';
       }
-      versionEl.textContent = parts.join(' • ');
       canPlay = !!ready;
       playBtn.disabled = !canPlay;
     }

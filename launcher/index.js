@@ -78,6 +78,7 @@ let uiState = {
   phase: 'starting', // starting | checking | downloading | finalizing | ready | error
   statusText: 'Starting launcher…',
   version: null,
+  launcherVersion: null,
   error: null,
   canPlay: false,
   downloadPercent: 0,
@@ -447,6 +448,7 @@ function renderLauncherHtml() {
     .fs-toggle input{accent-color:#54ffe6}
     .fs-label{user-select:none}
     .footer{margin-top:14px;font-size:11px;color:#6f88b5;opacity:0.9}
+    .launcher-version{position:fixed;right:10px;bottom:8px;font-size:11px;color:#6f88b5;opacity:0.9;pointer-events:none}
   </style>
 </head>
 <body>
@@ -472,12 +474,14 @@ function renderLauncherHtml() {
         </label>
       </div>
       <div class="footer">Launcher will keep Nano-Siege up to date automatically.</div>
+      <div id="launcher-ver" class="launcher-version"></div>
     </div>
   </div>
   <script>
     (function(){
       var statusEl = document.getElementById('status-line');
       var versionEl = document.getElementById('version-line');
+      var launcherVerEl = document.getElementById('launcher-ver');
       var playBtn = document.getElementById('btn-play');
       var exitBtn = document.getElementById('btn-exit');
       var dlWrap = document.getElementById('dl-wrap');
@@ -493,6 +497,9 @@ function renderLauncherHtml() {
               if(!data){ throw new Error('bad status'); }
               statusEl.textContent = data.statusText || '';
               versionEl.textContent = data.version ? ('Alpha ' + data.version) : '';
+              if(launcherVerEl){
+                launcherVerEl.textContent = data.launcherVersion ? ('Launcher v' + data.launcherVersion) : '';
+              }
 
               // Mirror fullscreen preference from the Node side.
               if(fsCheckbox && data.settings && typeof data.settings.launchFullscreen === 'boolean'){
@@ -755,6 +762,7 @@ async function main() {
       phase: 'downloading',
       statusText: `Downloading Nano‑Siege${versionLabel}…`,
       version: versionSummary || remoteGameVersion || displayVersion || null,
+      launcherVersion: remoteLauncherVersion || null,
       downloadPercent: 0,
       downloadBytes: 0,
       downloadTotal: 0,
@@ -798,7 +806,8 @@ async function main() {
     setUiState({
       phase: 'finalizing',
       statusText: 'Finishing install…',
-      version: versionSummary || remoteGameVersion || displayVersion || null
+      version: versionSummary || remoteGameVersion || displayVersion || null,
+      launcherVersion: remoteLauncherVersion || null
     });
   } else {
     console.log(`Already up to date (build token ${current.buildToken || current.version || 'unknown'}).`);
@@ -806,6 +815,7 @@ async function main() {
       phase: 'ready',
       statusText: `Up to date — Nano‑Siege${versionLabel} is installed.`,
       version: versionSummary || remoteGameVersion || displayVersion || null,
+      launcherVersion: remoteLauncherVersion || null,
       canPlay: true
     });
   }
@@ -816,6 +826,7 @@ async function main() {
       phase: 'ready',
       statusText: `Ready — Nano‑Siege${versionLabel} installed. Click Play to start.`,
       version: versionSummary || remoteGameVersion || displayVersion || null,
+      launcherVersion: remoteLauncherVersion || null,
       canPlay: true
     });
   }

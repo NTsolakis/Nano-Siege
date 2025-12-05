@@ -1,17 +1,5 @@
-Desktop: use live meta.json for version label and launcher banner
-Desktop settings cleanup + pause exit dialog
-Desktop exit button + Electron detection
-Desktop exit button + launcher icon + SHA updates
-Electron launcher builds + desktop Exit button
-Desktop: route API calls to nano.nicksminecraft.net
-Desktop build: use nano API for auth/leaderboard
-Wire Download to launcher and avoid navigating to /downloads
-Update launcher to use nano domain and hook Download button
- Some updates
-Add local download zip and update button wiring
-feat: sync current game state for master
-feat: preload assets, loading screen, and visual polish
-Integrate sprite-based enemies and towers
-Daily Nano Siege updates
-Tweak cannon and splash tower behavior
-Initial import of new master version
+Improved desktop launcher and update pipeline.
+Switched desktop builds to live server metadata for version labels.
+Preloaded assets and refreshed loading screen visuals.
+Integrated sprite‑based enemies and tower effects.
+Balance tweaks to cannon and splash towers.
