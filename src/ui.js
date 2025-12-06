@@ -98,6 +98,8 @@ export class UIManager{
     this.$pauseActions = this.$pauseOverlay ? this.$pauseOverlay.querySelector('.pause-actions') : null;
     this.$btnSettings = document.getElementById('btn-settings');
     this.$settingsPanel = document.getElementById('settings-panel');
+    this.$btnDisplaySettings = document.getElementById('btn-display-settings');
+    this.$btnSoundSettings = document.getElementById('btn-sound-settings');
     this.$btnPauseLogin = document.getElementById('btn-pause-login');
     this.$pauseLoginPanel = document.getElementById('pause-login-panel');
     this.$pauseLoginUsername = document.getElementById('pause-login-username');
@@ -241,6 +243,8 @@ export class UIManager{
     this.$mainDevSettingsActions = document.getElementById('main-devsettings-actions');
     this.$btnMainDevSettingsClose = document.getElementById('btn-main-devsettings-close');
     this.$mainSettingsBackRow = document.getElementById('mainsettings-back-row');
+    this.$btnMainDisplaySettings = document.getElementById('btn-main-display-settings');
+    this.$btnMainSoundSettings = document.getElementById('btn-main-sound-settings');
     this.$btnLoadBack = document.getElementById('btn-load-back');
     this.$loadSlots = [];
     // Assembly War UI
@@ -1229,6 +1233,18 @@ export class UIManager{
     if(this.$pauseRestart){ this.$pauseRestart.addEventListener('click', ()=> this.emit('restart')); }
     if(this.$btnSettings){ this.$btnSettings.addEventListener('click', ()=> this.showSettings(true)); }
     if(this.$btnSettingsBack){ this.$btnSettingsBack.addEventListener('click', ()=> this.showSettings(false)); }
+    if(this.$btnDisplaySettings){
+      this.$btnDisplaySettings.addEventListener('click', ()=>{
+        this.showSettings(false);
+        this.showDisplaySettings(true);
+      });
+    }
+    if(this.$btnSoundSettings){
+      this.$btnSoundSettings.addEventListener('click', ()=>{
+        this.showSettings(false);
+        this.showSoundSettings(true);
+      });
+    }
     if(this.$volSlider){ this.$volSlider.addEventListener('input', ()=> this.emit('setVolume', parseInt(this.$volSlider.value,10)||0)); }
     if(this.$retry){ this.$retry.addEventListener('click', ()=> this.emit('retry')); }
     if(this.$overMenu){ this.$overMenu.addEventListener('click', ()=> this.emit('toMenu')); }
@@ -1250,6 +1266,18 @@ export class UIManager{
     if(this.$volSliderMain){ this.$volSliderMain.addEventListener('input', ()=> this.emit('setVolume', parseInt(this.$volSliderMain.value,10)||0)); }
     const $btnMainSettingsBack = document.getElementById('btn-main-settings-back');
     if($btnMainSettingsBack){ $btnMainSettingsBack.addEventListener('click', ()=> this.emit('mainSettingsBack')); }
+    if(this.$btnMainDisplaySettings){
+      this.$btnMainDisplaySettings.addEventListener('click', ()=>{
+        if(this.showMainSettings) this.showMainSettings(false);
+        this.showDisplaySettings(true);
+      });
+    }
+    if(this.$btnMainSoundSettings){
+      this.$btnMainSoundSettings.addEventListener('click', ()=>{
+        if(this.showMainSettings) this.showMainSettings(false);
+        this.showSoundSettings(true);
+      });
+    }
     const $btnHowToBack = document.getElementById('btn-howto-back');
     if(this.$btnMainHowTo){
       this.$btnMainHowTo.addEventListener('click', ()=>{
@@ -1282,6 +1310,53 @@ export class UIManager{
         if(this.$patchNotesOverlay) this.$patchNotesOverlay.classList.add('visible');
         this.updateModalMask();
         this.emit('mainPatchNotes');
+      });
+    }
+    // Display settings overlay buttons
+    const $btnDisplayApply = document.getElementById('btn-display-apply');
+    const $btnDisplayBack = document.getElementById('btn-display-back');
+    if($btnDisplayApply){
+      $btnDisplayApply.addEventListener('click', ()=>{
+        const select = document.getElementById('res-select');
+        if(select && select.value){
+          try{
+            const parts = select.value.split('x');
+            const w = parseInt(parts[0],10)||1600;
+            const h = parseInt(parts[1],10)||900;
+            if(typeof window !== 'undefined' && window.applyResolution){
+              window.applyResolution(w,h);
+            }
+          }catch(e){}
+        }
+        const uiSel = document.getElementById('ui-scale-select');
+        if(uiSel && uiSel.value){
+          const v = parseFloat(uiSel.value)||1;
+          if(typeof window !== 'undefined' && window.applyUIScale){
+            window.applyUIScale(v);
+          }
+        }
+      });
+    }
+    if($btnDisplayBack){
+      $btnDisplayBack.addEventListener('click', ()=>{
+        this.showDisplaySettings(false);
+        if(this.showMainSettings){
+          this.showMainSettings(true);
+        }else{
+          this.showPause(true);
+        }
+      });
+    }
+    // Sound settings overlay buttons
+    const $btnSoundBack = document.getElementById('btn-sound-back');
+    if($btnSoundBack){
+      $btnSoundBack.addEventListener('click', ()=>{
+        this.showSoundSettings(false);
+        if(this.showMainSettings){
+          this.showMainSettings(true);
+        }else{
+          this.showPause(true);
+        }
       });
     }
     if($btnPatchBack){
@@ -2673,6 +2748,30 @@ export class UIManager{
       if(this.$pauseLoginPanel) this.$pauseLoginPanel.style.display = 'none';
     }
     if(this.$pauseActions) this.$pauseActions.style.display = show ? 'none' : 'flex';
+  }
+  showMainSettings(show){
+    this.show(this.$mainSettings, show);
+    this.updateModalMask();
+  }
+  showDisplaySettings(show){
+    const overlay = document.getElementById('displaysettings-overlay');
+    if(!overlay) return;
+    if(show){
+      overlay.classList.add('visible');
+    }else{
+      overlay.classList.remove('visible');
+    }
+    this.updateModalMask();
+  }
+  showSoundSettings(show){
+    const overlay = document.getElementById('soundsettings-overlay');
+    if(!overlay) return;
+    if(show){
+      overlay.classList.add('visible');
+    }else{
+      overlay.classList.remove('visible');
+    }
+    this.updateModalMask();
   }
   _getCharacterMeta(key){
     const k = (key || '').trim().toLowerCase();

@@ -25,6 +25,7 @@
       <div id="game-frame">
         <div id="game-root">
           <div id="game-wrapper">
+            <div id="ui-scale-root">
             <div id="app">
       <header class="hud">
         <div class="hud-title-floating">
@@ -152,6 +153,7 @@
           </div>
         </aside>
           <div id="canvas-shell" class="canvas-shell">
+          <div id="canvas-unscale">
           <div id="combat-stats" class="combat-stats-card">
             <div class="cs-title">
               <span>Combat Stats</span>
@@ -191,6 +193,7 @@
           <div class="upg-hint">Click a placed tower to upgrade</div>
         </aside>
           <canvas id="game" width="960" height="540"></canvas>
+          </div> <!-- #canvas-unscale -->
         </div>
         <aside id="passive-panel" class="passive-panel">
           <div id="passive-lines" class="pp-lines"></div>
@@ -258,10 +261,6 @@
             <!-- Settings sub-menu (hidden by default) -->
             <div id="settings-panel" style="display:none; margin-top:10px">
               <h4>Settings</h4>
-              <div class="vol-ctl" style="margin-top:4px; display:flex; align-items:center; gap:8px; justify-content:center">
-                <label for="vol-slider">Volume <span id="vol-label">70%</span></label>
-                <input type="range" id="vol-slider" min="0" max="100" step="1" value="70" />
-              </div>
               <div class="dev-toggle" style="margin-top:10px">
                 <span class="dev-label">Automatic Speed Control</span>
                 <label class="switch">
@@ -271,6 +270,8 @@
                 <span class="dev-hint">Auto slow on bonus &amp; boss waves</span>
               </div>
               <div class="actions" style="margin-top:10px">
+                <button id="btn-display-settings">Display Settings</button>
+                <button id="btn-sound-settings">Sound Settings</button>
                 <button id="btn-settings-back">Back</button>
               </div>
             </div>
@@ -409,6 +410,7 @@
       </main>
 
             </div> <!-- #app -->
+            </div> <!-- #ui-scale-root -->
           </div> <!-- #game-wrapper -->
         </div> <!-- #game-root -->
       </div> <!-- #game-frame -->
@@ -425,6 +427,7 @@
           </div>
           <div class="mainmenu-actions">
             <button id="btn-main-play">Play</button>
+            <button id="btn-main-settings">Settings</button>
             <button id="btn-main-profile">Profile</button>
             <button id="btn-main-database">Database</button>
             <button id="btn-main-download">Exit</button>
@@ -556,6 +559,48 @@
 
           <div class="actions" style="margin-top:18px">
             <button id="btn-patch-back">Back</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- Display Settings -->
+      <section id="displaysettings-overlay" class="overlay mainmenu">
+        <div class="panel mainmenu-panel">
+          <h2>Display Settings</h2>
+          <p class="tag">Adjust resolution and UI scale</p>
+
+          <label for="res-select">Resolution</label>
+          <select id="res-select"></select>
+
+          <label for="ui-scale-select" style="margin-top:12px;">UI Scale</label>
+          <select id="ui-scale-select">
+            <option value="1">1×</option>
+            <option value="1.25">1.25×</option>
+            <option value="1.5">1.5×</option>
+            <option value="1.75">1.75×</option>
+            <option value="2">2×</option>
+          </select>
+
+          <div class="actions" style="margin-top:18px">
+            <button id="btn-display-apply">Apply</button>
+            <button id="btn-display-back">Back</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- Sound Settings -->
+      <section id="soundsettings-overlay" class="overlay mainmenu">
+        <div class="panel mainmenu-panel">
+          <h2>Sound Settings</h2>
+          <p class="tag">Adjust audio levels</p>
+
+          <div class="vol-ctl" style="margin-top:10px; display:flex; align-items:center; gap:8px; justify-content:center">
+            <label for="vol-slider-main">Master Volume <span id="vol-label-main">70%</span></label>
+            <input type="range" id="vol-slider-main" min="0" max="100" step="1" value="70" />
+          </div>
+
+          <div class="actions" style="margin-top:18px">
+            <button id="btn-sound-back">Back</button>
           </div>
         </div>
       </section>
@@ -851,9 +896,9 @@
 
           <!-- Primary settings (always visible on hosted build, top-level on desktop) -->
           <div id="mainsettings-primary">
-            <div class="vol-ctl" style="margin-top:10px; display:flex; align-items:center; gap:8px; justify-content:center">
-              <label for="vol-slider-main">Volume <span id="vol-label-main">70%</span></label>
-              <input type="range" id="vol-slider-main" min="0" max="100" step="1" value="70" />
+            <div class="actions" style="margin-top:10px">
+              <button id="btn-main-display-settings">Display Settings</button>
+              <button id="btn-main-sound-settings">Sound Settings</button>
             </div>
             <div class="dev-toggle" style="margin-top:14px">
               <span class="dev-label">Automatic Speed Control</span>
@@ -1079,24 +1124,120 @@
     </script>
     <script type="module" src="src/boot.js"></script>
     <script>
+      (function(){
+        function getCompatibleResolutions(){
+          try{
+            const screenW = window.screen && window.screen.width || 1600;
+            const screenH = window.screen && window.screen.height || 900;
+            const common = [
+              [1280, 720],
+              [1600, 900],
+              [1920, 1080],
+              [2560, 1440],
+              [3840, 2160]
+            ];
+            return common.filter(([w,h])=> w<=screenW && h<=screenH);
+          }catch(e){
+            return [[1600,900]];
+          }
+        }
+        function populateResolutionDropdown(){
+          const select = document.getElementById('res-select');
+          if(!select) return;
+          const resList = getCompatibleResolutions();
+          select.innerHTML = '';
+          resList.forEach(([w,h])=>{
+            const opt = document.createElement('option');
+            opt.value = `${w}x${h}`;
+            opt.textContent = `${w}×${h}`;
+            select.appendChild(opt);
+          });
+          const saved = (typeof window !== 'undefined' && window.localStorage)
+            ? window.localStorage.getItem('resolution')
+            : null;
+          if(saved && Array.from(select.options).some(o=>o.value===saved)){
+            select.value = saved;
+          }
+        }
+        function applyUIScale(n){
+          const val = Math.max(0.75, Math.min(2.5, Number(n)||1));
+          document.documentElement.style.setProperty('--ui-scale', String(val));
+          try{
+            window.NANO_UI_SCALE = val;
+          }catch(e){}
+          try{
+            if(window.localStorage){
+              window.localStorage.setItem('ui-scale', String(val));
+            }
+          }catch(e){}
+        }
+        window.applyUIScale = applyUIScale;
+        function initUiScale(){
+          let saved = 1;
+          try{
+            if(window.localStorage){
+              const raw = window.localStorage.getItem('ui-scale');
+              if(raw!=null && raw!=='' && !isNaN(parseFloat(raw))){
+                saved = parseFloat(raw);
+              }
+            }
+          }catch(e){}
+          applyUIScale(saved);
+          const sel = document.getElementById('ui-scale-select');
+          if(sel){
+            const valStr = String(saved);
+            const match = Array.from(sel.options).some(o=>o.value===valStr);
+            if(match){
+              sel.value = valStr;
+            }
+          }
+        }
+        window.addEventListener('DOMContentLoaded', ()=>{
+          populateResolutionDropdown();
+          initUiScale();
+        });
+      })();
+    </script>
+    <script>
       (() => {
         const frame = document.getElementById('game-frame');
         const baseW = 1600;
         const baseMenuH = 1100; // Menu overlays are unscaled; keep frame height sane for gameplay UI
         const baseGameH = 900;
         let uiMode = 'menu'; // 'menu' | 'game'
+        let desiredWidth = baseW;
+        let desiredHeight = baseGameH;
+
+        function applyResolution(w,h){
+          try{
+            const ww = Math.max(800, w|0)||baseW;
+            const hh = Math.max(600, h|0)||baseGameH;
+            desiredWidth = ww;
+            desiredHeight = hh;
+            if(window.localStorage){
+              window.localStorage.setItem('resolution', `${ww}x${hh}`);
+            }
+          }catch(e){}
+          fitGame();
+        }
+        window.applyResolution = applyResolution;
 
         const computeScale = () => {
           const sw = window.innerWidth;
           const sh = window.visualViewport ? window.visualViewport.height : window.innerHeight;
+          const uiScale = (typeof window !== 'undefined' && window.NANO_UI_SCALE != null)
+            ? (Number(window.NANO_UI_SCALE) || 1)
+            : 1;
+          const targetW = desiredWidth || baseW;
+          const targetH = desiredHeight || baseGameH;
           if(uiMode === 'menu'){
             // Keep menus fully visible where possible without introducing scroll.
-            return Math.min(sw / baseW, sh / baseMenuH);
+            return Math.min(sw / (targetW * uiScale), sh / (baseMenuH * uiScale));
           }
-          // Gameplay: always choose the smaller scale so the full 1600x900
-          // frame stays inside the viewport (no cropping on ultrawide/short screens).
-          const scaleW = sw / baseW;
-          const scaleH = sh / baseGameH;
+          // Gameplay: always choose the smaller scale so the full frame
+          // stays inside the viewport (no cropping on ultrawide/short screens).
+          const scaleW = sw / (targetW * uiScale);
+          const scaleH = sh / (targetH * uiScale);
           return Math.min(scaleW, scaleH);
         };
 
@@ -1107,12 +1248,37 @@
 
         function fitGame(){
           if(!frame) return;
-          const baseH = uiMode === 'game' ? baseGameH : baseMenuH;
+          const targetW = desiredWidth || baseW;
+          const targetH = desiredHeight || baseGameH;
+          const baseH = uiMode === 'game' ? targetH : baseMenuH;
           const scale = computeScale();
-          frame.style.width = baseW + 'px';
+          frame.style.width = targetW + 'px';
           frame.style.height = baseH + 'px';
           frame.style.transform = `translate(-50%, 0) scale(${scale})`;
         }
+        // Load saved resolution (desktop builds may override via query string later)
+        try{
+          const qs = window.location && window.location.search || '';
+          if(qs && qs.length > 1){
+            const raw = qs.slice(1);
+            if(raw && raw.includes('x')){
+              const parts = raw.split('x');
+              const w = parseInt(parts[0],10)||baseW;
+              const h = parseInt(parts[1],10)||baseGameH;
+              desiredWidth = w;
+              desiredHeight = h;
+            }
+          }else if(window.localStorage){
+            const saved = window.localStorage.getItem('resolution');
+            if(saved && typeof saved === 'string' && saved.includes('x')){
+              const parts = saved.split('x');
+              const w = parseInt(parts[0],10)||baseW;
+              const h = parseInt(parts[1],10)||baseGameH;
+              desiredWidth = w;
+              desiredHeight = h;
+            }
+          }
+        }catch(e){}
         window.addEventListener('resize', fitGame);
         window.addEventListener('orientationchange', fitGame);
         window.addEventListener('load', fitGame);

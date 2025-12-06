@@ -14,10 +14,43 @@ try {
 
 const wantsStartupFullscreen = process.argv.some((arg) => arg === '--fullscreen');
 
+function parseDesiredResolutionFromArgs() {
+  try {
+    let width = 1600;
+    let height = 900;
+    for (const arg of process.argv) {
+      if (!arg) continue;
+      if (arg.startsWith('--window-size=')) {
+        const val = arg.split('=')[1] || '';
+        const parts = val.split(',');
+        const w = parseInt(parts[0], 10) || 0;
+        const h = parseInt(parts[1], 10) || 0;
+        if (w > 0 && h > 0) {
+          width = w;
+          height = h;
+        }
+      } else if (arg.startsWith('--nano-resolution=')) {
+        const val = arg.split('=')[1] || '';
+        const parts = val.split('x');
+        const w = parseInt(parts[0], 10) || 0;
+        const h = parseInt(parts[1], 10) || 0;
+        if (w > 0 && h > 0) {
+          width = w;
+          height = h;
+        }
+      }
+    }
+    return { width, height };
+  } catch (e) {
+    return { width: 1600, height: 900 };
+  }
+}
+
 function createWindow() {
+  const desired = parseDesiredResolutionFromArgs();
   const win = new BrowserWindow({
-    width: 1600,
-    height: 900,
+    width: desired.width,
+    height: desired.height,
     useContentSize: true,
     backgroundColor: '#000000',
     webPreferences: {
@@ -32,7 +65,11 @@ function createWindow() {
   });
 
   win.setMenuBarVisibility(false);
-  win.loadFile(path.join(__dirname, 'index.html'));
+  const nanoResArg = process.argv.find((arg) => arg && arg.startsWith('--nano-resolution='));
+  const url = nanoResArg
+    ? `file://${path.join(__dirname, 'index.html')}?${encodeURIComponent(nanoResArg.slice('--nano-resolution='.length))}`
+    : `file://${path.join(__dirname, 'index.html')}`;
+  win.loadURL(url);
 
   if (wantsStartupFullscreen) {
     try {

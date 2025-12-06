@@ -55,16 +55,18 @@ function readSettings() {
     const raw = fs.readFileSync(settingsFile, 'utf8');
     const parsed = JSON.parse(raw);
     return {
-      launchFullscreen: !!parsed.launchFullscreen
+      launchFullscreen: !!parsed.launchFullscreen,
+      resolution: typeof parsed.resolution === 'string' ? parsed.resolution : null
     };
   } catch (e) {
-    return { launchFullscreen: false };
+    return { launchFullscreen: false, resolution: null };
   }
 }
 
 function writeSettings(settings) {
   const safe = {
-    launchFullscreen: !!(settings && settings.launchFullscreen)
+    launchFullscreen: !!(settings && settings.launchFullscreen),
+    resolution: settings && typeof settings.resolution === 'string' ? settings.resolution : null
   };
   fs.mkdirSync(baseDir, { recursive: true });
   fs.writeFileSync(settingsFile, JSON.stringify(safe, null, 2), 'utf8');
@@ -469,6 +471,18 @@ function renderLauncherHtml() {
       </div>
       <div class="fs-row">
         <label class="fs-toggle">
+          <span class="fs-label">Resolution:</span>
+          <select id="res-select" style="margin-left:6px; font-size:11px; padding:2px 4px; border-radius:6px; border:1px solid rgba(142,189,255,0.8); background:rgba(4,10,24,0.9); color:#c7d7ff">
+            <option value="">Auto</option>
+            <option value="1280x720">1280×720</option>
+            <option value="1600x900">1600×900</option>
+            <option value="1920x1080">1920×1080</option>
+            <option value="2560x1440">2560×1440</option>
+          </select>
+        </label>
+      </div>
+      <div class="fs-row" style="margin-top:4px">
+        <label class="fs-toggle">
           <input type="checkbox" id="chk-fullscreen" />
           <span class="fs-label">Launch in fullscreen</span>
         </label>
@@ -488,6 +502,7 @@ function renderLauncherHtml() {
       var dlFill = document.getElementById('dl-fill');
       var dlText = document.getElementById('dl-text');
       var fsCheckbox = document.getElementById('chk-fullscreen');
+      var resSelect = document.getElementById('res-select');
 
       function updateStatus(){
         try{
@@ -501,9 +516,13 @@ function renderLauncherHtml() {
                 launcherVerEl.textContent = data.launcherVersion ? ('Launcher v' + data.launcherVersion) : '';
               }
 
-              // Mirror fullscreen preference from the Node side.
+              // Mirror fullscreen + resolution preference from the Node side.
               if(fsCheckbox && data.settings && typeof data.settings.launchFullscreen === 'boolean'){
                 fsCheckbox.checked = !!data.settings.launchFullscreen;
+              }
+              if(resSelect && data.settings){
+                var res = (typeof data.settings.resolution === 'string' && data.settings.resolution) ? data.settings.resolution : '';
+                resSelect.value = res || '';
               }
 
               // Download progress UI.
@@ -552,7 +571,26 @@ function renderLauncherHtml() {
         fsCheckbox.addEventListener('change', function(){
           try{
             var v = fsCheckbox.checked ? '1' : '0';
-            fetch('/settings?fullscreen=' + encodeURIComponent(v)).catch(function(){});
+            var params = new URLSearchParams();
+            params.set('fullscreen', v);
+            if(resSelect && resSelect.value){
+              params.set('res', resSelect.value);
+            }
+            fetch('/settings?' + params.toString()).catch(function(){});
+          }catch(e){}
+        });
+      }
+      if(resSelect){
+        resSelect.addEventListener('change', function(){
+          try{
+            var params = new URLSearchParams();
+            if(fsCheckbox){
+              params.set('fullscreen', fsCheckbox.checked ? '1' : '0');
+            }
+            if(resSelect.value){
+              params.set('res', resSelect.value);
+            }
+            fetch('/settings?' + params.toString()).catch(function(){});
           }catch(e){}
         });
       }
@@ -591,11 +629,17 @@ function startLauncherUiServer() {
           }
           if (url.pathname === '/settings') {
             const fullscreen = url.searchParams.get('fullscreen');
+            const resParam = url.searchParams.get('res');
+            const patch = {};
             if (fullscreen === '1' || fullscreen === 'true') {
-              updateSettings({ launchFullscreen: true });
+              patch.launchFullscreen = true;
             } else if (fullscreen === '0' || fullscreen === 'false') {
-              updateSettings({ launchFullscreen: false });
+              patch.launchFullscreen = false;
             }
+            if (typeof resParam === 'string') {
+              patch.resolution = resParam || null;
+            }
+            updateSettings(patch);
             res.statusCode = 200;
             res.setHeader('Content-Type', 'application/json; charset=utf-8');
             res.end(JSON.stringify({ ok: true, settings: uiState.settings }));
@@ -669,6 +713,15 @@ function launchGame(binaryPath) {
   if (settings && settings.launchFullscreen) {
     args.push('--fullscreen');
   }
+   if (settings && typeof settings.resolution === 'string' && settings.resolution) {
+     const parts = String(settings.resolution).split('x');
+     const w = parseInt(parts[0], 10) || 0;
+     const h = parseInt(parts[1], 10) || 0;
+     if (w > 0 && h > 0) {
+       args.push(`--window-size=${w},${h}`);
+       args.push(`--nano-resolution=${w}x${h}`);
+     }
+   }
   const child = spawn(binaryPath, args, {
     detached: PLATFORM === 'win32',
     stdio: 'inherit'

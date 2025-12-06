@@ -9,6 +9,7 @@
   --danger: #ff5370;
   --design-width: 1600;
   --canvas-zoom: 1;
+  --ui-scale: 1;
 }
 
 *{box-sizing:border-box}
@@ -94,6 +95,11 @@ body.mainmenu-visible #game-container{
   transform-origin:top left;
   display:flex;
   flex-direction:column;
+}
+
+#ui-scale-root{
+  transform:scale(var(--ui-scale));
+  transform-origin:top left;
 }
 .signin-banner{
   position:fixed;
@@ -1463,6 +1469,11 @@ canvas#game{display:block;max-width:100%;width:960px;height:auto;border:1px soli
   height:auto;
   aspect-ratio:16/9;
   max-width:100%;
+}
+
+#canvas-unscale{
+  transform:scale(calc(1 / var(--ui-scale)));
+  transform-origin:top left;
 }
 /* Combat stats overlay */
 #combat-stats{
