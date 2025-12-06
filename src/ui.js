@@ -289,6 +289,9 @@ export class UIManager{
     this.$autoSpeed = document.getElementById('autospeed-toggle');
     this.$autoSpeedMain = document.getElementById('autospeed-toggle-main');
     this.$btnMainLoadUser = document.getElementById('btn-main-loaduser');
+    if(this.isDesktopRuntime && this.$btnMainLoadUser){
+      this.$btnMainLoadUser.style.display = 'none';
+    }
     // Load / Login menu elements
     this.$loadTitle = this.$loadMenu ? this.$loadMenu.querySelector('h2') : null;
     this.$loadTag = this.$loadMenu ? this.$loadMenu.querySelector('.tag') : null;
@@ -988,19 +991,11 @@ export class UIManager{
     }
     // Profile submenu buttons
     const $btnProfileUser = document.getElementById('btn-profile-userprofile');
-    const $btnProfileSignOut = document.getElementById('btn-profile-signout');
     const $btnProfileBack = document.getElementById('btn-profile-back');
     if($btnProfileUser){
       $btnProfileUser.addEventListener('click', ()=>{
-        // Open the current user's profile (or route through sign-in).
+        // Open the current user's profile view.
         this.emit('mainUserProfile');
-      });
-    }
-    if($btnProfileSignOut){
-      $btnProfileSignOut.addEventListener('click', ()=>{
-        this.emit('logout', { source:'mainmenu' });
-        if(this.showProfileMenu) this.showProfileMenu(false);
-        if(this.showMainMenu) this.showMainMenu(true);
       });
     }
     if($btnProfileBack){
@@ -3336,7 +3331,7 @@ export class UIManager{
   }
   updateAuthButtons(){
     const signed = !!this.isSignedIn;
-    if(this.$btnMainLoadUser){
+    if(this.$btnMainLoadUser && !this.isDesktopRuntime){
       this.$btnMainLoadUser.textContent = signed ? 'Sign Out' : 'Sign In';
     }
     if(this.$btnLeaderboardSignIn){

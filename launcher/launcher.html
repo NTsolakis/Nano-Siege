@@ -19,6 +19,13 @@
     .dl-bar{position:relative;width:100%;height:6px;border-radius:999px;background:rgba(8,20,40,0.85);overflow:hidden;border:1px solid rgba(120,180,255,0.45);box-shadow:0 0 10px rgba(0,0,0,0.75) inset}
     .dl-fill{position:absolute;inset:0;width:0%;background:linear-gradient(90deg,#12b5ff,#54ffe6);box-shadow:0 0 12px rgba(0,255,255,0.55)}
     .dl-text{margin-top:4px;min-height:14px;color:#9fb7ff}
+    .signin-wrap{margin:8px 0 6px 0;text-align:left;font-size:12px;color:#c5e2ff}
+    .signin-grid{display:flex;flex-wrap:wrap;gap:8px}
+    .signin-field{flex:1 1 140px;display:flex;flex-direction:column;gap:2px}
+    .signin-field label{font-size:11px;color:#9fb7ff}
+    .signin-field input{padding:4px 8px;border-radius:6px;border:1px solid rgba(142,189,255,0.8);background:rgba(4,10,24,0.9);color:#e6f7ff;font-size:12px}
+    .signin-options{margin-top:6px;font-size:11px;color:#9fb7ff}
+    .signin-status{margin-top:4px;min-height:14px;font-size:11px}
     .buttons{display:flex;justify-content:center;gap:10px;margin-top:8px}
     button{min-width:90px;padding:8px 18px;border-radius:999px;border:1px solid rgba(96,255,255,0.7);background:linear-gradient(135deg,#12b5ff,#54ffe6);color:#02131f;font-weight:600;font-size:14px;cursor:pointer;box-shadow:0 0 12px rgba(0,255,255,0.35);transition:transform 0.1s ease,box-shadow 0.1s ease,filter 0.1s ease,background 0.2s}
     button.secondary{background:rgba(4,10,24,0.9);color:#c7d7ff;border-color:rgba(142,189,255,0.8);box-shadow:none}
@@ -41,6 +48,28 @@
       <p class="subtitle">Reactor Defense Launcher</p>
       <div id="status-line" class="status">Starting launcher…</div>
       <div id="version-line" class="version"></div>
+      <div class="signin-wrap">
+        <div class="signin-grid">
+          <div class="signin-field">
+            <label for="login-username">Username</label>
+            <input type="text" id="login-username" autocomplete="username" />
+          </div>
+          <div class="signin-field">
+            <label for="login-password">Password</label>
+            <input type="password" id="login-password" autocomplete="current-password" />
+          </div>
+        </div>
+        <div class="signin-options">
+          <label class="fs-toggle">
+            <input type="checkbox" id="login-stay-signedin" />
+            <span class="fs-label">Stay signed in on this device</span>
+          </label>
+        </div>
+        <div id="login-status" class="signin-status"></div>
+        <div class="buttons" style="margin-top:6px">
+          <button id="btn-login" class="secondary">Sign In</button>
+        </div>
+      </div>
       <div id="dl-wrap" class="dl-wrap" style="display:none">
         <div class="dl-bar"><div id="dl-fill" class="dl-fill"></div></div>
         <div id="dl-text" class="dl-text"></div>
@@ -69,6 +98,11 @@
     const dlFill = document.getElementById('dl-fill');
     const dlText = document.getElementById('dl-text');
     const fsCheckbox = document.getElementById('chk-fullscreen');
+    const loginUserInput = document.getElementById('login-username');
+    const loginPasswordInput = document.getElementById('login-password');
+    const loginStayCheckbox = document.getElementById('login-stay-signedin');
+    const loginStatusEl = document.getElementById('login-status');
+    const loginBtn = document.getElementById('btn-login');
     const bgEl = document.querySelector('.bg');
     const http = require('http');
     const https = require('https');
@@ -96,6 +130,15 @@
         return u.toString();
       } catch (e) {
         return DEFAULT_META_URL;
+      }
+    })();
+    const DEFAULT_API_BASE = 'https://nano.nicksminecraft.net';
+    const API_BASE = (() => {
+      try {
+        const u = new URL(MANIFEST_URL);
+        return u.origin || DEFAULT_API_BASE;
+      } catch (e) {
+        return DEFAULT_API_BASE;
       }
     })();
 
@@ -205,22 +248,31 @@
         const raw = fs.readFileSync(settingsFile, 'utf8');
         const parsed = JSON.parse(raw);
         return {
-          launchFullscreen: !!parsed.launchFullscreen
+          launchFullscreen: !!parsed.launchFullscreen,
+          rememberedUser: typeof parsed.rememberedUser === 'string'
+            ? (parsed.rememberedUser || '').trim() || null
+            : null
         };
       }catch(e){
-        return { launchFullscreen:false };
+        return { launchFullscreen:false, rememberedUser:null };
       }
     }
 
     function writeSettings(next){
       const safe = {
-        launchFullscreen: !!(next && next.launchFullscreen)
+        launchFullscreen: !!(next && next.launchFullscreen),
+        rememberedUser: next && typeof next.rememberedUser === 'string'
+          ? (next.rememberedUser || '').trim() || null
+          : null
       };
       fs.mkdirSync(baseDir, { recursive:true });
       fs.writeFileSync(settingsFile, JSON.stringify(safe, null, 2), 'utf8');
     }
 
     let settings = readSettings();
+    let signedInUser = settings && typeof settings.rememberedUser === 'string'
+      ? (settings.rememberedUser || '').trim() || null
+      : null;
     let launcherVersion = null;
 
     const launcherVersionEl = document.getElementById('launcher-ver');
@@ -248,6 +300,27 @@
       }
       canPlay = !!ready;
       playBtn.disabled = !canPlay;
+    }
+
+    function applyAuthUi(){
+      if(loginUserInput && signedInUser){
+        loginUserInput.value = signedInUser;
+      }
+      if(loginStayCheckbox){
+        loginStayCheckbox.checked = !!(settings && settings.rememberedUser);
+      }
+      if(loginStatusEl){
+        if(signedInUser){
+          loginStatusEl.textContent = 'Signed in as ' + signedInUser;
+          loginStatusEl.style.color = '#8cf5ff';
+        }else{
+          loginStatusEl.textContent = '';
+          loginStatusEl.style.color = '#9fb7ff';
+        }
+      }
+      if(loginBtn){
+        loginBtn.textContent = signedInUser ? 'Sign Out' : 'Sign In';
+      }
     }
 
     function updateProgressUI(prog){
@@ -278,6 +351,51 @@
 
     function getHttpModule(url){
       return url.startsWith('https:') ? https : http;
+    }
+
+    function postJson(url, payload){
+      return new Promise((resolve, reject) => {
+        try{
+          const target = new URL(url);
+          const isHttps = target.protocol === 'https:';
+          const mod = isHttps ? https : http;
+          const data = JSON.stringify(payload || {});
+          const req = mod.request({
+            method:'POST',
+            hostname: target.hostname,
+            port: target.port || (isHttps ? 443 : 80),
+            path: target.pathname + (target.search || ''),
+            headers:{
+              'Content-Type':'application/json',
+              'Content-Length': Buffer.byteLength(data)
+            }
+          }, (res) => {
+            const chunks = [];
+            res.on('data', (chunk) => chunks.push(chunk));
+            res.on('end', () => {
+              try{
+                const buf = Buffer.concat(chunks);
+                let parsed = null;
+                try{
+                  parsed = JSON.parse(buf.toString('utf8'));
+                }catch(e){}
+                if(res.statusCode !== 200 || !parsed || parsed.ok === false){
+                  const msg = (parsed && parsed.error) ? String(parsed.error) : ('HTTP ' + res.statusCode);
+                  return reject(new Error(msg));
+                }
+                resolve(parsed);
+              }catch(e){
+                reject(e);
+              }
+            });
+          });
+          req.on('error', (err) => reject(err));
+          req.write(data);
+          req.end();
+        }catch(err){
+          reject(err);
+        }
+      });
     }
 
     function fetchJson(url){
@@ -370,6 +488,16 @@
         console.error('Global meta fetch failed from', META_URL, e);
         return null;
       }
+    }
+
+    async function loginWithBackend(username, password){
+      const trimmedUser = (username || '').trim();
+      const pwd = password || '';
+      if(!trimmedUser || !pwd){
+        throw new Error('Username and password required');
+      }
+      const url = API_BASE + '/api/login';
+      return postJson(url, { username: trimmedUser, password: pwd });
     }
 
     function downloadFile(url, dest, onProgress){
@@ -612,6 +740,67 @@
     }
 
     runUpdateFlow();
+
+    applyAuthUi();
+
+    if(loginBtn){
+      loginBtn.addEventListener('click', async () => {
+        if(!loginUserInput || !loginStatusEl) return;
+        // If already signed in, treat this as a sign-out toggle.
+        if(signedInUser){
+          try{
+            signedInUser = null;
+            if(settings){
+              settings.rememberedUser = null;
+              try{ writeSettings(settings); }catch(e){}
+            }
+            if(loginPasswordInput){
+              loginPasswordInput.value = '';
+            }
+            loginStatusEl.textContent = 'Signed out.';
+            loginStatusEl.style.color = '#9fb7ff';
+          }catch(e){
+            // Best-effort; leave UI in a safe state.
+          }
+          applyAuthUi();
+          return;
+        }
+        const username = (loginUserInput.value || '').trim();
+        const password = loginPasswordInput ? (loginPasswordInput.value || '') : '';
+        if(!username || !password){
+          loginStatusEl.textContent = 'Username and password required.';
+          loginStatusEl.style.color = '#ff5370';
+          return;
+        }
+        loginStatusEl.textContent = 'Signing in…';
+        loginStatusEl.style.color = '#8cf5ff';
+        try{
+          const result = await loginWithBackend(username, password);
+          const resolvedName = (result && typeof result.username === 'string' && result.username.trim())
+            ? result.username.trim()
+            : username;
+          signedInUser = resolvedName;
+          if(loginStayCheckbox && loginStayCheckbox.checked){
+            settings.rememberedUser = resolvedName;
+          }else if(settings){
+            settings.rememberedUser = null;
+          }
+          try{
+            writeSettings(settings);
+          }catch(e){}
+          loginStatusEl.textContent = 'Signed in.';
+          loginStatusEl.style.color = '#8cf5ff';
+        }catch(err){
+          signedInUser = null;
+          if(loginPasswordInput){
+            loginPasswordInput.value = '';
+          }
+          loginStatusEl.textContent = err && err.message ? err.message : 'Login failed.';
+          loginStatusEl.style.color = '#ff5370';
+        }
+        applyAuthUi();
+      });
+    }
 
     if(fsCheckbox){
       fsCheckbox.checked = !!(settings && settings.launchFullscreen);

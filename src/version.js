@@ -112,6 +112,19 @@ function openDownloadLink(url) {
 function setupLauncherBanner(meta) {
   try {
     if (typeof document === 'undefined') return;
+    // Hosted web build: keep the launcher banner hidden. The web
+    // version now acts as a lightweight hub page and does not need
+    // to surface desktop launcher update prompts.
+    try {
+      if (typeof window !== 'undefined') {
+        const loc = window.location || {};
+        const protocol = String(loc.protocol || '').toLowerCase();
+        if (protocol === 'http:' || protocol === 'https:') {
+          return;
+        }
+      }
+    } catch (e) {}
+
     const banner = document.getElementById('launcher-banner');
     const textEl = document.getElementById('launcher-banner-text');
     const btn = document.getElementById('launcher-banner-download');
@@ -135,7 +148,10 @@ function setupLauncherBanner(meta) {
     if (textEl) {
       textEl.textContent = labelParts.join(' • ');
     }
-    const targetUrl = computeDownloadUrl(meta);
+    // Desktop/app builds: redirect to the main Nano‑Siege site rather
+    // than starting a launcher download immediately. The site hosts
+    // the current download buttons and release notes.
+    const targetUrl = 'https://nano.nicksminecraft.net';
     if (!targetUrl) return;
     banner.style.display = 'flex';
     btn.onclick = async () => {

@@ -12,6 +12,17 @@ const IMAGE_ASSETS = [
 // bootstrap work (module import, sprite preprocessing, etc) finishes.
 const MAX_ASSET_PROGRESS = 80; // percent
 
+function isHostedWebBuild(){
+  try{
+    if(typeof window === 'undefined') return false;
+    const loc = window.location || {};
+    const protocol = String(loc.protocol || '').toLowerCase();
+    return protocol === 'http:' || protocol === 'https:';
+  }catch(e){
+    return false;
+  }
+}
+
 function preloadImage(url){
   return new Promise((resolve)=>{
     if(typeof Image === 'undefined'){
@@ -94,15 +105,25 @@ async function boot(){
   const t0 = (typeof performance !== 'undefined' && performance.now)
     ? performance.now()
     : Date.now();
+  const webHub = isHostedWebBuild();
   try{
-    await preloadAssets();
+    if(!webHub){
+      await preloadAssets();
+    }
   }catch(e){
     console.warn('Asset preload failed', e);
   }
   try{
-    await import('./main.js');
+    if(webHub){
+      const mod = await import('./hub.js');
+      if(mod && typeof mod.initHub === 'function'){
+        await mod.initHub();
+      }
+    }else{
+      await import('./main.js');
+    }
   }catch(e){
-    console.error('Game bootstrap failed', e);
+    console.error(webHub ? 'Hub bootstrap failed' : 'Game bootstrap failed', e);
   }
   // Ensure there is a small minimum loading duration so any one‑time
   // initialization hitches are hidden behind the loading screen, and
