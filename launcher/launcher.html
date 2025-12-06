@@ -319,12 +319,22 @@
     function applyAuthUi(){
       const playRow = document.getElementById('play-row');
       const fsRow = document.querySelector('.fs-row');
+      const signinGrid = document.querySelector('.signin-grid');
+      const signinOptions = document.querySelector('.signin-options');
       const showControls = !!signedInUser;
       if(playRow){
         playRow.style.display = showControls ? 'flex' : 'none';
       }
       if(fsRow){
         fsRow.style.display = showControls ? 'flex' : 'none';
+      }
+      // Once signed in, hide the username/password fields and the
+      // "stay signed in" checkbox so the launcher surface stays clean.
+      if(signinGrid){
+        signinGrid.style.display = signedInUser ? 'none' : '';
+      }
+      if(signinOptions){
+        signinOptions.style.display = signedInUser ? 'none' : '';
       }
       if(loginUserInput && signedInUser){
         loginUserInput.value = signedInUser;
@@ -788,6 +798,21 @@
         currentBinaryPath = binaryPath;
       }catch(err){
         console.error('Launcher error:', err);
+        try{
+          // If we already have a local install from a previous run,
+          // fall back to that even if update checks fail (e.g. server
+          // temporarily unreachable) so Play still works.
+          const fallback = readState();
+          if(fallback && fallback.binaryPath && fs.existsSync(fallback.binaryPath)){
+            currentBinaryPath = fallback.binaryPath;
+            updateProgressUI(null);
+            setStatus('Launcher offline — using existing install.', '', true);
+            return;
+          }
+        }catch(e){
+          // ignore fallback errors
+        }
+        updateProgressUI(null);
         setStatus('Launcher error — see console for details.', '', false);
       }
     }
