@@ -466,87 +466,23 @@ export class UIManager{
     // Player portrait tooltip (uses dynamic character data)
     attachTip(this.$hpCharIcon, 'character', { preferBelow:true });
 
-    // Make the combat stats card draggable within the full stage
-    // (wave panel + board + passive panel) instead of only the board
-    // column so it behaves consistently on ultrawide layouts and can
-    // be parked over the side panels if desired.
-    if(this.$combatStats){
-      const shell = document.getElementById('canvas-shell');
-      const stage = document.querySelector('.stage-wrap');
-      const card = this.$combatStats;
-      let drag = null;
-      const onPointerDown = (e)=>{
-        const isTouch = e.pointerType === 'touch';
-        if(!isTouch && e.button !== 0) return;
-        // Don't start a drag when clicking the minimize/expand toggle or other buttons.
-        if(e.target && (e.target.closest('#combat-stats-toggle') || e.target.closest('button'))){
-          return;
-        }
-        if(!shell || !stage) return;
-        const rect = card.getBoundingClientRect();
-        const shellRect = shell.getBoundingClientRect();
-        drag = {
-          pointerId: e.pointerId,
-          offsetX: e.clientX - rect.left,
-          offsetY: e.clientY - rect.top,
-          shellLeft: shellRect.left,
-          shellTop: shellRect.top
-        };
-        card.classList.add('dragging');
-        card.setPointerCapture?.(e.pointerId);
-        e.preventDefault();
-      };
-      const onPointerMove = (e)=>{
-        if(!drag || e.pointerId !== drag.pointerId || !shell || !stage) return;
-        const shellRect = shell.getBoundingClientRect();
-        const stageRect = stage.getBoundingClientRect();
-        const cardRect = card.getBoundingClientRect();
-        // Desired viewport position for the card's top-left based on pointer + offset.
-        let vLeft = e.clientX - drag.offsetX;
-        let vTop = e.clientY - drag.offsetY;
-        const margin = 4;
-        const minLeft = stageRect.left + margin;
-        const maxLeft = stageRect.right - cardRect.width - margin;
-        const minTop = stageRect.top + margin;
-        const maxTop = stageRect.bottom - cardRect.height - margin;
-        vLeft = Math.max(minLeft, Math.min(maxLeft, vLeft));
-        vTop = Math.max(minTop, Math.min(maxTop, vTop));
-        // Convert back to shell-relative coordinates.
-        const left = vLeft - drag.shellLeft;
-        const top = vTop - drag.shellTop;
-        card.style.left = `${left}px`;
-        card.style.top = `${top}px`;
-      };
-      const endDrag = (e)=>{
-        if(!drag || (e && typeof e.pointerId === 'number' && e.pointerId !== drag.pointerId)) return;
-        drag = null;
-        card.classList.remove('dragging');
-        if(e && typeof e.pointerId === 'number'){
-          card.releasePointerCapture?.(e.pointerId);
-        }
-      };
-      card.addEventListener('pointerdown', onPointerDown);
-      window.addEventListener('pointermove', onPointerMove);
-      window.addEventListener('pointerup', endDrag);
-      window.addEventListener('pointercancel', endDrag);
-    }
-    // Minimize / expand toggle for combat stats: when minimized, only the
-    // title bar with the toggle button is visible (small bar).
+    // Combat stats drawer: minimize/expand inside the bottom toolbar.
+    // When minimized, only the "Combat Stats" title bar is visible.
     if(this.$combatStats && this.$combatToggle){
       const card = this.$combatStats;
       const toggle = this.$combatToggle;
       const setMinimized = (min)=>{
         if(min){
           card.classList.add('minimized');
-          toggle.textContent = '+';
-          toggle.setAttribute('aria-label','Expand combat stats');
+          toggle.textContent = '▲';
+          toggle.setAttribute('aria-label','Show combat stats');
         } else {
           card.classList.remove('minimized');
-          toggle.textContent = '−';
-          toggle.setAttribute('aria-label','Minimize combat stats');
+          toggle.textContent = '▼';
+          toggle.setAttribute('aria-label','Hide combat stats');
         }
       };
-      let minimized = false;
+      let minimized = true;
       setMinimized(minimized);
       toggle.addEventListener('click', (e)=>{
         e.preventDefault();
@@ -3387,7 +3323,6 @@ export class UIManager{
       } else {
         this.$signinName.textContent = 'Guest';
       }
-      this.$signinBanner.style.display = 'flex';
     }
     this.updateAuthButtons();
     this.updateLeaderboardWarning(name);

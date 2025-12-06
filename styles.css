@@ -144,9 +144,14 @@ body.mainmenu-visible #game-container{
   box-shadow:0 16px 40px rgba(0,0,0,.55),0 0 18px rgba(0,186,255,.2);
   z-index:800;
 }
-/* Ensure the signed-in banner remains fully visible above the main
- * menu panels on the title screen without affecting in-run overlays. */
+/* Show the signed-in banner on title / fullscreen menus, but hide it
+ * during active gameplay so it does not overlap in-run UI like the
+ * bottom toolbar. */
+.signin-banner{
+  display:none;
+}
 body.mainmenu-visible .signin-banner{
+  display:flex;
   z-index:120000;
 }
 .signin-banner .label{
@@ -1503,23 +1508,50 @@ canvas#game{display:block;max-width:100%;width:960px;height:auto;border:1px soli
    * UI scale changes. */
   transform-origin:top center;
 }
-/* Combat stats overlay */
-#combat-stats{
+/* Bottom toolbar + combat stats drawer */
+.bottom-toolbar{
   position:absolute;
-  top:8px;
-  left:8px;
-  z-index:120;
+  left:0;
+  right:0;
+  bottom:0;
+  margin:0;
+  padding:4px 10px 8px;
+  display:flex;
+  align-items:flex-end;
+  justify-content:center;
+  gap:10px;
+  z-index:3;
+}
+.bottom-toolbar::before{
+  content:"";
+  position:absolute;
+  left:10px;
+  right:10px;
+  bottom:0;
+  height:42px;
+  border-radius:18px 18px 0 0;
+  background:linear-gradient(180deg,rgba(3,8,16,.96),rgba(0,0,0,.98));
+  border-top:1px solid rgba(0,186,255,.22);
+  box-shadow:0 -8px 30px rgba(0,0,0,.85);
+  pointer-events:none;
+}
+#combat-stats{
+  display:flex;
+  flex-direction:column;
   padding:10px 14px;
-  min-width:210px;
-  width:210px;
+  min-width:220px;
   border-radius:14px;
   background:rgba(8,12,18,0.9);
   border:1px solid rgba(0,186,255,0.18);
   box-shadow:0 14px 30px rgba(0,0,0,0.45), inset 0 0 0 1px rgba(255,255,255,0.04);
   backdrop-filter:blur(8px);
   color:#cfe9ff;
+  max-height:420px;
+  overflow:hidden;
+  transition:max-height .22s ease-out, padding .18s ease-out;
 }
-#combat-stats.minimized{
+.combat-stats-card.minimized{
+  max-height:34px;
   padding:6px 10px;
 }
 .combat-stats-card.minimized .cs-title{
@@ -1614,7 +1646,7 @@ canvas#game{display:block;max-width:100%;width:960px;height:auto;border:1px soli
   pointer-events:none;
   z-index:0;
 }
-.stage-wrap > *:not(.stage-bg-video):not(.overlay){
+.stage-wrap > *:not(.stage-bg-video):not(.overlay):not(.bottom-toolbar){
   position:relative;
   z-index:1;
 }
@@ -1906,8 +1938,6 @@ canvas#game{display:block;max-width:100%;width:960px;height:auto;border:1px soli
     width:100%;
   }
   #combat-stats{
-    left:8px;
-    right:auto;
     width:clamp(160px, 40vw, 220px);
   }
 }

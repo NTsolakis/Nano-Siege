@@ -154,21 +154,6 @@
         </aside>
           <div id="canvas-shell" class="canvas-shell">
           <div id="canvas-unscale">
-          <div id="combat-stats" class="combat-stats-card">
-            <div class="cs-title">
-              <span>Combat Stats</span>
-              <button id="combat-stats-toggle" type="button" aria-label="Minimize combat stats">−</button>
-            </div>
-            <div class="cs-row cs-header"><span class="cs-col-label">Stats</span><span class="cs-col-label">Bonus</span><span class="cs-col-label">Actual</span></div>
-            <div class="cs-row"><span>Base Damage</span><span id="stat-basedmg">+0%</span><span id="stat-basedmg-raw">1.00x</span></div>
-            <div class="cs-row"><span>Crit Chance</span><span id="stat-crit">+0%</span><span id="stat-crit-raw">0%</span></div>
-            <div class="cs-row"><span>Crit Damage</span><span id="stat-critdmg">+0%</span><span id="stat-critdmg-raw">0%</span></div>
-            <div class="cs-row"><span>Slow Strength</span><span id="stat-slow">+0%</span><span id="stat-slow-raw">1.00x</span></div>
-            <div class="cs-row"><span>Burn DPS</span><span id="stat-burn">+0%</span><span id="stat-burn-raw">1.00x</span></div>
-            <div class="cs-row"><span>Targeting Speed</span><span id="stat-target">+0%</span><span id="stat-target-raw">1.00x</span></div>
-            <div class="cs-row"><span>Acid Spread</span><span id="stat-puddle">+0%</span><span id="stat-puddle-raw">1.00x</span></div>
-            <div class="cs-row"><span>Laser Stability</span><span id="stat-laserstab">+0%</span><span id="stat-laserstab-raw">1.00x</span></div>
-          </div>
           <aside id="upgrade-panel" class="upgrade" style="display:none">
           <button id="btn-upg-close" class="upg-close" aria-label="Close">×</button>
           <div class="upg-title">Selected:
@@ -198,6 +183,23 @@
         <aside id="passive-panel" class="passive-panel">
           <div id="passive-lines" class="pp-lines"></div>
         </aside>
+        <div id="bottom-toolbar" class="bottom-toolbar">
+          <div id="combat-stats" class="combat-stats-card">
+            <div class="cs-title">
+              <span>Combat Stats</span>
+              <button id="combat-stats-toggle" type="button" aria-label="Toggle combat stats drawer">▲</button>
+            </div>
+            <div class="cs-row cs-header"><span class="cs-col-label">Stats</span><span class="cs-col-label">Bonus</span><span class="cs-col-label">Actual</span></div>
+            <div class="cs-row"><span>Base Damage</span><span id="stat-basedmg">+0%</span><span id="stat-basedmg-raw">1.00x</span></div>
+            <div class="cs-row"><span>Crit Chance</span><span id="stat-crit">+0%</span><span id="stat-crit-raw">0%</span></div>
+            <div class="cs-row"><span>Crit Damage</span><span id="stat-critdmg">+0%</span><span id="stat-critdmg-raw">0%</span></div>
+            <div class="cs-row"><span>Slow Strength</span><span id="stat-slow">+0%</span><span id="stat-slow-raw">1.00x</span></div>
+            <div class="cs-row"><span>Burn DPS</span><span id="stat-burn">+0%</span><span id="stat-burn-raw">1.00x</span></div>
+            <div class="cs-row"><span>Targeting Speed</span><span id="stat-target">+0%</span><span id="stat-target-raw">1.00x</span></div>
+            <div class="cs-row"><span>Acid Spread</span><span id="stat-puddle">+0%</span><span id="stat-puddle-raw">1.00x</span></div>
+            <div class="cs-row"><span>Laser Stability</span><span id="stat-laserstab">+0%</span><span id="stat-laserstab-raw">1.00x</span></div>
+          </div>
+        </div>
         <!-- Overlays -->
         <!-- Assembly War Missions -->
         <section id="assembly-overlay" class="overlay mainmenu">
