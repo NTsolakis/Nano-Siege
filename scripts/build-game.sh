@@ -67,6 +67,15 @@ cat > "${VERSION_FILE}" <<EOF
 }
 EOF
 
+# Keep data/meta.json's gameVersion in sync on the dev side so the
+# value you see in that file matches the latest desktop build. The
+# Unraid deploy script will still aggregate versions server-side, but
+# this makes the local meta.json less confusing.
+if [ -f "data/meta.json" ]; then
+  tmpfile="$(mktemp)"
+  jq --arg ver "${new_version}" '.gameVersion = $ver' "data/meta.json" > "${tmpfile}" && mv "${tmpfile}" "data/meta.json"
+fi
+
 echo
 echo "Generating patch notes for game version ${new_version}..."
 
@@ -121,4 +130,3 @@ npm run build:win
 echo
 echo "Game build complete. Desktop artifacts in dist/:"
 ls -1 dist/Nano-Siege.* 2>/dev/null || echo "  (no game artifacts found yet)"
-

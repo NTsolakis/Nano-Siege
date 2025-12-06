@@ -5,9 +5,45 @@
 
 const { contextBridge, ipcRenderer } = require('electron');
 
+function parseLaunchAuth(argv) {
+  try {
+    let username = null;
+    let token = null;
+    let stay = false;
+    for (const arg of argv || []) {
+      if (!arg || typeof arg !== 'string') continue;
+      if (arg.startsWith('--nano-user=')) {
+        const raw = arg.slice('--nano-user='.length);
+        try {
+          username = decodeURIComponent(raw);
+        } catch (e) {
+          username = raw;
+        }
+      } else if (arg.startsWith('--nano-token=')) {
+        const raw = arg.slice('--nano-token='.length);
+        try {
+          token = decodeURIComponent(raw);
+        } catch (e) {
+          token = raw;
+        }
+      } else if (arg === '--nano-stay=1' || arg === '--nano-stay') {
+        stay = true;
+      }
+    }
+    return { username, token, stay };
+  } catch (e) {
+    return { username: null, token: null, stay: false };
+  }
+}
+
+const launchAuth = parseLaunchAuth(process.argv || []);
+
 try {
   contextBridge.exposeInMainWorld('NANO_DESKTOP', {
     flavor: 'desktop',
+    launcherUser: launchAuth.username || null,
+    launcherToken: launchAuth.token || null,
+    launcherStaySignedIn: !!launchAuth.stay,
     quit: () => {
       try {
         ipcRenderer.send('nano-quit');

@@ -14,6 +14,39 @@ try {
 
 const wantsStartupFullscreen = process.argv.some((arg) => arg === '--fullscreen');
 
+function parseLauncherAuthFromArgs() {
+  try {
+    let username = null;
+    let token = null;
+    let stay = false;
+    for (const arg of process.argv) {
+      if (!arg || typeof arg !== 'string') continue;
+      if (arg.startsWith('--nano-user=')) {
+        const raw = arg.slice('--nano-user='.length);
+        try {
+          username = decodeURIComponent(raw);
+        } catch (e) {
+          username = raw;
+        }
+      } else if (arg.startsWith('--nano-token=')) {
+        const raw = arg.slice('--nano-token='.length);
+        try {
+          token = decodeURIComponent(raw);
+        } catch (e) {
+          token = raw;
+        }
+      } else if (arg === '--nano-stay=1' || arg === '--nano-stay') {
+        stay = true;
+      }
+    }
+    return { username, token, stay };
+  } catch (e) {
+    return { username: null, token: null, stay: false };
+  }
+}
+
+const launcherAuth = parseLauncherAuthFromArgs();
+
 function parseDesiredResolutionFromArgs() {
   try {
     let width = 1600;
@@ -60,7 +93,12 @@ function createWindow() {
       // Allow the desktop build to call the hosted backend API
       // (https://nano.nicksminecraft.net) without being blocked by
       // CORS / same-origin checks when running from file://.
-      webSecurity: false
+      webSecurity: false,
+      additionalArguments: [
+        launcherAuth && launcherAuth.username ? `--nano-user=${encodeURIComponent(launcherAuth.username)}` : '',
+        launcherAuth && launcherAuth.token ? `--nano-token=${encodeURIComponent(launcherAuth.token)}` : '',
+        launcherAuth && launcherAuth.stay ? '--nano-stay=1' : ''
+      ].filter(Boolean)
     }
   });
 

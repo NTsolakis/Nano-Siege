@@ -74,7 +74,7 @@
         <div class="dl-bar"><div id="dl-fill" class="dl-fill"></div></div>
         <div id="dl-text" class="dl-text"></div>
       </div>
-      <div class="buttons">
+      <div class="buttons" id="play-row" style="display:none">
         <button id="btn-play" disabled>Play</button>
         <button id="btn-exit" class="secondary">Exit</button>
       </div>
@@ -251,10 +251,13 @@
           launchFullscreen: !!parsed.launchFullscreen,
           rememberedUser: typeof parsed.rememberedUser === 'string'
             ? (parsed.rememberedUser || '').trim() || null
+            : null,
+          rememberedToken: typeof parsed.rememberedToken === 'string'
+            ? (parsed.rememberedToken || '').trim() || null
             : null
         };
       }catch(e){
-        return { launchFullscreen:false, rememberedUser:null };
+        return { launchFullscreen:false, rememberedUser:null, rememberedToken:null };
       }
     }
 
@@ -263,6 +266,9 @@
         launchFullscreen: !!(next && next.launchFullscreen),
         rememberedUser: next && typeof next.rememberedUser === 'string'
           ? (next.rememberedUser || '').trim() || null
+          : null,
+        rememberedToken: next && typeof next.rememberedToken === 'string'
+          ? (next.rememberedToken || '').trim() || null
           : null
       };
       fs.mkdirSync(baseDir, { recursive:true });
@@ -272,6 +278,9 @@
     let settings = readSettings();
     let signedInUser = settings && typeof settings.rememberedUser === 'string'
       ? (settings.rememberedUser || '').trim() || null
+      : null;
+    let signedInToken = settings && typeof settings.rememberedToken === 'string'
+      ? (settings.rememberedToken || '').trim() || null
       : null;
     let launcherVersion = null;
 
@@ -287,8 +296,9 @@
     }
     let currentBinaryPath = null;
     let canPlay = false;
+    let hasRunUpdate = false;
 
-    function setStatus(text, version, ready){
+    function setStatus(text, version, readyFlag){
       statusEl.textContent = text || '';
       if(version){
         versionEl.textContent = 'Alpha ' + version;
@@ -298,11 +308,24 @@
       if(launcherVersionEl){
         launcherVersionEl.textContent = launcherVersion ? ('Launcher v' + launcherVersion) : '';
       }
-      canPlay = !!ready;
-      playBtn.disabled = !canPlay;
+      const isSignedIn = !!signedInUser;
+      const ready = !!readyFlag && isSignedIn;
+      canPlay = ready;
+      if(playBtn){
+        playBtn.disabled = !ready;
+      }
     }
 
     function applyAuthUi(){
+      const playRow = document.getElementById('play-row');
+      const fsRow = document.querySelector('.fs-row');
+      const showControls = !!signedInUser;
+      if(playRow){
+        playRow.style.display = showControls ? 'flex' : 'none';
+      }
+      if(fsRow){
+        fsRow.style.display = showControls ? 'flex' : 'none';
+      }
       if(loginUserInput && signedInUser){
         loginUserInput.value = signedInUser;
       }
@@ -320,6 +343,11 @@
       }
       if(loginBtn){
         loginBtn.textContent = signedInUser ? 'Sign Out' : 'Sign In';
+      }
+      if(playBtn){
+        // Ensure Play remains disabled until both signed in and the
+        // game binary is ready.
+        playBtn.disabled = !(canPlay && signedInUser);
       }
     }
 
@@ -594,10 +622,22 @@
     async function launchGame(binaryPath){
       if(!binaryPath) return;
       try{
+        const launcherUser = signedInUser || null;
+        const launcherToken = signedInToken || (settings && settings.rememberedToken) || null;
+        const persistAuth = !!(settings && settings.rememberedUser && launcherUser && settings.rememberedUser === launcherUser);
         if(PLATFORM === 'linux'){
           const args = ['--no-sandbox'];
           if(settings && settings.launchFullscreen){
             args.push('--fullscreen');
+          }
+          if(launcherUser){
+            args.push('--nano-user=' + encodeURIComponent(launcherUser));
+          }
+          if(launcherToken){
+            args.push('--nano-token=' + encodeURIComponent(launcherToken));
+          }
+          if(persistAuth){
+            args.push('--nano-stay=1');
           }
           const child = spawn(binaryPath, args, {
             detached: true,
@@ -612,6 +652,15 @@
           const argsWin = [];
           if(settings && settings.launchFullscreen){
             argsWin.push('--fullscreen');
+          }
+          if(launcherUser){
+            argsWin.push('--nano-user=' + encodeURIComponent(launcherUser));
+          }
+          if(launcherToken){
+            argsWin.push('--nano-token=' + encodeURIComponent(launcherToken));
+          }
+          if(persistAuth){
+            argsWin.push('--nano-stay=1');
           }
           const childWin = spawn(binaryPath, argsWin, {
             detached: true,
@@ -638,6 +687,10 @@
     async function runUpdateFlow(){
       if (!PLATFORM) {
         setStatus('Unsupported platform: ' + process.platform, '', false);
+        return;
+      }
+      if (!signedInUser) {
+        setStatus('Sign in to download and play Nano‑Siege.', '', false);
         return;
       }
       try{
@@ -739,9 +792,13 @@
       }
     }
 
-    runUpdateFlow();
-
     applyAuthUi();
+    if (signedInUser) {
+      hasRunUpdate = true;
+      runUpdateFlow();
+    } else {
+      setStatus('Sign in to download and play Nano‑Siege.', '', false);
+    }
 
     if(loginBtn){
       loginBtn.addEventListener('click', async () => {
@@ -750,8 +807,10 @@
         if(signedInUser){
           try{
             signedInUser = null;
+            signedInToken = null;
             if(settings){
               settings.rememberedUser = null;
+              settings.rememberedToken = null;
               try{ writeSettings(settings); }catch(e){}
             }
             if(loginPasswordInput){
@@ -762,6 +821,12 @@
           }catch(e){
             // Best-effort; leave UI in a safe state.
           }
+          canPlay = false;
+          if(playBtn){
+            playBtn.disabled = true;
+          }
+          currentBinaryPath = null;
+          setStatus('Sign in to download and play Nano‑Siege.', '', false);
           applyAuthUi();
           return;
         }
@@ -780,18 +845,29 @@
             ? result.username.trim()
             : username;
           signedInUser = resolvedName;
+           const token = (result && typeof result.token === 'string' && result.token.trim())
+             ? result.token.trim()
+             : null;
+           signedInToken = token;
           if(loginStayCheckbox && loginStayCheckbox.checked){
             settings.rememberedUser = resolvedName;
+            settings.rememberedToken = token || null;
           }else if(settings){
             settings.rememberedUser = null;
+            settings.rememberedToken = null;
           }
           try{
             writeSettings(settings);
           }catch(e){}
           loginStatusEl.textContent = 'Signed in.';
           loginStatusEl.style.color = '#8cf5ff';
+          if(!hasRunUpdate){
+            hasRunUpdate = true;
+            runUpdateFlow();
+          }
         }catch(err){
           signedInUser = null;
+          signedInToken = null;
           if(loginPasswordInput){
             loginPasswordInput.value = '';
           }

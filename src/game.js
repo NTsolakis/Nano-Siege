@@ -1839,10 +1839,32 @@ export class Game {
 
   _hydrateAuthFromStorage(){
     const pref = this._readAuthPref();
-    if(!pref || !pref.username) return;
-    this.currentUser = { username: pref.username };
-    if(this.ui && typeof this.ui.setSignedInUser === 'function'){
-      this.ui.setSignedInUser(pref.username);
+    if(pref && pref.username){
+      this.currentUser = { username: pref.username };
+      if(this.ui && typeof this.ui.setSignedInUser === 'function'){
+        this.ui.setSignedInUser(pref.username);
+      }
+      return;
+    }
+    // Desktop launcher integration: if the game was started from the
+    // standalone launcher and a signed‑in user was provided, hydrate
+    // a lightweight auth snapshot so the main menu shows the correct
+    // username immediately.
+    try{
+      if(typeof window !== 'undefined' && window.NANO_DESKTOP && window.NANO_DESKTOP.launcherUser){
+        const name = String(window.NANO_DESKTOP.launcherUser || '').trim();
+        if(name){
+          this.currentUser = { username: name };
+          if(this.ui && typeof this.ui.setSignedInUser === 'function'){
+            this.ui.setSignedInUser(name);
+          }
+          if(window.NANO_DESKTOP.launcherStaySignedIn){
+            this._writeAuthPref(name, true);
+          }
+        }
+      }
+    }catch(e){
+      // best-effort; launcher-provided auth is optional.
     }
   }
 

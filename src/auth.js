@@ -22,6 +22,17 @@ const API_BASE = (() => {
 
 let authToken = null;
 
+try {
+  if (typeof window !== 'undefined' && window.NANO_DESKTOP && window.NANO_DESKTOP.launcherToken) {
+    const initial = String(window.NANO_DESKTOP.launcherToken || '').trim();
+    if (initial) {
+      authToken = initial;
+    }
+  }
+} catch (e) {
+  // Best-effort; desktop launcher auth is optional.
+}
+
 async function apiRequest(path, body) {
   const headers = { 'Content-Type': 'application/json' };
   if (authToken) {
