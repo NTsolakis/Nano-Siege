@@ -511,9 +511,9 @@ export class Game {
         if(e.key==='r' || e.key==='R'){ this.shopReroll(); this.buildChamberNodes(); }
         return;
       }
-      if(e.key === 'p' || e.key === 'P' || e.key === 'Escape'){
-      if(this.state === 'playing') this.pause();
-      else if(this.state === 'paused') this.resume();
+      if(e.key === 'Escape'){
+        if(this.state === 'playing') this.pause();
+        else if(this.state === 'paused') this.resume();
       }
     });
     window.addEventListener('keyup', (e)=>{

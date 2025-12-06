@@ -1229,20 +1229,14 @@
         const computeScale = () => {
           const sw = window.innerWidth;
           const sh = window.visualViewport ? window.visualViewport.height : window.innerHeight;
-          const uiScale = (typeof window !== 'undefined' && window.NANO_UI_SCALE != null)
-            ? (Number(window.NANO_UI_SCALE) || 1)
-            : 1;
-          const designW = baseW * uiScale;
-          const designMenuH = baseMenuH * uiScale;
-          const designGameH = baseGameH * uiScale;
           if(uiMode === 'menu'){
             // Keep menus fully visible where possible without introducing scroll.
-            return Math.min(sw / designW, sh / designMenuH);
+            return Math.min(sw / baseW, sh / baseMenuH);
           }
           // Gameplay: always choose the smaller scale so the full frame
           // stays inside the viewport (no cropping on ultrawide/short screens).
-          const scaleW = sw / designW;
-          const scaleH = sh / designGameH;
+          const scaleW = sw / baseW;
+          const scaleH = sh / baseGameH;
           return Math.min(scaleW, scaleH);
         };
 

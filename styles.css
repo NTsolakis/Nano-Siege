@@ -12,7 +12,13 @@
   --ui-scale: 1;
 }
 
-*{box-sizing:border-box}
+*{
+  box-sizing:border-box;
+  user-select:none;
+  -webkit-user-select:none;
+  -ms-user-select:none;
+  -webkit-tap-highlight-color:transparent;
+}
 html,body{
   margin:0;
   padding:0;
@@ -25,6 +31,16 @@ html,body{
   background:#020713;
   font-family:Inter,system-ui,Segoe UI,Roboto,Helvetica,Arial,sans-serif;
   color:var(--text);
+}
+
+/* Allow normal text selection and caret behavior in input fields
+ * and textareas (bug reports, login forms, etc.). */
+input,
+textarea,
+select{
+  user-select:text;
+  -webkit-user-select:text;
+  -ms-user-select:text;
 }
 
 .page-bg-video{
@@ -104,7 +120,9 @@ body.mainmenu-visible #game-container{
   width:100%;
   height:100%;
   transform:scale(var(--ui-scale));
-  transform-origin:top left;
+  /* Match the game-frame origin so scaling keeps the layout centered
+   * horizontally while growing downward from the top edge. */
+  transform-origin:top center;
   pointer-events:none;
 }
 #ui-root *{
@@ -1481,7 +1499,9 @@ canvas#game{display:block;max-width:100%;width:960px;height:auto;border:1px soli
 
 #canvas-unscale{
   transform:scale(calc(1 / var(--ui-scale)));
-  transform-origin:top left;
+  /* Mirror the UI root's origin so the board stays anchored when
+   * UI scale changes. */
+  transform-origin:top center;
 }
 /* Combat stats overlay */
 #combat-stats{
@@ -1645,7 +1665,7 @@ canvas#game{display:block;max-width:100%;width:960px;height:auto;border:1px soli
   min-height:0;
   overflow-y:auto;
   overflow-x:hidden;
-  padding-right:4px;
+  padding:10px 4px 18px 0;
 }
 .passive-panel.compact{
   padding:8px 9px;
@@ -1663,13 +1683,21 @@ canvas#game{display:block;max-width:100%;width:960px;height:auto;border:1px soli
   max-width:240px;
 }
 .wave-panel-top #stat-wave{
-  font-size:18px;
+  align-self:center;
+  padding:6px 14px;
+  border-radius:999px;
+  font-size:16px;
   font-weight:600;
-  letter-spacing:.2em;
+  letter-spacing:.28em;
   text-transform:uppercase;
-  color:#f0fbff;
+  color:#e8f8ff;
   text-align:center;
-  width:100%;
+  width:auto;
+  background:radial-gradient(circle at center,rgba(0,0,0,.85) 0,rgba(0,0,0,.55) 55%,rgba(0,0,0,0) 100%);
+  border:1px solid rgba(0,186,255,.35);
+  box-shadow:0 0 12px rgba(0,186,255,.45);
+  backdrop-filter:blur(3px);
+  margin-bottom:6px;
 }
 .wave-metrics{display:flex;flex-direction:column;gap:6px}
 .wave-metric{
@@ -1703,12 +1731,40 @@ canvas#game{display:block;max-width:100%;width:960px;height:auto;border:1px soli
 .banner-entry.banner-boss{border-color:rgba(199,125,255,.8);background:rgba(199,125,255,.18)}
 .banner-entry.banner-hp{border-color:rgba(128,226,126,.8);background:rgba(128,226,126,.18)}
 .banner-entry.banner-bonus{border-color:rgba(124,224,255,.8);background:rgba(124,224,255,.18)}
-.pp-meta{font-size:12px;letter-spacing:.25em;text-transform:uppercase;color:#8ab6de;margin-top:-2px;margin-bottom:4px}
-.passive-panel.compact .pp-meta{margin-bottom:2px;font-size:10.5px;letter-spacing:.18em}
-.passive-slot-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px}
-.passive-panel.compact .passive-slot-grid{grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:6px}
-.passive-slot{position:relative;border:1px solid rgba(255,255,255,.05);border-radius:16px;padding:11px 12px;min-height:120px;background:linear-gradient(160deg,rgba(255,255,255,.03),rgba(0,0,0,.25));display:flex;flex-direction:column;gap:7px;box-shadow:inset 0 0 18px rgba(0,0,0,.4);transition:border-color .2s ease,box-shadow .2s ease}
-.passive-panel.compact .passive-slot{padding:8px 9px;min-height:92px;gap:5px;border-radius:14px}
+.pp-meta{
+  align-self:center;
+  padding:6px 14px;
+  border-radius:999px;
+  font-size:12px;
+  letter-spacing:.28em;
+  text-transform:uppercase;
+  color:#e8f8ff;
+  text-align:center;
+  background:radial-gradient(circle at center,rgba(0,0,0,.82) 0,rgba(0,0,0,.55) 55%,rgba(0,0,0,0) 100%);
+  border:1px solid rgba(0,186,255,.35);
+  box-shadow:0 0 16px rgba(0,186,255,.45);
+  backdrop-filter:blur(3px);
+  margin-top:2px;
+  margin-bottom:6px;
+}
+.passive-panel.compact .pp-meta{
+  margin-bottom:4px;
+  font-size:10.5px;
+  letter-spacing:.2em;
+  padding:5px 12px;
+}
+.passive-slot-grid{
+  display:flex;
+  flex-direction:column;
+  justify-content:space-between;
+  gap:8px;
+  height:100%;
+}
+.passive-panel.compact .passive-slot-grid{
+  gap:4px;
+}
+.passive-slot{position:relative;border:1px solid rgba(255,255,255,.05);border-radius:16px;padding:10px 11px;min-height:116px;background:linear-gradient(160deg,rgba(255,255,255,.03),rgba(0,0,0,.25));display:flex;flex-direction:column;gap:6px;box-shadow:inset 0 0 18px rgba(0,0,0,.4);transition:border-color .2s ease,box-shadow .2s ease}
+.passive-panel.compact .passive-slot{padding:7px 8px;min-height:90px;gap:4px;border-radius:14px}
 .passive-slot::after{content:\"\";position:absolute;inset:8px;border-radius:12px;border:1px solid rgba(255,255,255,.03);pointer-events:none}
 .passive-slot.filled{border-color:rgba(0,186,255,.35);box-shadow:0 12px 26px rgba(0,0,0,.4),inset 0 0 22px rgba(0,0,0,.4)}
 .passive-slot.tier-common{border-color:rgba(44,204,126,.35);box-shadow:0 10px 24px rgba(0,0,0,.35), inset 0 0 22px rgba(44,204,126,.12);background:linear-gradient(160deg,rgba(44,204,126,.16),rgba(0,0,0,.25))}
