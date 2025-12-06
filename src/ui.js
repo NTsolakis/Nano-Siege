@@ -1151,8 +1151,15 @@ export class UIManager{
     if(this.$towerBtns && this.$towerBtns.length){
       this.$towerBtns.forEach(btn=> btn.addEventListener('click', ()=>{
         const key = btn.dataset.tower;
-        this.highlightTowerBtn(key);
-        this.emit('selectTowerType', key);
+        const alreadySelected = btn.classList.contains('selected');
+        if(alreadySelected){
+          // Toggle off: return to neutral (no tower selected)
+          this.highlightTowerBtn(null);
+          this.emit('selectTowerType', null);
+        } else {
+          this.highlightTowerBtn(key);
+          this.emit('selectTowerType', key);
+        }
       }));
     }
     // Assembly War: mission actions

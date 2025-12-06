@@ -1494,6 +1494,7 @@ canvas#game{display:block;max-width:100%;width:960px;height:auto;border:1px soli
   margin:0;
   width:100%;
   position:relative;
+  z-index:2;
 }
 #canvas-shell canvas{
   width:100%;

@@ -170,8 +170,10 @@ export class Game {
 
     // Input
     this.mouse = { x:0, y:0, gx:0, gy:0 };
-    this.placing = true; // default in placement mode
-    this.selectedTower = 'basic';
+    // Start in neutral mode: no tower selected until the player
+    // explicitly clicks a tower button.
+    this.placing = false;
+    this.selectedTower = null;
 
     // If the player previously chose to stay signed in on this device,
     // hydrate a lightweight auth snapshot so leaderboard saves and
@@ -259,7 +261,10 @@ export class Game {
       });
     });
     this.ui.on('toMissionSelect', ()=> this.toMissionSelect());
-    this.ui.on('selectTowerType', (v)=>{ this.selectedTower = v; });
+    this.ui.on('selectTowerType', (v)=>{
+      this.selectedTower = v || null;
+      this.placing = !!v;
+    });
     this.ui.on('selectMap', (key)=>{ const m = MAPS.find(x=>x.key===key); if(m){ this.selectedMap = m; } });
     this.ui.on('selectCharacter', (key)=>{
       if(!key) return;
@@ -2452,6 +2457,7 @@ export class Game {
 
   placeTower(){
     if(this.state !== 'playing') return;
+    if(!this.selectedTower) return;
     const { gx, gy } = this.mouse;
     if(this.grid.canPlace(gx,gy)){
       const def = TOWER_TYPES[this.selectedTower];
@@ -2470,6 +2476,12 @@ export class Game {
         // Show spend toast near cursor
         if(!this.isCheatMode()) this.addFloater(this.mouse.x + 14, this.mouse.y - 10, `-${cost}⚛`, COLORS.danger || '#ff5370');
         audio.place();
+        // After a successful placement, return to neutral: no tower
+        // selected and no further ghosts until the player chooses
+        // another tower type from the palette.
+        this.selectedTower = null;
+        this.placing = false;
+        if(this.ui.highlightTowerBtn) this.ui.highlightTowerBtn(null);
       } else {
         // Not enough nano credits — show red toast near cursor and above upgrade panel if open
         this.addFloater(this.mouse.x + 14, this.mouse.y - 10, 'Not enough nano credits', COLORS.danger || '#ff5370');
