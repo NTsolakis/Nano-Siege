@@ -97,9 +97,18 @@ body.mainmenu-visible #game-container{
   flex-direction:column;
 }
 
-#ui-scale-root{
+#ui-root{
+  position:absolute;
+  top:0;
+  left:0;
+  width:100%;
+  height:100%;
   transform:scale(var(--ui-scale));
   transform-origin:top left;
+  pointer-events:none;
+}
+#ui-root *{
+  pointer-events:auto;
 }
 .signin-banner{
   position:fixed;
@@ -304,10 +313,9 @@ canvas#game{display:block;max-width:100%;width:960px;height:auto;border:1px soli
 
 /* Ensure the exit-confirm overlay appears above fullscreen main menu
  * and gameplay, so the confirmation dialog is always visible no matter
- * where it is triggered from (browser or desktop builds). */
+ * where it is triggered from (browser or desktop builds). It uses the
+ * standard overlay positioning but with a higher stacking level. */
 #exitconfirm-overlay{
-  position:fixed;
-  inset:0;
   z-index:120000;
 }
 

@@ -100,6 +100,10 @@ export class UIManager{
     this.$settingsPanel = document.getElementById('settings-panel');
     this.$btnDisplaySettings = document.getElementById('btn-display-settings');
     this.$btnSoundSettings = document.getElementById('btn-sound-settings');
+    // Track where Display/Sound settings were opened from so the Back button
+    // can return to the correct parent (pause menu vs main menu settings).
+    this._displaySettingsOrigin = null; // 'pause' | 'mainmenu' | null
+    this._soundSettingsOrigin = null;   // 'pause' | 'mainmenu' | null
     this.$btnPauseLogin = document.getElementById('btn-pause-login');
     this.$pauseLoginPanel = document.getElementById('pause-login-panel');
     this.$pauseLoginUsername = document.getElementById('pause-login-username');
@@ -1235,12 +1239,14 @@ export class UIManager{
     if(this.$btnSettingsBack){ this.$btnSettingsBack.addEventListener('click', ()=> this.showSettings(false)); }
     if(this.$btnDisplaySettings){
       this.$btnDisplaySettings.addEventListener('click', ()=>{
+        this._displaySettingsOrigin = 'pause';
         this.showSettings(false);
         this.showDisplaySettings(true);
       });
     }
     if(this.$btnSoundSettings){
       this.$btnSoundSettings.addEventListener('click', ()=>{
+        this._soundSettingsOrigin = 'pause';
         this.showSettings(false);
         this.showSoundSettings(true);
       });
@@ -1268,12 +1274,14 @@ export class UIManager{
     if($btnMainSettingsBack){ $btnMainSettingsBack.addEventListener('click', ()=> this.emit('mainSettingsBack')); }
     if(this.$btnMainDisplaySettings){
       this.$btnMainDisplaySettings.addEventListener('click', ()=>{
+        this._displaySettingsOrigin = 'mainmenu';
         if(this.showMainSettings) this.showMainSettings(false);
         this.showDisplaySettings(true);
       });
     }
     if(this.$btnMainSoundSettings){
       this.$btnMainSoundSettings.addEventListener('click', ()=>{
+        this._soundSettingsOrigin = 'mainmenu';
         if(this.showMainSettings) this.showMainSettings(false);
         this.showSoundSettings(true);
       });
@@ -1340,11 +1348,13 @@ export class UIManager{
     if($btnDisplayBack){
       $btnDisplayBack.addEventListener('click', ()=>{
         this.showDisplaySettings(false);
-        if(this.showMainSettings){
-          this.showMainSettings(true);
+        const inPause = this.$pauseOverlay && this.$pauseOverlay.classList.contains('visible');
+        if(inPause){
+          this.showSettings(true);
         }else{
-          this.showPause(true);
+          this.showMainSettings(true);
         }
+        this._displaySettingsOrigin = null;
       });
     }
     // Sound settings overlay buttons
@@ -1352,11 +1362,13 @@ export class UIManager{
     if($btnSoundBack){
       $btnSoundBack.addEventListener('click', ()=>{
         this.showSoundSettings(false);
-        if(this.showMainSettings){
-          this.showMainSettings(true);
+        const inPause = this.$pauseOverlay && this.$pauseOverlay.classList.contains('visible');
+        if(inPause){
+          this.showSettings(true);
         }else{
-          this.showPause(true);
+          this.showMainSettings(true);
         }
+        this._soundSettingsOrigin = null;
       });
     }
     if($btnPatchBack){

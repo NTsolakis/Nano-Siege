@@ -25,7 +25,7 @@
       <div id="game-frame">
         <div id="game-root">
           <div id="game-wrapper">
-            <div id="ui-scale-root">
+            <div id="ui-root">
             <div id="app">
       <header class="hud">
         <div class="hud-title-floating">
@@ -1170,6 +1170,11 @@
               window.localStorage.setItem('ui-scale', String(val));
             }
           }catch(e){}
+          // Recompute frame scaling immediately so in-game HUD/layout updates
+          // without needing a full reload or mode change.
+          try{
+            window.dispatchEvent(new Event('resize'));
+          }catch(e){}
         }
         window.applyUIScale = applyUIScale;
         function initUiScale(){
@@ -1205,15 +1210,14 @@
         const baseMenuH = 1100; // Menu overlays are unscaled; keep frame height sane for gameplay UI
         const baseGameH = 900;
         let uiMode = 'menu'; // 'menu' | 'game'
-        let desiredWidth = baseW;
-        let desiredHeight = baseGameH;
 
+        // Resolution preference currently controls render intent (for desktop)
+        // but does not override the 1600x900 base layout. We still keep it
+        // so the launcher and browser builds can share a single setting.
         function applyResolution(w,h){
           try{
             const ww = Math.max(800, w|0)||baseW;
             const hh = Math.max(600, h|0)||baseGameH;
-            desiredWidth = ww;
-            desiredHeight = hh;
             if(window.localStorage){
               window.localStorage.setItem('resolution', `${ww}x${hh}`);
             }
@@ -1228,16 +1232,17 @@
           const uiScale = (typeof window !== 'undefined' && window.NANO_UI_SCALE != null)
             ? (Number(window.NANO_UI_SCALE) || 1)
             : 1;
-          const targetW = desiredWidth || baseW;
-          const targetH = desiredHeight || baseGameH;
+          const designW = baseW * uiScale;
+          const designMenuH = baseMenuH * uiScale;
+          const designGameH = baseGameH * uiScale;
           if(uiMode === 'menu'){
             // Keep menus fully visible where possible without introducing scroll.
-            return Math.min(sw / (targetW * uiScale), sh / (baseMenuH * uiScale));
+            return Math.min(sw / designW, sh / designMenuH);
           }
           // Gameplay: always choose the smaller scale so the full frame
           // stays inside the viewport (no cropping on ultrawide/short screens).
-          const scaleW = sw / (targetW * uiScale);
-          const scaleH = sh / (targetH * uiScale);
+          const scaleW = sw / designW;
+          const scaleH = sh / designGameH;
           return Math.min(scaleW, scaleH);
         };
 
@@ -1248,11 +1253,9 @@
 
         function fitGame(){
           if(!frame) return;
-          const targetW = desiredWidth || baseW;
-          const targetH = desiredHeight || baseGameH;
-          const baseH = uiMode === 'game' ? targetH : baseMenuH;
+          const baseH = uiMode === 'game' ? baseGameH : baseMenuH;
           const scale = computeScale();
-          frame.style.width = targetW + 'px';
+          frame.style.width = baseW + 'px';
           frame.style.height = baseH + 'px';
           frame.style.transform = `translate(-50%, 0) scale(${scale})`;
         }
@@ -1265,8 +1268,9 @@
               const parts = raw.split('x');
               const w = parseInt(parts[0],10)||baseW;
               const h = parseInt(parts[1],10)||baseGameH;
-              desiredWidth = w;
-              desiredHeight = h;
+              if(window.localStorage){
+                window.localStorage.setItem('resolution', `${w}x${h}`);
+              }
             }
           }else if(window.localStorage){
             const saved = window.localStorage.getItem('resolution');
@@ -1274,8 +1278,7 @@
               const parts = saved.split('x');
               const w = parseInt(parts[0],10)||baseW;
               const h = parseInt(parts[1],10)||baseGameH;
-              desiredWidth = w;
-              desiredHeight = h;
+              // keep for future use; layout stays 1600x900
             }
           }
         }catch(e){}
