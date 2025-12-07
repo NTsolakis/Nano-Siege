@@ -1,7 +1,7 @@
 {
   "channel": "alpha",
   "backendVersion": "0.0.2",
-  "gameVersion": "0.0.18",
+  "gameVersion": "0.0.19",
   "launcherVersion": "0.0.11",
   "launcherMinVersion": "0.0.0",
   "patchNotes": [

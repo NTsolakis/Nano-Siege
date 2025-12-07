@@ -462,20 +462,37 @@ export class Game {
     // instead of during Game construction so it always reflects the
     // latest character pick.
 
-    // Unlock audio on first user interaction, start main menu music,
-    // and preload other music tracks so transitions stay smooth.
-    window.addEventListener('pointerdown', ()=> {
-      audio.resume();
-      audio.playMusic('data/Main-Menumusic.mp3', { loop:true });
-      // Preload additional tracks used in menus and gameplay.
+    // Music + audio bootstrap:
+    // - On the desktop/Electron build, start the main menu music
+    //   immediately on boot so the game never feels "silent".
+    // - On the web build, keep using a first‑interaction unlock so
+    //   browser autoplay policies are respected.
+    const isDesktopRuntime = !!(this.ui && this.ui.isDesktopRuntime);
+    if(isDesktopRuntime){
       try{
+        audio.resume();
+        audio.playMusic('data/Main-Menumusic.mp3', { loop:true });
         audio.preloadMusic('data/Leaderboard-Music.mp3');
         audio.preloadMusic('data/Interlude.mp3');
         audio.preloadMusic('data/Main-Wavemusic.mp3');
         audio.preloadMusic('data/Alt-Wavemusic.mp3');
         audio.preloadMusic('data/Boss-Music.mp3');
       }catch(e){}
-    }, { once: true });
+    } else if(typeof window !== 'undefined'){
+      // Web / file builds: unlock audio and start music only after the
+      // first real user interaction so autoplay rules don't block it.
+      window.addEventListener('pointerdown', ()=> {
+        try{
+          audio.resume();
+          audio.playMusic('data/Main-Menumusic.mp3', { loop:true });
+          audio.preloadMusic('data/Leaderboard-Music.mp3');
+          audio.preloadMusic('data/Interlude.mp3');
+          audio.preloadMusic('data/Main-Wavemusic.mp3');
+          audio.preloadMusic('data/Alt-Wavemusic.mp3');
+          audio.preloadMusic('data/Boss-Music.mp3');
+        }catch(e){}
+      }, { once: true });
+    }
 
     this.last = now();
 
