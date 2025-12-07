@@ -160,6 +160,9 @@ export class Game {
     this._introReadyShown = false;
     // Logged-in user (for backend saves)
     this.currentUser = null; // { username }
+    // Wave music state for alternating main/alt themes and resuming
+    // correctly after boss music interruptions.
+    this._currentWaveMusicKey = null; // 'main' | 'alt' | null
 
     // Character-specific runtime state (per run)
     this._resetCharacterRuntimeState();
@@ -345,8 +348,11 @@ export class Game {
     this.ui.on('createUser', (creds)=> this.handleCreateUser(creds));
   this.ui.on('openLeaderboard', (payload)=> {
     const origin = payload && payload.origin;
-    // Fade out menu music when transitioning into the leaderboard view.
+    // Fade from whatever is currently playing into the leaderboard theme.
     audio.fadeOutMusic(0.6);
+    setTimeout(()=> {
+      audio.playMusic('data/Leaderboard-Music.mp3', { loop:true });
+    }, 620);
     this.openLeaderboard(origin);
   });
   this.ui.on('closeLeaderboard', ()=> this.closeLeaderboard());
@@ -456,11 +462,19 @@ export class Game {
     // instead of during Game construction so it always reflects the
     // latest character pick.
 
-    // Unlock audio on first user interaction and start main menu music.
+    // Unlock audio on first user interaction, start main menu music,
+    // and preload other music tracks so transitions stay smooth.
     window.addEventListener('pointerdown', ()=> {
       audio.resume();
-      // Start or resume main menu music when the game first becomes interactive.
       audio.playMusic('data/Main-Menumusic.mp3', { loop:true });
+      // Preload additional tracks used in menus and gameplay.
+      try{
+        audio.preloadMusic('data/Leaderboard-Music.mp3');
+        audio.preloadMusic('data/Interlude.mp3');
+        audio.preloadMusic('data/Main-Wavemusic.mp3');
+        audio.preloadMusic('data/Alt-Wavemusic.mp3');
+        audio.preloadMusic('data/Boss-Music.mp3');
+      }catch(e){}
     }, { once: true });
 
     this.last = now();
@@ -907,6 +921,33 @@ export class Game {
     }
   }
 
+  _playWaveMusicTrack(key){
+    const k = (key === 'alt') ? 'alt' : 'main';
+    this._currentWaveMusicKey = k;
+    const url = (k === 'main')
+      ? 'data/Main-Wavemusic.mp3'
+      : 'data/Alt-Wavemusic.mp3';
+    try{
+      audio.playMusic(url, { loop:false });
+      audio.setMusicEndHandler(()=> {
+        this._onWaveMusicEnded();
+      });
+    }catch(e){}
+  }
+
+  _onWaveMusicEnded(){
+    // Only continue the alternating wave music loop while in a live run.
+    if(this.state !== 'playing' && this.state !== 'paused'){
+      return;
+    }
+    const nextKey = (this._currentWaveMusicKey === 'main') ? 'alt' : 'main';
+    this._playWaveMusicTrack(nextKey);
+  }
+
+  _startWaveMusicLoop(){
+    this._playWaveMusicTrack('main');
+  }
+
   start(){ requestAnimationFrame(()=>this.loop()); }
 
   applyScaleMode(mode){
@@ -957,8 +998,16 @@ export class Game {
   _startGameCore(){
     // Ensure any lingering loops are silenced before start
     this.stopAllAudio();
-    // Fade out menu music as we transition into active gameplay.
+    // Fade out current menu music and start the in‑run music sequence.
     audio.fadeOutMusic(0.8);
+    try{
+      audio.playMusic('data/Interlude.mp3', { loop:false });
+      audio.setMusicEndHandler(()=> {
+        // After the intro/interlude, start alternating wave music:
+        // Main-Wavemusic → Alt-Wavemusic → Main → Alt → ...
+        this._startWaveMusicLoop();
+      });
+    }catch(e){}
     // Endless Cycle should always start from a fresh
     // progression state (no carried-over abilities).
     if(this.mode === 'endless'){
@@ -1699,6 +1748,11 @@ export class Game {
       this.ui.showMainMenu(true);
     }
     this.leaderboardOrigin = null;
+    // When leaving the leaderboard back to a menu context, return to main menu music.
+    audio.fadeOutMusic(0.6);
+    setTimeout(()=> {
+      audio.playMusic('data/Main-Menumusic.mp3', { loop:true });
+    }, 620);
   }
   async recordLeaderboardEntry(waves){
     if(!this.currentUser || this.isCheatMode()) return;
@@ -2480,7 +2534,7 @@ export class Game {
         this.ui.setFastLabel(this.speedFactor);
       }
     }
-    // Boss wave banner
+    // Boss wave banner + music
     if(upcomingWaveNumber % 10 === 0){
       this.showBanner('BOSS INCOMING', 'Brace for impact', 'boss');
       if(audio.bossIntro) audio.bossIntro();
@@ -2488,6 +2542,20 @@ export class Game {
         this.speedFactor = 1;
         this.ui.setFastLabel(this.speedFactor);
       }
+      // Transition into boss music, starting partway into the track so
+      // the drop hits immediately. When the boss theme ends, resume the
+      // alternating wave music from the next track in the sequence.
+      try{
+        const prevKey = this._currentWaveMusicKey || 'main';
+        const nextKey = (prevKey === 'main') ? 'alt' : 'main';
+        audio.fadeOutMusic(0.6);
+        setTimeout(()=> {
+          audio.playMusic('data/Boss-Music.mp3', { loop:false, offsetSeconds:29 });
+          audio.setMusicEndHandler(()=> {
+            this._playWaveMusicTrack(nextKey);
+          });
+        }, 620);
+      }catch(e){}
     }
     // Difficulty increase banner on variant introductions and phase-outs
     const triggers = new Set([
@@ -4040,6 +4108,17 @@ export class Game {
           const tier = (typeof e.bossIndex === 'number') ? e.bossIndex : 0;
           // First boss: 3 HP, then 4, 5, ...
           damage = Math.max(3, 3 + tier);
+          // Boss leaked into the reactor: end boss music and resume the
+          // alternating wave themes from the opposite track so the
+          // sequence stays consistent.
+          try{
+            const prevKey = this._currentWaveMusicKey || 'main';
+            const nextKey = (prevKey === 'main') ? 'alt' : 'main';
+            audio.fadeOutMusic(0.6);
+            setTimeout(()=> {
+              this._playWaveMusicTrack(nextKey);
+            }, 620);
+          }catch(e){}
         }
         if(this.reactorShield>0){
           const absorb = Math.min(this.reactorShield, damage);
@@ -4143,6 +4222,17 @@ export class Game {
         // Boss kill quips (only when the boss dies, not on leaks).
         if(e.isBoss){
           this._maybeShowBossKillLine();
+          // Boss killed before reaching the reactor: end boss music and
+          // resume the alternating wave themes from the opposite track
+          // so the sequence stays consistent.
+          try{
+            const prevKey = this._currentWaveMusicKey || 'main';
+            const nextKey = (prevKey === 'main') ? 'alt' : 'main';
+            audio.fadeOutMusic(0.6);
+            setTimeout(()=> {
+              this._playWaveMusicTrack(nextKey);
+            }, 620);
+          }catch(e){}
         }
         this.handleDroneKill();
         // Death particles for visual punch

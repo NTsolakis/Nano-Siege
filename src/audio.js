@@ -11,7 +11,8 @@ class AudioManager {
     this.currentVolume = this._readVolumePref('master', this.volSteps[this.volIndex]); // 0..1
     this.musicVolume = this._readVolumePref('music', 0.7);
     this.sfxVolume = this._readVolumePref('sfx', 0.9);
-    this._music = null; // { source, gain, url, loop }
+    this._music = null; // { el, url }
+    this._musicCache = new Map();
   }
 
   resume(){
@@ -264,10 +265,21 @@ class AudioManager {
         this._music.el.pause();
       }catch(e){}
     }
+    // Prefer any cached element if available.
+    if(this._musicCache && this._musicCache.has(url)){
+      const cached = this._musicCache.get(url);
+      this._music = { el: cached, url };
+      return cached;
+    }
     try{
       const el = new Audio(url);
       el.loop = true;
-      el.volume = Math.max(0, Math.min(1, (this.musicVolume||1)*(this.currentVolume||1)));
+      const music = (this.musicVolume == null ? 1 : this.musicVolume);
+      const master = (this.currentVolume == null ? 1 : this.currentVolume);
+      el.volume = Math.max(0, Math.min(1, music * master));
+      if(this._musicCache){
+        this._musicCache.set(url, el);
+      }
       this._music = { el, url };
       return el;
     }catch(e){
@@ -278,7 +290,9 @@ class AudioManager {
   _syncMusicElementVolume(){
     const m = this._music;
     if(!m || !m.el) return;
-    const vol = Math.max(0, Math.min(1, (this.musicVolume||1)*(this.currentVolume||1)));
+    const music = (this.musicVolume == null ? 1 : this.musicVolume);
+    const master = (this.currentVolume == null ? 1 : this.currentVolume);
+    const vol = Math.max(0, Math.min(1, music * master));
     try{
       m.el.volume = vol;
     }catch(e){}
@@ -323,10 +337,43 @@ class AudioManager {
     if(!this.enabled) return;
     const el = this._ensureMusicElement(url);
     if(!el) return;
+    const opts = arguments[1] || {};
+    const offsetSeconds = typeof opts.offsetSeconds === 'number' ? opts.offsetSeconds : null;
     el.loop = !!loop;
+    if(offsetSeconds && offsetSeconds > 0){
+      try{
+        el.currentTime = offsetSeconds;
+      }catch(e){}
+    }
     this._syncMusicElementVolume();
     try{
       el.play().catch(()=>{});
+    }catch(e){}
+    // Clear any previous end handler; callers that need chaining can
+    // install a new one after playMusic completes.
+    try{
+      el.onended = null;
+    }catch(e){}
+  }
+
+  preloadMusic(url){
+    try{
+      if(typeof Audio === 'undefined') return;
+      if(!this._musicCache) this._musicCache = new Map();
+      if(this._musicCache.has(url)) return;
+      const el = new Audio(url);
+      el.preload = 'auto';
+      el.loop = false;
+      el.volume = 0;
+      this._musicCache.set(url, el);
+    }catch(e){}
+  }
+
+  setMusicEndHandler(handler){
+    const m = this._music;
+    if(!m || !m.el) return;
+    try{
+      m.el.onended = typeof handler === 'function' ? handler : null;
     }catch(e){}
   }
 }
