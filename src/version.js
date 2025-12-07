@@ -90,21 +90,9 @@ async function exitFullscreenIfNeeded() {
 function openDownloadLink(url) {
   if (!url) return;
   try {
-    if (typeof document !== 'undefined') {
-      const a = document.createElement('a');
-      a.href = url;
-      a.target = '_blank';
-      a.rel = 'noopener noreferrer';
-      a.style.display = 'none';
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      return;
-    }
-  } catch (e) {}
-  try {
     if (typeof window !== 'undefined' && typeof window.open === 'function') {
       window.open(url, '_blank');
+      return;
     }
   } catch (e) {}
 }

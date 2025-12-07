@@ -1,8 +1,8 @@
 {
   "channel": "alpha",
   "backendVersion": "0.0.2",
-  "gameVersion": "0.0.15",
-  "launcherVersion": "0.0.9",
+  "gameVersion": "0.0.16",
+  "launcherVersion": "0.0.10",
   "launcherMinVersion": "0.0.0",
   "patchNotes": [
     "Incremental desktop/launcher update",
