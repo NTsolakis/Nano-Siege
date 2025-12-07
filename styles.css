@@ -982,11 +982,11 @@ canvas#game{display:block;max-width:100%;width:960px;height:auto;border:1px soli
 
 /* Upgrade panel */
 .upgrade{
-  position:absolute;
-  right:24px;
-  bottom:96px;
-  left:auto;
-  z-index:80;
+  position:fixed;
+  left:50%;
+  top:50%;
+  transform:translate(-50%,-50%);
+  z-index:12000;
   display:flex;
   flex-direction:column;
   gap:10px;
@@ -999,11 +999,6 @@ canvas#game{display:block;max-width:100%;width:960px;height:auto;border:1px soli
   max-height:calc(100vh - 140px);
   box-shadow:0 10px 30px rgba(0,0,0,.5), inset 0 0 0 1px rgba(255,255,255,.06);
   overflow:auto;
-}
-.upgrade.sticky-center{
-  left:50%;
-  right:auto;
-  transform:translateX(-50%);
 }
 .upgrade .upg-close{position:absolute;top:6px;right:8px;border:0;background:transparent;color:var(--muted);font-size:18px;cursor:pointer}
 .upgrade .upg-close:hover{color:var(--text)}
@@ -1021,10 +1016,9 @@ canvas#game{display:block;max-width:100%;width:960px;height:auto;border:1px soli
 
 @media (max-width: 860px){
   .upgrade{
+    top:50%;
     left:50%;
-    right:auto;
-    bottom:16px;
-    transform:translateX(-50%);
+    transform:translate(-50%,-50%);
     width:min(520px, calc(100vw - 24px));
   }
 }
@@ -1650,6 +1644,10 @@ canvas#game{display:block;max-width:100%;width:960px;height:auto;border:1px soli
 .stage-wrap > *:not(.stage-bg-video):not(.overlay):not(.bottom-toolbar){
   position:relative;
   z-index:1;
+}
+.stage-wrap > .upgrade{
+  position:absolute;
+  z-index:80;
 }
 .wave-panel,.passive-panel{
   width:100%;

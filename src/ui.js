@@ -83,6 +83,11 @@ export class UIManager{
     this.setTowerCosts();
     // Upgrade panel
     this.$upg = document.getElementById('upgrade-panel');
+    // For consistent positioning independent of the scaled game frame,
+    // host the upgrade panel at the document body level (fixed overlay).
+    if(this.$upg && this.$upg.parentElement && this.$upg.parentElement !== document.body){
+      document.body.appendChild(this.$upg);
+    }
     this.$upgTitle = this.$upg ? this.$upg.querySelector('.upg-title') : null;
     this.$upgName = document.getElementById('upg-name');
     this.$upgIcon = document.getElementById('upg-icon');
@@ -498,12 +503,10 @@ export class UIManager{
         setMinimized(minimized);
       });
     }
-    // Make the tower upgrade panel draggable within the visible stage
-    // area so it stays reachable even after resolution / scale changes.
+    // Make the tower upgrade panel draggable within the viewport so it
+    // stays reachable even after resolution / scale changes.
     if(this.$upg){
       const panel = this.$upg;
-      const shell = document.getElementById('canvas-shell');
-      const stage = document.querySelector('.stage-wrap');
       let drag = null;
       const onPointerDownUpg = (e)=>{
         const isTouch = e.pointerType === 'touch';
@@ -514,15 +517,11 @@ export class UIManager{
         if(target && (target.closest('button') || target.closest('a') || target.closest('input') || target.closest('textarea') || target.closest('select'))){
           return;
         }
-        if(!stage) return;
         const rect = panel.getBoundingClientRect();
-        const stageRect = stage.getBoundingClientRect();
         drag = {
           pointerId: e.pointerId,
           offsetX: e.clientX - rect.left,
-          offsetY: e.clientY - rect.top,
-          stageLeft: stageRect.left,
-          stageTop: stageRect.top
+          offsetY: e.clientY - rect.top
         };
         panel.classList.add('dragging');
         // Switch to explicit top/left anchoring for the duration of the drag.
@@ -533,24 +532,22 @@ export class UIManager{
         e.preventDefault();
       };
       const onPointerMoveUpg = (e)=>{
-        if(!drag || e.pointerId !== drag.pointerId || !stage) return;
-        const stageRect = stage.getBoundingClientRect();
+        if(!drag || e.pointerId !== drag.pointerId) return;
         const panelRect = panel.getBoundingClientRect();
         // Desired viewport position for the panel's top-left based on pointer + offset.
         let vLeft = e.clientX - drag.offsetX;
         let vTop = e.clientY - drag.offsetY;
         const margin = 4;
-        const minLeft = stageRect.left + margin;
-        const maxLeft = stageRect.right - panelRect.width - margin;
-        const minTop = stageRect.top + margin;
-        const maxTop = stageRect.bottom - panelRect.height - margin;
+        const vw = window.innerWidth || document.documentElement.clientWidth || panelRect.width + margin*2;
+        const vh = window.innerHeight || document.documentElement.clientHeight || panelRect.height + margin*2;
+        const minLeft = margin;
+        const maxLeft = vw - panelRect.width - margin;
+        const minTop = margin;
+        const maxTop = vh - panelRect.height - margin;
         vLeft = Math.max(minLeft, Math.min(maxLeft, vLeft));
         vTop = Math.max(minTop, Math.min(maxTop, vTop));
-        // Convert back to stage-relative coordinates.
-        const left = vLeft - drag.stageLeft;
-        const top = vTop - drag.stageTop;
-        panel.style.left = `${left}px`;
-        panel.style.top = `${top}px`;
+        panel.style.left = `${vLeft}px`;
+        panel.style.top = `${vTop}px`;
       };
       const endDragUpg = (e)=>{
         if(!drag || (e && typeof e.pointerId === 'number' && e.pointerId !== drag.pointerId)) return;
@@ -3267,40 +3264,16 @@ export class UIManager{
       this.$upg.style.display='none';
       return;
     }
-    this.$upgName.textContent = tower.name;
+    // Ensure the panel is visible and re-centered using the base CSS
+    // transform so it always opens in the middle of the screen.
+    this.$upg.classList.remove('hidden');
     this.$upg.style.display='flex';
-    // When opening the panel, anchor it in the center of the visible
-    // play area so it never spawns off-screen after UI scaling or
-    // resolution changes.
-    try{
-      const stage = document.querySelector('.stage-wrap');
-      const shell = document.getElementById('canvas-shell');
-      if(stage && shell){
-        const stageRect = stage.getBoundingClientRect();
-        const shellRect = shell.getBoundingClientRect();
-        const panelRect = this.$upg.getBoundingClientRect();
-        const margin = 6;
-        // Start from the board (canvas) center so the panel appears in
-        // the player's main focus area.
-        let vLeft = shellRect.left + (shellRect.width - panelRect.width) / 2;
-        let vTop = shellRect.top + (shellRect.height - panelRect.height) / 2;
-        // Clamp to the overall stage so the panel cannot be dragged or
-        // spawned fully off-screen in either direction.
-        const minLeft = stageRect.left + margin;
-        const maxLeft = stageRect.right - panelRect.width - margin;
-        const minTop = stageRect.top + margin;
-        const maxTop = stageRect.bottom - panelRect.height - margin;
-        vLeft = Math.max(minLeft, Math.min(maxLeft, vLeft));
-        vTop = Math.max(minTop, Math.min(maxTop, vTop));
-        const left = vLeft - stageRect.left;
-        const top = vTop - stageRect.top;
-        this.$upg.style.right = 'auto';
-        this.$upg.style.bottom = 'auto';
-        this.$upg.style.transform = 'none';
-        this.$upg.style.left = `${left}px`;
-        this.$upg.style.top = `${top}px`;
-      }
-    }catch(e){}
+    this.$upg.style.left = '';
+    this.$upg.style.top = '';
+    this.$upg.style.right = '';
+    this.$upg.style.bottom = '';
+    this.$upg.style.transform = '';
+    this.$upgName.textContent = tower.name;
     if(this.setUpgradeTips) this.setUpgradeTips(tower);
     // Color-code upgrade controls to match tower base color
     const tint = tower.baseColor || null;

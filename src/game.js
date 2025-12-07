@@ -1342,7 +1342,15 @@ export class Game {
     if(this.ui.showMapSelect) this.ui.showMapSelect(false);
     this.ui.setPauseLabel('Pause');
     this.ui.setUpgradePanel(null, this.credits);
+    // Silence in-run loops and smoothly transition back to the main
+    // menu theme when leaving a game via the pause menu or game over.
     this.stopAllAudio();
+    try{
+      audio.fadeOutMusic(0.6);
+      setTimeout(()=> {
+        audio.playMusic('data/Main-Menumusic.mp3', { loop:true });
+      }, 620);
+    }catch(e){}
   }
   toMissionSelect(){
     // Return from in-game (usually paused) to the Assembly War
