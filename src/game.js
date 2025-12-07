@@ -279,6 +279,22 @@ export class Game {
     this.ui.on('sellConfirm', ()=> this.sellSelectedConfirmed());
     this.ui.on('sellCancel', ()=> this.ui.showSell(false));
     this.ui.on('setVolume', (pct)=> { audio.setVolumePercent(pct); this.ui.setVolumeLabel(audio.getVolumeLabel()); });
+    this.ui.on('setMasterVolume', (pct)=> {
+      audio.setVolumePercent(pct);
+      this.ui.setVolumeLabel(audio.getVolumeLabel());
+    });
+    this.ui.on('setMusicVolume', (pct)=> {
+      audio.setMusicVolumePercent(pct);
+      if(this.ui.setMusicVolumeLabel){
+        this.ui.setMusicVolumeLabel(String(audio.getMusicVolumePercent()));
+      }
+    });
+    this.ui.on('setSfxVolume', (pct)=> {
+      audio.setSfxVolumePercent(pct);
+      if(this.ui.setSfxVolumeLabel){
+        this.ui.setSfxVolumeLabel(String(audio.getSfxVolumePercent()));
+      }
+    });
     this.ui.on('upgradeSlow', ()=> this.upgradeSelected('slow'));
     this.ui.on('upgradeRate', ()=> this.upgradeSelected('rate'));
     this.ui.on('upgradeRange', ()=> this.upgradeSelected('range'));
@@ -307,8 +323,8 @@ export class Game {
     this.ui.on('devUpgradeMax', ()=> this.upgradeSelectedMax());
 
     // Main menu flow
-    this.ui.on('mainNew', ()=> this.handleMainNew());
-    this.ui.on('mainLoad', ()=> this.handleMainLoad());
+  this.ui.on('mainNew', ()=> this.handleMainNew());
+  this.ui.on('mainLoad', ()=> this.handleMainLoad());
     this.ui.on('mainUserProfile', ()=> this.handleMainUserProfile());
     this.ui.on('loadSlot', (slot)=> this.handleLoadSlot(slot));
     this.ui.on('loadBack', ()=> this.handleLoadBack());
@@ -319,7 +335,7 @@ export class Game {
     this.ui.on('mainSettingsBack', ()=> this.handleMainSettingsBack());
     // Assembly War missions
     this.ui.on('closeAssembly', ()=> this.handleCloseAssembly());
-    this.ui.on('assemblyMainMenu', ()=> this.toMenu());
+  this.ui.on('assemblyMainMenu', ()=> this.toMenu());
     this.ui.on('startMission', (id)=> this.handleStartMission(id));
     this.ui.on('assemblySave', ()=> this.handleAssemblySave());
     this.ui.on('assemblyLoad', ()=> this.handleAssemblyLoad());
@@ -327,11 +343,13 @@ export class Game {
     this.ui.on('openCreateUser', ()=> this.openCreateUser());
     this.ui.on('closeCreateUser', ()=> this.closeCreateUser());
     this.ui.on('createUser', (creds)=> this.handleCreateUser(creds));
-    this.ui.on('openLeaderboard', (payload)=> {
-      const origin = payload && payload.origin;
-      this.openLeaderboard(origin);
-    });
-    this.ui.on('closeLeaderboard', ()=> this.closeLeaderboard());
+  this.ui.on('openLeaderboard', (payload)=> {
+    const origin = payload && payload.origin;
+    // Fade out menu music when transitioning into the leaderboard view.
+    audio.fadeOutMusic(0.6);
+    this.openLeaderboard(origin);
+  });
+  this.ui.on('closeLeaderboard', ()=> this.closeLeaderboard());
     this.ui.on('leaderboardSignIn', ()=> this.handleLeaderboardSignIn());
     this.ui.on('logout', (payload)=> this.handleLogout(payload));
     this.ui.on('pauseLoginOpen', ()=> { this.profileOrigin = 'pause'; });
@@ -412,6 +430,8 @@ export class Game {
     this.ui.highlightTowerBtn(this.selectedTower);
     this.ui.setVolumeLabel(audio.getVolumeLabel());
     if(this.ui.setVolumeSlider) this.ui.setVolumeSlider(audio.getVolumePercent());
+    if(this.ui.setMusicVolumeSlider) this.ui.setMusicVolumeSlider(audio.getMusicVolumePercent());
+    if(this.ui.setSfxVolumeSlider) this.ui.setSfxVolumeSlider(audio.getSfxVolumePercent());
     this.ui.setWaveStatus(false);
     if(this.ui.setWaveProgress) this.ui.setWaveProgress(0);
     this.refreshPassivePanel();
@@ -436,8 +456,12 @@ export class Game {
     // instead of during Game construction so it always reflects the
     // latest character pick.
 
-    // Unlock audio on first user interaction
-    window.addEventListener('pointerdown', ()=> audio.resume(), { once: true });
+    // Unlock audio on first user interaction and start main menu music.
+    window.addEventListener('pointerdown', ()=> {
+      audio.resume();
+      // Start or resume main menu music when the game first becomes interactive.
+      audio.playMusic('data/Main-Menumusic.mp3', { loop:true });
+    }, { once: true });
 
     this.last = now();
 
@@ -933,6 +957,8 @@ export class Game {
   _startGameCore(){
     // Ensure any lingering loops are silenced before start
     this.stopAllAudio();
+    // Fade out menu music as we transition into active gameplay.
+    audio.fadeOutMusic(0.8);
     // Endless Cycle should always start from a fresh
     // progression state (no carried-over abilities).
     if(this.mode === 'endless'){
@@ -2047,6 +2073,8 @@ export class Game {
     if(this.ui.showMainMenu) this.ui.showMainMenu(true);
     this.resetAbilityUnlocks();
     this.state = 'menu';
+    // When returning to the main menu, ensure the menu music is active.
+    audio.playMusic('data/Main-Menumusic.mp3', { loop:true });
   }
   handleMainAssembly(){
     // From fullscreen main menu → Assembly War mission select.

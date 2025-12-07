@@ -152,9 +152,32 @@
             <div class="banner-empty">Status messages will appear here.</div>
           </div>
         </aside>
-          <div id="canvas-shell" class="canvas-shell">
+        <div id="canvas-shell">
           <div id="canvas-unscale">
-          <aside id="upgrade-panel" class="upgrade" style="display:none">
+            <canvas id="game" width="960" height="540"></canvas>
+          </div>
+        </div>
+        <aside id="passive-panel" class="passive-panel">
+          <div id="passive-lines" class="pp-lines"></div>
+        </aside>
+        <div id="bottom-toolbar" class="bottom-toolbar">
+          <div id="combat-stats" class="combat-stats-card">
+            <div class="cs-title">
+              <span>Combat Stats</span>
+              <button id="combat-stats-toggle" type="button" aria-label="Toggle combat stats drawer">▲</button>
+            </div>
+            <div class="cs-row cs-header"><span class="cs-col-label">Stats</span><span class="cs-col-label">Bonus</span><span class="cs-col-label">Actual</span></div>
+            <div class="cs-row"><span>Base Damage</span><span id="stat-basedmg">+0%</span><span id="stat-basedmg-raw">1.00x</span></div>
+            <div class="cs-row"><span>Crit Chance</span><span id="stat-crit">+0%</span><span id="stat-crit-raw">0%</span></div>
+            <div class="cs-row"><span>Crit Damage</span><span id="stat-critdmg">+0%</span><span id="stat-critdmg-raw">0%</span></div>
+            <div class="cs-row"><span>Slow Strength</span><span id="stat-slow">+0%</span><span id="stat-slow-raw">1.00x</span></div>
+            <div class="cs-row"><span>Burn DPS</span><span id="stat-burn">+0%</span><span id="stat-burn-raw">1.00x</span></div>
+            <div class="cs-row"><span>Targeting Speed</span><span id="stat-target">+0%</span><span id="stat-target-raw">1.00x</span></div>
+            <div class="cs-row"><span>Acid Spread</span><span id="stat-puddle">+0%</span><span id="stat-puddle-raw">1.00x</span></div>
+            <div class="cs-row"><span>Laser Stability</span><span id="stat-laserstab">+0%</span><span id="stat-laserstab-raw">1.00x</span></div>
+          </div>
+        </div>
+        <aside id="upgrade-panel" class="upgrade" style="display:none">
           <button id="btn-upg-close" class="upg-close" aria-label="Close">×</button>
           <div class="upg-title">Selected:
             <span id="upg-icon" class="upg-icon" aria-hidden="true"></span>
@@ -177,29 +200,6 @@
           </div>
           <div class="upg-hint">Click a placed tower to upgrade</div>
         </aside>
-          <canvas id="game" width="960" height="540"></canvas>
-          </div> <!-- #canvas-unscale -->
-        </div>
-        <aside id="passive-panel" class="passive-panel">
-          <div id="passive-lines" class="pp-lines"></div>
-        </aside>
-        <div id="bottom-toolbar" class="bottom-toolbar">
-          <div id="combat-stats" class="combat-stats-card">
-            <div class="cs-title">
-              <span>Combat Stats</span>
-              <button id="combat-stats-toggle" type="button" aria-label="Toggle combat stats drawer">▲</button>
-            </div>
-            <div class="cs-row cs-header"><span class="cs-col-label">Stats</span><span class="cs-col-label">Bonus</span><span class="cs-col-label">Actual</span></div>
-            <div class="cs-row"><span>Base Damage</span><span id="stat-basedmg">+0%</span><span id="stat-basedmg-raw">1.00x</span></div>
-            <div class="cs-row"><span>Crit Chance</span><span id="stat-crit">+0%</span><span id="stat-crit-raw">0%</span></div>
-            <div class="cs-row"><span>Crit Damage</span><span id="stat-critdmg">+0%</span><span id="stat-critdmg-raw">0%</span></div>
-            <div class="cs-row"><span>Slow Strength</span><span id="stat-slow">+0%</span><span id="stat-slow-raw">1.00x</span></div>
-            <div class="cs-row"><span>Burn DPS</span><span id="stat-burn">+0%</span><span id="stat-burn-raw">1.00x</span></div>
-            <div class="cs-row"><span>Targeting Speed</span><span id="stat-target">+0%</span><span id="stat-target-raw">1.00x</span></div>
-            <div class="cs-row"><span>Acid Spread</span><span id="stat-puddle">+0%</span><span id="stat-puddle-raw">1.00x</span></div>
-            <div class="cs-row"><span>Laser Stability</span><span id="stat-laserstab">+0%</span><span id="stat-laserstab-raw">1.00x</span></div>
-          </div>
-        </div>
         <!-- Overlays -->
         <!-- Assembly War Missions -->
         <section id="assembly-overlay" class="overlay mainmenu">
@@ -570,7 +570,7 @@
       <section id="displaysettings-overlay" class="overlay mainmenu">
         <div class="panel mainmenu-panel">
           <h2>Display Settings</h2>
-          <p class="tag">Adjust resolution and UI scale</p>
+          <p class="tag">Adjust resolution, UI scale, and map zoom</p>
 
           <label for="res-select">Resolution</label>
           <select id="res-select"></select>
@@ -583,6 +583,9 @@
             <option value="1.75">1.75×</option>
             <option value="2">2×</option>
           </select>
+
+          <label for="map-zoom-slider" style="margin-top:12px;">Map Zoom</label>
+          <input type="range" id="map-zoom-slider" min="0.85" max="1.25" step="0.05" value="1" />
 
           <div class="actions" style="margin-top:18px">
             <button id="btn-display-apply">Apply</button>
@@ -597,9 +600,19 @@
           <h2>Sound Settings</h2>
           <p class="tag">Adjust audio levels</p>
 
-          <div class="vol-ctl" style="margin-top:10px; display:flex; align-items:center; gap:8px; justify-content:center">
-            <label for="vol-slider-main">Master Volume <span id="vol-label-main">70%</span></label>
-            <input type="range" id="vol-slider-main" min="0" max="100" step="1" value="70" />
+          <div class="vol-ctl" style="margin-top:10px; display:flex; flex-direction:column; gap:10px; align-items:stretch">
+            <div style="display:flex; align-items:center; gap:8px; justify-content:center">
+              <label for="vol-slider-main">Master Volume <span id="vol-label-main">70%</span></label>
+              <input type="range" id="vol-slider-main" min="0" max="100" step="1" value="70" />
+            </div>
+            <div style="display:flex; align-items:center; gap:8px; justify-content:center">
+              <label for="vol-slider-music">Music Volume <span id="vol-label-music">70%</span></label>
+              <input type="range" id="vol-slider-music" min="0" max="100" step="1" value="70" />
+            </div>
+            <div style="display:flex; align-items:center; gap:8px; justify-content:center">
+              <label for="vol-slider-sfx">SFX Volume <span id="vol-label-sfx">70%</span></label>
+              <input type="range" id="vol-slider-sfx" min="0" max="100" step="1" value="70" />
+            </div>
           </div>
 
           <div class="actions" style="margin-top:18px">
@@ -1180,6 +1193,26 @@
           }catch(e){}
         }
         window.applyUIScale = applyUIScale;
+        function applyMapZoom(level){
+          const raw = Number(level);
+          let z = 1;
+          if(!isNaN(raw)){
+            z = raw;
+          }
+          // Clamp to a reasonable range so the board never becomes
+          // unreadably tiny or excessively zoomed.
+          z = Math.max(0.75, Math.min(1.4, z));
+          document.documentElement.style.setProperty('--canvas-zoom', String(z));
+          try{
+            if(window.localStorage){
+              window.localStorage.setItem('map-zoom', String(z));
+            }
+          }catch(e){}
+          try{
+            window.NANO_MAP_ZOOM = z;
+          }catch(e){}
+        }
+        window.applyMapZoom = applyMapZoom;
         function initUiScale(){
           let saved = 1;
           try{
@@ -1200,9 +1233,29 @@
             }
           }
         }
+        function initMapZoom(){
+          let saved = 1;
+          try{
+            if(window.localStorage){
+              const raw = window.localStorage.getItem('map-zoom');
+              if(raw!=null && raw!=='' && !isNaN(parseFloat(raw))){
+                saved = parseFloat(raw);
+              }
+            }
+          }catch(e){}
+          applyMapZoom(saved);
+          const slider = document.getElementById('map-zoom-slider');
+          if(slider){
+            slider.value = String(saved);
+            slider.addEventListener('input', ()=>{
+              applyMapZoom(slider.value);
+            });
+          }
+        }
         window.addEventListener('DOMContentLoaded', ()=>{
           populateResolutionDropdown();
           initUiScale();
+          initMapZoom();
         });
       })();
     </script>

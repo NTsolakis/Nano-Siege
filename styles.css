@@ -1504,9 +1504,9 @@ canvas#game{display:block;max-width:100%;width:960px;height:auto;border:1px soli
 }
 
 #canvas-unscale{
-  transform:scale(calc(1 / var(--ui-scale)));
+  transform:scale(calc(var(--canvas-zoom) / var(--ui-scale)));
   /* Mirror the UI root's origin so the board stays anchored when
-   * UI scale changes. */
+   * UI scale changes, while allowing an independent map zoom level. */
   transform-origin:top center;
 }
 /* Bottom toolbar + combat stats drawer */
@@ -1624,7 +1624,7 @@ canvas#game{display:block;max-width:100%;width:960px;height:auto;border:1px soli
   border-left:1px solid rgba(255,255,255,0.18);
 }
 .stage-wrap{
-  --side-panel-width: clamp(200px, 14vw, 240px);
+  --side-panel-width: clamp(170px, 12vw, 210px);
   flex:1;
   display:grid;
   grid-template-columns:var(--side-panel-width) minmax(300px,1fr) var(--side-panel-width);

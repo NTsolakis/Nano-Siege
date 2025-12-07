@@ -60,6 +60,15 @@ cat > "${VERSION_FILE}" <<EOF
 }
 EOF
 
+# Keep data/meta.json's launcherVersion in sync on the dev side so the
+# value you see in that file matches the latest launcher build. The
+# Unraid deploy script will still aggregate versions server-side, but
+# this makes the local meta.json less confusing.
+if [ -f "data/meta.json" ]; then
+  tmpfile="$(mktemp)"
+  jq --arg ver "${new_version}" '.launcherVersion = $ver' "data/meta.json" > "${tmpfile}" && mv "${tmpfile}" "data/meta.json"
+fi
+
 echo
 echo "Building Electron launcher (Linux AppImage)..."
 npm run build:launcher:electron:linux
@@ -71,4 +80,3 @@ npm run build:launcher:electron:win
 echo
 echo "Launcher build complete. Artifacts in dist/:"
 ls -1 dist/NanoSiegeLauncher* 2>/dev/null || echo "  (no launcher artifacts found yet)"
-

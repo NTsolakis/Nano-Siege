@@ -2,11 +2,16 @@ class AudioManager {
   constructor(){
     this.ctx = null;
     this.master = null;
+    this.musicGain = null;
+    this.sfxGain = null;
     this.enabled = true;
     this.unlocked = false;
     this.volSteps = [0, 0.4, 0.7, 1.0];
     this.volIndex = 2; // default louder than before (~70%)
-    this.currentVolume = this.volSteps[this.volIndex]; // 0..1
+    this.currentVolume = this._readVolumePref('master', this.volSteps[this.volIndex]); // 0..1
+    this.musicVolume = this._readVolumePref('music', 0.7);
+    this.sfxVolume = this._readVolumePref('sfx', 0.9);
+    this._music = null; // { source, gain, url, loop }
   }
 
   resume(){
@@ -17,6 +22,12 @@ class AudioManager {
         this.master = this.ctx.createGain();
         this.master.gain.value = this.currentVolume;
         this.master.connect(this.ctx.destination);
+        this.musicGain = this.ctx.createGain();
+        this.musicGain.gain.value = this.musicVolume;
+        this.musicGain.connect(this.master);
+        this.sfxGain = this.ctx.createGain();
+        this.sfxGain.gain.value = this.sfxVolume;
+        this.sfxGain.connect(this.master);
       }catch(e){
         console.warn('Audio init failed', e); this.enabled=false; return;
       }
@@ -27,10 +38,30 @@ class AudioManager {
 
   now(){ return this.ctx ? this.ctx.currentTime : 0; }
 
+  _readVolumePref(kind, fallback){
+    if(typeof window === 'undefined' || !window.localStorage) return fallback;
+    try{
+      const raw = window.localStorage.getItem(`nano_vol_${kind}`);
+      if(raw == null || raw === '') return fallback;
+      const v = parseFloat(raw);
+      if(!isFinite(v) || v<0 || v>1) return fallback;
+      return v;
+    }catch(e){
+      return fallback;
+    }
+  }
+  _writeVolumePref(kind, value){
+    if(typeof window === 'undefined' || !window.localStorage) return;
+    try{
+      window.localStorage.setItem(`nano_vol_${kind}`, String(value));
+    }catch(e){}
+  }
+
   setVolumeIndex(i){
     this.volIndex = Math.max(0, Math.min(this.volSteps.length-1, i|0));
     this.currentVolume = this.volSteps[this.volIndex];
     if(this.master) this.master.gain.value = this.currentVolume;
+    this._writeVolumePref('master', this.currentVolume);
   }
 
   cycleVolume(){
@@ -49,9 +80,31 @@ class AudioManager {
     const clamped = Math.max(0, Math.min(100, pct|0));
     this.currentVolume = clamped/100;
     if(this.master) this.master.gain.value = this.currentVolume;
+    this._writeVolumePref('master', this.currentVolume);
+    this._syncMusicElementVolume();
   }
   getVolumePercent(){
     return Math.round((this.master? this.master.gain.value : this.currentVolume)*100);
+  }
+
+  setMusicVolumePercent(pct){
+    const clamped = Math.max(0, Math.min(100, pct|0));
+    this.musicVolume = clamped/100;
+    if(this.musicGain) this.musicGain.gain.value = this.musicVolume;
+    this._writeVolumePref('music', this.musicVolume);
+    this._syncMusicElementVolume();
+  }
+  getMusicVolumePercent(){
+    return Math.round((this.musicGain? this.musicGain.gain.value : this.musicVolume)*100);
+  }
+  setSfxVolumePercent(pct){
+    const clamped = Math.max(0, Math.min(100, pct|0));
+    this.sfxVolume = clamped/100;
+    if(this.sfxGain) this.sfxGain.gain.value = this.sfxVolume;
+    this._writeVolumePref('sfx', this.sfxVolume);
+  }
+  getSfxVolumePercent(){
+    return Math.round((this.sfxGain? this.sfxGain.gain.value : this.sfxVolume)*100);
   }
 
   // helpers
@@ -73,7 +126,7 @@ class AudioManager {
     g.gain.setValueAtTime(0, t0);
     g.gain.linearRampToValueAtTime(gain, t0+attack);
     g.gain.exponentialRampToValueAtTime(0.0001, t0+d);
-    node.connect(g); g.connect(this.master);
+    node.connect(g); g.connect(this.sfxGain || this.master);
     osc.start(t0); osc.stop(t0+d+0.02);
   }
 
@@ -193,6 +246,88 @@ class AudioManager {
     for(const n of seq){
       setTimeout(()=> this.oneShotOsc({type:n.type, f0:n.f0, f1:n.f1, t:n.d, gain:n.g, filter:{type:'lowpass', freq:1800, Q:0.6}}), Math.floor(n.t*1000));
     }
+  }
+
+  // --- Music handling (HTMLAudioElement) ---
+  _ensureMusicElement(url){
+    try{
+      if(typeof Audio === 'undefined') return null;
+    }catch(e){
+      return null;
+    }
+    // Reuse existing element if same track.
+    if(this._music && this._music.el){
+      if(this._music.url === url){
+        return this._music.el;
+      }
+      try{
+        this._music.el.pause();
+      }catch(e){}
+    }
+    try{
+      const el = new Audio(url);
+      el.loop = true;
+      el.volume = Math.max(0, Math.min(1, (this.musicVolume||1)*(this.currentVolume||1)));
+      this._music = { el, url };
+      return el;
+    }catch(e){
+      return null;
+    }
+  }
+
+  _syncMusicElementVolume(){
+    const m = this._music;
+    if(!m || !m.el) return;
+    const vol = Math.max(0, Math.min(1, (this.musicVolume||1)*(this.currentVolume||1)));
+    try{
+      m.el.volume = vol;
+    }catch(e){}
+  }
+
+  _stopMusicImmediate(){
+    const m = this._music;
+    this._music = null;
+    if(!m || !m.el) return;
+    try{
+      m.el.pause();
+      m.el.currentTime = 0;
+    }catch(e){}
+  }
+
+  fadeOutMusic(duration=0.5){
+    const m = this._music;
+    if(!m || !m.el) return;
+    const el = m.el;
+    const start = el.volume;
+    if(start <= 0) return;
+    const steps = 20;
+    const stepMs = (duration*1000)/steps;
+    let n = 0;
+    const tick = ()=>{
+      n++;
+      const t = n/steps;
+      const v = start*(1-t);
+      try{
+        el.volume = Math.max(0, v);
+      }catch(e){}
+      if(n < steps){
+        setTimeout(tick, stepMs);
+      }else{
+        try{ el.pause(); }catch(e){}
+      }
+    };
+    setTimeout(tick, stepMs);
+  }
+
+  playMusic(url, { loop=true } = {}){
+    if(!this.enabled) return;
+    const el = this._ensureMusicElement(url);
+    if(!el) return;
+    el.loop = !!loop;
+    this._syncMusicElementVolume();
+    try{
+      el.play().catch(()=>{});
+    }catch(e){}
   }
 }
 

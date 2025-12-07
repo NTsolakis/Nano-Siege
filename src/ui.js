@@ -285,6 +285,10 @@ export class UIManager{
     // Main menu settings controls
     this.$volSliderMain = document.getElementById('vol-slider-main');
     this.$volLabelMain = document.getElementById('vol-label-main');
+    this.$volSliderMusic = document.getElementById('vol-slider-music');
+    this.$volLabelMusic = document.getElementById('vol-label-music');
+    this.$volSliderSfx = document.getElementById('vol-slider-sfx');
+    this.$volLabelSfx = document.getElementById('vol-label-sfx');
     // Speed control toggles
     this.$autoSpeed = document.getElementById('autospeed-toggle');
     this.$autoSpeedMain = document.getElementById('autospeed-toggle-main');
@@ -1207,7 +1211,21 @@ export class UIManager{
     if(this.$sandboxReset){ this.$sandboxReset.addEventListener('click', ()=> this.emit('sandboxReset')); }
     if(this.$sandboxStart){ this.$sandboxStart.addEventListener('click', ()=> this.emit('sandboxStart')); }
     // Main menu settings controls
-    if(this.$volSliderMain){ this.$volSliderMain.addEventListener('input', ()=> this.emit('setVolume', parseInt(this.$volSliderMain.value,10)||0)); }
+    if(this.$volSliderMain){
+      this.$volSliderMain.addEventListener('input', ()=>{
+        this.emit('setMasterVolume', parseInt(this.$volSliderMain.value,10)||0);
+      });
+    }
+    if(this.$volSliderMusic){
+      this.$volSliderMusic.addEventListener('input', ()=>{
+        this.emit('setMusicVolume', parseInt(this.$volSliderMusic.value,10)||0);
+      });
+    }
+    if(this.$volSliderSfx){
+      this.$volSliderSfx.addEventListener('input', ()=>{
+        this.emit('setSfxVolume', parseInt(this.$volSliderSfx.value,10)||0);
+      });
+    }
     const $btnMainSettingsBack = document.getElementById('btn-main-settings-back');
     if($btnMainSettingsBack){ $btnMainSettingsBack.addEventListener('click', ()=> this.emit('mainSettingsBack')); }
     if(this.$btnMainDisplaySettings){
@@ -1279,6 +1297,13 @@ export class UIManager{
           const v = parseFloat(uiSel.value)||1;
           if(typeof window !== 'undefined' && window.applyUIScale){
             window.applyUIScale(v);
+          }
+        }
+        const zoomSlider = document.getElementById('map-zoom-slider');
+        if(zoomSlider && zoomSlider.value){
+          const z = parseFloat(zoomSlider.value)||1;
+          if(typeof window !== 'undefined' && window.applyMapZoom){
+            window.applyMapZoom(z);
           }
         }
       });
@@ -2220,6 +2245,22 @@ export class UIManager{
     const val = String(Math.max(0, Math.min(100, pct|0)));
     if(this.$volSlider) this.$volSlider.value = val;
     if(this.$volSliderMain) this.$volSliderMain.value = val;
+  }
+  setMusicVolumeSlider(pct){
+    const val = String(Math.max(0, Math.min(100, pct|0)));
+    if(this.$volSliderMusic) this.$volSliderMusic.value = val;
+  }
+  setSfxVolumeSlider(pct){
+    const val = String(Math.max(0, Math.min(100, pct|0)));
+    if(this.$volSliderSfx) this.$volSliderSfx.value = val;
+  }
+  setMusicVolumeLabel(text){
+    const v = String(text||'').replace('%','');
+    if(this.$volLabelMusic) this.$volLabelMusic.textContent = v + '%';
+  }
+  setSfxVolumeLabel(text){
+    const v = String(text||'').replace('%','');
+    if(this.$volLabelSfx) this.$volLabelSfx.textContent = v + '%';
   }
   setAutoSpeedUI(on){
     const v = !!on;
