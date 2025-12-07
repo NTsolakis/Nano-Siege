@@ -146,6 +146,11 @@ set -euo pipefail
 REPO_DIR="${UNRAID_REPO_DIR}"
 cd "\$REPO_DIR"
 BRANCH="\$(git rev-parse --abbrev-ref HEAD)"
+# meta.json is regenerated on each deploy; ensure any local changes from
+# previous runs do not block pulling the latest code from GitHub.
+if git rev-parse --verify HEAD >/dev/null 2>&1 && git ls-files --error-unmatch data/meta.json >/dev/null 2>&1; then
+  git restore data/meta.json 2>/dev/null || git checkout -- data/meta.json 2>/dev/null || true
+fi
 git pull origin "\$BRANCH" || true
 ./scripts/deploy-unraid.sh
 EOF
