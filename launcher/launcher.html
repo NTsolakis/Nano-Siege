@@ -142,9 +142,19 @@
       }
     })();
 
-    // Use the same hosted background video as the main game,
-    // derived from the manifest base URL so staging domains work.
+    // Prefer a local background video when running as a standalone
+    // app so the launcher stays fully functional offline. Fall back
+    // to the hosted asset only if the local file is missing.
     const LAUNCHER_BG_URL = (() => {
+      try {
+        const localPath = path.join(__dirname, 'loading-bg.mp4');
+        if (fs.existsSync(localPath)) {
+          // Relative path keeps things simple; Electron will resolve
+          // this next to launcher.html inside the packaged app.
+          return 'loading-bg.mp4';
+        }
+      } catch (e) {
+      }
       try {
         const u = new URL('../data/loading-bg.mp4', MANIFEST_URL);
         return u.toString();

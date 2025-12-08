@@ -463,8 +463,9 @@ export class Game {
     // latest character pick.
 
     // Music + audio bootstrap:
-    // - On the desktop/Electron build, start the main menu music
-    //   immediately on boot so the game never feels "silent".
+    // - On the desktop/Electron build, start only the main menu music
+    //   up front so the game never feels "silent", and defer heavier
+    //   combat tracks until gameplay actually begins.
     // - On the web build, keep using a first‑interaction unlock so
     //   browser autoplay policies are respected.
     const isDesktopRuntime = !!(this.ui && this.ui.isDesktopRuntime);
@@ -472,11 +473,6 @@ export class Game {
       try{
         audio.resume();
         audio.playMusic('data/Main-Menumusic.mp3', { loop:true });
-        audio.preloadMusic('data/Leaderboard-Music.mp3');
-        audio.preloadMusic('data/Interlude.mp3');
-        audio.preloadMusic('data/Main-Wavemusic.mp3');
-        audio.preloadMusic('data/Alt-Wavemusic.mp3');
-        audio.preloadMusic('data/Boss-Music.mp3');
       }catch(e){}
     } else if(typeof window !== 'undefined'){
       // Web / file builds: unlock audio and start music only after the
@@ -485,11 +481,6 @@ export class Game {
         try{
           audio.resume();
           audio.playMusic('data/Main-Menumusic.mp3', { loop:true });
-          audio.preloadMusic('data/Leaderboard-Music.mp3');
-          audio.preloadMusic('data/Interlude.mp3');
-          audio.preloadMusic('data/Main-Wavemusic.mp3');
-          audio.preloadMusic('data/Alt-Wavemusic.mp3');
-          audio.preloadMusic('data/Boss-Music.mp3');
         }catch(e){}
       }, { once: true });
     }
@@ -962,6 +953,12 @@ export class Game {
   }
 
   _startWaveMusicLoop(){
+    try{
+      // Ensure both primary wave tracks are warmed up by the time the
+      // first combat loop begins so mid‑run switches stay smooth.
+      audio.preloadMusic('data/Main-Wavemusic.mp3');
+      audio.preloadMusic('data/Alt-Wavemusic.mp3');
+    }catch(e){}
     this._playWaveMusicTrack('main');
   }
 
@@ -1018,6 +1015,10 @@ export class Game {
     // Fade out current menu music and start the in‑run music sequence.
     audio.fadeOutMusic(0.8);
     try{
+      // Load the intro and boss tracks on demand as the player actually
+      // commits to a run instead of at app startup.
+      audio.preloadMusic('data/Interlude.mp3');
+      audio.preloadMusic('data/Boss-Music.mp3');
       audio.playMusic('data/Interlude.mp3', { loop:false });
       audio.setMusicEndHandler(()=> {
         // After the intro/interlude, start alternating wave music:

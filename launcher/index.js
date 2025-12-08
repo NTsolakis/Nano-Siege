@@ -404,17 +404,11 @@ function showGuiPrompt(version) {
   return 'play';
 }
 
-// Basic HTML launcher shell served from the local Node process
-// so the launcher feels like a small app instead of a bare
-// console window.
-const LAUNCHER_BG_URL = (() => {
-  try {
-    const u = new URL('../data/loading-bg.mp4', MANIFEST_URL);
-    return u.toString();
-  } catch (e) {
-    return 'https://nano.nicksminecraft.net/data/loading-bg.mp4';
-  }
-})();
+// Basic HTML launcher shell served from the local Node process so the
+// launcher feels like a small app instead of a bare console window.
+// We expose the background video via a local /bg endpoint so the
+// launcher remains fully functional even when offline.
+const LAUNCHER_BG_URL = '/bg';
 
 function renderLauncherHtml() {
   return `<!DOCTYPE html>
@@ -619,6 +613,39 @@ function startLauncherUiServer() {
             res.statusCode = 200;
             res.setHeader('Content-Type', 'text/html; charset=utf-8');
             res.end(renderLauncherHtml());
+            return;
+          }
+          if (url.pathname === '/bg') {
+            try {
+              const candidates = [
+                path.join(__dirname, 'loading-bg.mp4'),
+                path.join(__dirname, '..', 'data', 'loading-bg.mp4')
+              ];
+              let bgPath = null;
+              for (const p of candidates) {
+                try {
+                  if (fs.existsSync(p)) {
+                    bgPath = p;
+                    break;
+                  }
+                } catch (e) {}
+              }
+              if (bgPath) {
+                res.statusCode = 200;
+                res.setHeader('Content-Type', 'video/mp4');
+                const stream = fs.createReadStream(bgPath);
+                stream.on('error', () => {
+                  try { res.destroy(); } catch (e) {}
+                });
+                stream.pipe(res);
+                return;
+              }
+            } catch (e) {}
+            // Fallback: redirect to the hosted background if local
+            // assets are unavailable.
+            res.statusCode = 302;
+            res.setHeader('Location', 'https://nano.nicksminecraft.net/data/loading-bg.mp4');
+            res.end();
             return;
           }
           if (url.pathname === '/status') {

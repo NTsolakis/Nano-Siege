@@ -141,7 +141,7 @@ app.get('/api/admin/users', requireAuth, requireRole('admin'), (req, res) => {
   res.json({ ok: true, users: db.users });
 });
 
-// Login or create user.
+// Login existing user (no auto‑create).
 app.post('/api/login', (req, res) => {
   const { username, password } = req.body || {};
   const ip = req.ip || (req.connection && req.connection.remoteAddress) || 'unknown';
@@ -157,23 +157,9 @@ app.post('/api/login', (req, res) => {
   const db = loadDb();
   let user = db.users.find(u => u.username === name);
 
-  // Auto-create user if they don't exist.
+  // If the user doesn't exist, reject login instead of silently creating them.
   if (!user) {
-    const hash = bcrypt.hashSync(password, 10);
-    user = {
-      id: crypto.randomUUID(),
-      username: name,
-      passwordHash: hash,
-      roles: ['user'],
-      banned: false,
-      createdAt: now,
-      updatedAt: now,
-      lastLoginAt: null,
-      loginHistory: [],
-      state: defaultState(),
-      scoreHistory: []
-    };
-    db.users.push(user);
+    return res.status(404).json({ ok: false, error: 'user not found' });
   }
 
   // Password check

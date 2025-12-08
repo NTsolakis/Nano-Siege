@@ -1,10 +1,14 @@
+// Keep the initial preload focused on lightweight, menu‑adjacent art so
+// startup memory stays low. Heavier gameplay assets (map textures,
+// enemy sheets, tower sprites, etc.) are loaded on demand when a run
+// actually starts.
 const IMAGE_ASSETS = [
-  'data/board-bg.png',
-  'data/reactor-core.png',
-  'data/tower-cannon.png',
-  'data/tower-laser.png',
-  'data/tower-splash.png',
-  'data/nano-boss-sheet.png'
+  // Main menu / hub background + subtle space layer
+  'data/Space-Background.png',
+  // Small character headshots used in menu/UI
+  'data/Volt.png',
+  'data/Torque.png',
+  'data/Lumen.png'
 ];
 
 // During the explicit asset preload phase we intentionally cap the
