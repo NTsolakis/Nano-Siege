@@ -1,5 +1,6 @@
 import { initVersionLabel } from './version.js';
 import { fetchPatchNotes } from './patchnotes.js';
+import { MAPS, drawMapPreview } from './maps.js';
 import {
   loginUser as apiLoginUser,
   createUser as apiCreateUser,
@@ -10,11 +11,68 @@ import {
 let currentUser = null;       // { username } | null
 let loginContext = null;      // 'download' | 'menu' | 'leaderboard' | null
 let patchNotesData = null;    // { meta, versions } | null
-let leaderboardLoaded = false;
+
+// Hub‑only state for the leaderboard overlay (hosted web build).
+let leaderboardMapKey = (Array.isArray(MAPS) && MAPS.length) ? MAPS[0].key : null;
 
 function getElement(id){
   if(typeof document === 'undefined') return null;
   return document.getElementById(id);
+}
+
+function normalizeMapKey(key){
+  const k = (key || '').trim();
+  if(!k) return null;
+  if(!Array.isArray(MAPS) || !MAPS.length) return null;
+  const found = MAPS.find(m => m && m.key === k);
+  return found ? found.key : null;
+}
+
+function getDefaultMapKey(){
+  if(normalizeMapKey(leaderboardMapKey)){
+    return leaderboardMapKey;
+  }
+  return (Array.isArray(MAPS) && MAPS[0] && MAPS[0].key) ? MAPS[0].key : null;
+}
+
+function getCharacterMeta(key){
+  const k = (key || '').trim().toLowerCase();
+  if(!k) return null;
+  const table = {
+    volt: { key:'volt', label:'Volt' },
+    lumen: { key:'lumen', label:'Lumen' },
+    torque: { key:'torque', label:'Torque' }
+  };
+  return table[k] || null;
+}
+
+function createCharacterChip(key){
+  if(typeof document === 'undefined') return null;
+  const meta = getCharacterMeta(key);
+  if(!meta) return null;
+  const chip = document.createElement('span');
+  chip.className = 'character-chip';
+  chip.dataset.character = meta.key;
+
+  const icon = document.createElement('span');
+  icon.className = 'character-chip-icon';
+  icon.setAttribute('aria-hidden', 'true');
+  // Lightweight: use background images directly so we avoid importing
+  // the full tower/renderer stack on the hosted hub build.
+  let url = null;
+  if(meta.key === 'volt') url = 'data/Volt.png';
+  else if(meta.key === 'torque') url = 'data/Torque.png';
+  else if(meta.key === 'lumen') url = 'data/Lumen.png';
+  if(url){
+    icon.style.backgroundImage = `url("${url}")`;
+  }
+
+  const label = document.createElement('span');
+  label.className = 'character-chip-label';
+  label.textContent = meta.label;
+  chip.appendChild(icon);
+  chip.appendChild(label);
+  return chip;
 }
 
 function readAuthPreference(){
@@ -383,7 +441,7 @@ function renderPatchNotesForVersion(versionKey){
   }
 }
 
-async function refreshHubLeaderboard(){
+async function refreshHubLeaderboard(mapKey){
   const listEl = getElement('leaderboard-list');
   const statusEl = getElement('leaderboard-status');
   const warningEl = getElement('leaderboard-warning');
@@ -398,23 +456,49 @@ async function refreshHubLeaderboard(){
   statusEl.style.color = '#17e7a4';
   listEl.innerHTML = '';
   try{
-    const res = await apiFetchLeaderboard(null);
+    const effectiveMap = normalizeMapKey(mapKey) || getDefaultMapKey();
+    leaderboardMapKey = effectiveMap;
+    const res = await apiFetchLeaderboard(effectiveMap);
     const entries = res && Array.isArray(res.entries) ? res.entries : [];
     if(!entries.length){
       statusEl.textContent = 'No entries yet.';
       statusEl.style.color = '#9fb7ff';
-      leaderboardLoaded = true;
       return;
     }
     statusEl.textContent = '';
     statusEl.style.color = '#17e7a4';
     entries.forEach((entry, index) => {
       const li = document.createElement('li');
-      const rank = index + 1;
-      const user = (entry.username || 'Unknown');
-      const waves = Number.isFinite(entry.waves) ? entry.waves : 0;
-      const perfect = Number.isFinite(entry.perfectCombo) ? entry.perfectCombo : 0;
-      li.textContent = `#${rank} — ${user} — Waves: ${waves} — Perfect Combo: ${perfect}`;
+      const badge = document.createElement('div');
+      badge.className = 'rank-glow';
+      badge.textContent = `#${index + 1}`;
+      li.appendChild(badge);
+
+      const nameWrap = document.createElement('div');
+      nameWrap.className = 'rank-name';
+
+      const name = document.createElement('span');
+      name.className = 'rank';
+      const uname = entry.username || 'Unknown Operative';
+      name.textContent = uname;
+      nameWrap.appendChild(name);
+
+      const waves = document.createElement('span');
+      waves.className = 'waves';
+      const waveVal = Number.isFinite(entry.waves) ? entry.waves : 0;
+      const perfect = Math.max(0, Number.isFinite(entry.perfectCombo) ? entry.perfectCombo : 0);
+      waves.textContent = `${waveVal} waves • Perfect Combo ${perfect}`;
+      nameWrap.appendChild(waves);
+
+      const pilotKey = entry.character || entry.pilot || null;
+      if(pilotKey){
+        const chip = createCharacterChip(pilotKey);
+        if(chip){
+          nameWrap.appendChild(chip);
+        }
+      }
+
+      li.appendChild(nameWrap);
       listEl.appendChild(li);
     });
     if(warningEl){
@@ -430,7 +514,6 @@ async function refreshHubLeaderboard(){
         warningEl.textContent = 'Leaderboard scores are recorded from signed-in runs.';
       }
     }
-    leaderboardLoaded = true;
   }catch(err){
     statusEl.textContent = (err && err.message) ? err.message : 'Failed to load leaderboard.';
     statusEl.style.color = '#ff5370';
@@ -447,9 +530,7 @@ function openLeaderboardOverlay(){
     mainMenu.classList.remove('visible');
   }
   overlay.classList.add('visible');
-  if(!leaderboardLoaded){
-    refreshHubLeaderboard();
-  }
+  refreshHubLeaderboard(getDefaultMapKey());
 }
 
 function attachMainMenuHandlers(){
@@ -649,6 +730,78 @@ function attachLeaderboardHandlers(){
   if(!overlay){
     return;
   }
+  const lbMapList = getElement('lb-map-list');
+  const lbMapTitle = getElement('lb-map-title');
+  const lbMapDesc = getElement('lb-map-desc');
+  let lbMapCanvas = null;
+  let lbMapIndex = 0;
+
+  if(lbMapList && Array.isArray(MAPS) && MAPS.length){
+    lbMapList.innerHTML = '';
+    lbMapList.classList.add('map-carousel');
+
+    const prev = document.createElement('button');
+    prev.className = 'map-nav prev';
+    prev.textContent = '◀';
+
+    const next = document.createElement('button');
+    next.className = 'map-nav next';
+    next.textContent = '▶';
+
+    const center = document.createElement('div');
+    center.className = 'map-center';
+
+    const titleEl = lbMapTitle || document.createElement('div');
+    titleEl.className = titleEl.className || 'map-title';
+    const canvas = document.createElement('canvas');
+    canvas.width = 340;
+    canvas.height = 190;
+    canvas.id = 'lb-map-canvas';
+
+    lbMapCanvas = canvas;
+
+    center.appendChild(titleEl);
+    center.appendChild(canvas);
+    lbMapList.appendChild(prev);
+    lbMapList.appendChild(center);
+    lbMapList.appendChild(next);
+
+    const initialKey = getDefaultMapKey();
+    const initialIndex = MAPS.findIndex(m => m && m.key === initialKey);
+    lbMapIndex = initialIndex >= 0 ? initialIndex : 0;
+
+    const renderMap = ()=>{
+      if(!Array.isArray(MAPS) || !MAPS.length) return;
+      const m = MAPS[lbMapIndex] || MAPS[0];
+      if(!m) return;
+      leaderboardMapKey = m.key;
+      if(lbMapTitle){
+        lbMapTitle.textContent = m.name || '';
+      }else if(titleEl){
+        titleEl.textContent = m.name || '';
+      }
+      if(lbMapDesc){
+        lbMapDesc.textContent = m.desc || '';
+      }
+      if(lbMapCanvas){
+        try{
+          drawMapPreview(lbMapCanvas, m);
+        }catch(e){}
+      }
+    };
+
+    const step = (dir)=>{
+      const n = MAPS.length || 1;
+      lbMapIndex = ((lbMapIndex + dir) % n + n) % n;
+      renderMap();
+      refreshHubLeaderboard(leaderboardMapKey);
+    };
+
+    prev.addEventListener('click', ()=> step(-1));
+    next.addEventListener('click', ()=> step(1));
+    renderMap();
+  }
+
   const backButton = getElement('btn-leaderboard-back');
   const signinButton = getElement('btn-leaderboard-signin');
   const searchRow = document.querySelector('.lb-search-row');
